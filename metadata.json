@@ -1,0 +1,6 @@
+{
+  "name": "Electrical Hazards Training Simulator",
+  "description": "An advanced engineering simulator and safety compliance trainer modeling real-world electrical hazards like arc flashes, earth faults, short circuits, and step/touch potentials in compliance with IEEE 1584, NFPA 70E, and IEC 60479 standards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
