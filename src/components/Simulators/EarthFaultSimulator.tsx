@@ -331,7 +331,7 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
 
       {/* RIGHT COLUMN: Realistic Visual SVG Schematic */}
       {/* Sticky side panel on desktop, top banner on mobile */}
-      <div className="w-full lg:w-[420px] xl:w-[460px] shrink-0 h-[240px] lg:h-full order-1 lg:order-2 bg-slate-900 border border-slate-750 lg:rounded-2xl overflow-hidden flex flex-col relative shadow-2xl">
+      <div className="w-full lg:w-[420px] xl:w-[460px] shrink-0 h-[300px] lg:h-full order-1 lg:order-2 bg-slate-900 border border-slate-750 lg:rounded-2xl overflow-hidden flex flex-col relative shadow-2xl">
         {renderSubstationVisual()}
       </div>
 

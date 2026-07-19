@@ -189,7 +189,7 @@ export function StepTouchSimulator({ config }: { config?: UserConfig }) {
         </div>
       </div>
       
-      <div className="flex relative items-center justify-center bg-slate-950/30 border-white/5 backdrop-blur-md border rounded-2xl shadow-inner flex-1 lg:flex-none lg:w-[400px] xl:w-[450px] shrink-0 h-[220px] min-h-[220px] lg:h-full overflow-hidden p-2 order-2 lg:order-3 relative z-10 lg:sticky lg:top-0 lg:z-20 bg-[#020617]/95 backdrop-blur-md border-b border-slate-800 lg:border-b-0 shadow-lg lg:shadow-none">
+      <div className="flex relative items-center justify-center bg-slate-950/30 border-white/5 backdrop-blur-md border rounded-2xl shadow-inner flex-1 lg:flex-none lg:w-[400px] xl:w-[450px] shrink-0 h-[300px] min-h-[300px] lg:h-full overflow-hidden p-2 order-2 lg:order-3 relative z-10 lg:sticky lg:top-0 lg:z-20 bg-[#020617]/95 backdrop-blur-md border-b border-slate-800 lg:border-b-0 shadow-lg lg:shadow-none">
         <svg viewBox="0 0 200 200" className="w-full h-full max-h-[300px]">
           {/* Earth Rings with dynamic gradient intensity based on soil resistivity */}
           <circle cx="100" cy="180" r="80" fill="none" stroke={`rgba(239, 68, 68, ${soilResistivity > 1000 ? 0.1 : 0.35})`} strokeWidth="15" />

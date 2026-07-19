@@ -2,6 +2,7 @@ import React from 'react';
 import { ShieldAlert, Zap, ShieldCheck, Battery, Activity, Shield, ActivitySquare, BookOpen } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { SimulationType, UserConfig } from '@/src/types';
+import { TrainerToolbar } from './TrainerToolbar';
 
 interface TopNavProps {
   activeModule: SimulationType;
@@ -41,6 +42,7 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
         
         {userConfig && (
           <div className="flex items-center gap-2 md:gap-4">
+            <TrainerToolbar />
             <button 
               onClick={onReconfigure}
               className="hidden sm:block px-3 py-1 bg-slate-950/60 rounded-full border border-slate-800 text-[9px] md:text-[10px] font-black text-slate-200 tracking-wider uppercase hover:bg-slate-800 hover:border-orange-500/50 transition-colors cursor-pointer"

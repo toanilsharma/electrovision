@@ -214,7 +214,7 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating =
         </svg>
 
         {/* Mobile List View for Effects (Bottom Left) */}
-        <div className="md:hidden absolute top-14 left-2 flex flex-col gap-1.5 z-30 pointer-events-none">
+        <div className="md:hidden absolute bottom-4 left-4 flex flex-col gap-1.5 z-30 pointer-events-none">
           <AnimatePresence>
             {activeEffects.map((effect, index) => (
               <motion.div
@@ -260,18 +260,7 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating =
       </div>
 
       {/* Medical UI Header */}
-      <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-30 pointer-events-none">
-        <div className="inline-flex flex-col gap-1">
-          <div className="inline-flex px-3 py-1.5 text-[8px] uppercase font-black tracking-[0.2em] rounded-lg bg-sky-950/60 border border-sky-500/30 text-sky-400 backdrop-blur-sm shadow-[0_0_15px_rgba(56,189,248,0.1)]">
-            <Activity className="w-3 h-3 mr-2" />
-            BIO-METRIC SCAN: {profile.replace('_', ' ')}
-          </div>
-          {!isAnimating && (
-            <div className="text-[7px] text-sky-500/70 font-mono tracking-widest ml-1 uppercase">
-              System nominal. Awaiting telemetry.
-            </div>
-          )}
-        </div>
+      <div className="absolute top-4 left-4 right-4 flex justify-end items-start z-30 pointer-events-none">
         
         {isAnimating && (
           <motion.div 

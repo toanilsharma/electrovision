@@ -311,7 +311,7 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
         </div>
       {/* Column 3: Graphics & Waveforms */}
       <div className="w-full lg:w-[450px] shrink-0 flex flex-col gap-2 h-auto lg:h-full overflow-visible lg:overflow-hidden order-2 lg:order-3 relative z-10 lg:sticky lg:top-0 lg:z-20 bg-[#020617]/95 backdrop-blur-md pb-3 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-lg lg:shadow-none">
-        <div className="flex-1 h-[220px] min-h-[220px] lg:h-auto lg:min-h-[400px] w-full relative border border-slate-700/50 rounded-xl bg-[#020617] shadow-inner overflow-hidden flex flex-col">
+        <div className="flex-1 h-[340px] min-h-[340px] lg:h-auto lg:min-h-[400px] w-full relative border border-slate-700/50 rounded-xl bg-[#020617] shadow-inner overflow-hidden flex flex-col">
           <span className="absolute top-2 left-2 text-[8px] font-black tracking-widest text-slate-600 uppercase z-20">Digital Twin</span>
           <HumanBodyTwin 
             shockPath={path} 
