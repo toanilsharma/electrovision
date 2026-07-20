@@ -177,66 +177,66 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
       />
       
       <div className="flex justify-between items-center mb-2 z-10 shrink-0">
-        <div className="flex items-center gap-2 text-[9px] md:text-[10px] font-black tracking-widest text-[#cbd5e1] uppercase">
-          <Shield className={cn("w-3.5 h-3.5", evalResult.safe ? "text-green-500" : "text-sky-400")} /> 
+        <div className="flex items-center gap-2 text-xs font-bold text-[#cbd5e1] uppercase">
+          <Shield className={cn("w-4 h-4", evalResult.safe ? "text-green-500" : "text-sky-400")} /> 
           Interactive Safety Verification Engine
         </div>
-        <div className="text-[8px] md:text-[9px] font-bold text-slate-500 tracking-wider hidden sm:block">
+        <div className="text-[10px] md:text-xs font-bold text-slate-400 tracking-wider hidden sm:block">
            {hazardType === 'arc_flash' ? 'IEC 61482 / NFPA 70E' : 'ASTM D120 / IEC 60903'}
         </div>
       </div>
       
       <div className="flex flex-col gap-2 z-10 flex-1 min-h-0">
-         <div className="grid grid-cols-2 lg:grid-cols-3 gap-1 md:gap-1.5">
+         <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5 md:gap-2">
             {availableItems.map(item => (
                <button
                  key={item.id}
                  onClick={() => toggleItem(item.id)}
                  className={cn(
-                   "p-1 md:p-1.5 rounded-lg text-left text-[8px] uppercase font-bold tracking-wider flex items-center gap-1.5 transition-all border",
+                   "p-1.5 md:p-2 rounded-lg text-left text-[10px] md:text-xs uppercase font-bold tracking-wider flex items-center gap-2 transition-all border cursor-pointer",
                    selectedItemIds.has(item.id) 
-                     ? "bg-slate-800 border-sky-500/60 text-sky-300 shadow-[0_0_10px_rgba(14,165,233,0.15)] ring-1 ring-sky-500" 
-                     : "bg-slate-900/50 border-slate-700/50 text-slate-400 hover:text-white hover:border-slate-500"
+                     ? "bg-sky-500/20 border-sky-500 text-sky-300 shadow-sm ring-1 ring-sky-500" 
+                     : "bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-750 hover:border-slate-600 hover:text-white"
                  )}
                >
-                 <div className={cn("p-1 rounded-md", selectedItemIds.has(item.id) ? "bg-sky-500/20 text-sky-400" : "bg-slate-800 text-slate-500")}>
+                 <div className={cn("p-1 rounded-md", selectedItemIds.has(item.id) ? "bg-sky-500/20 text-sky-400" : "bg-slate-900 text-slate-400")}>
                    {item.icon}
                  </div>
                  <div className="flex-1 leading-snug">
                    {item.name}
-                   {item.standard && <span className="block text-[7px] text-slate-500 mt-0.5">{item.standard}</span>}
+                   {item.standard && <span className="block text-[9px] text-slate-400 mt-0.5">{item.standard}</span>}
                  </div>
-                 {selectedItemIds.has(item.id) && <CheckCircle className="w-3 h-3 text-sky-500" />}
+                 {selectedItemIds.has(item.id) && <CheckCircle className="w-3.5 h-3.5 text-sky-400" />}
                </button>
             ))}
          </div>
 
          <div className={cn(
-            "p-1.5 md:p-2 rounded-xl border flex flex-col gap-1 transition-all mt-1 md:mt-2 shrink-0",
+            "p-2 rounded-xl border flex flex-col gap-1 transition-all mt-2 shrink-0",
             evalResult.safe 
               ? "bg-green-500/10 border-green-500/30 shadow-[0_0_20px_rgba(34,197,94,0.15)]" 
               : "bg-red-500/10 border-red-500/30"
          )}>
-           <span className="text-[9px] md:text-[10px] font-black tracking-[0.15em] uppercase flex justify-between items-center">
+           <span className="text-xs font-bold uppercase tracking-wide flex justify-between items-center">
               <span className={cn("flex items-center gap-1.5", evalResult.safe ? 'text-green-400' : 'text-red-400')}>
-                {evalResult.safe ? <><CheckCircle className="w-3.5 h-3.5"/> Criteria Met: Safe</> : <><Flame className="w-3.5 h-3.5"/> Inadequate PPE Selected</>}
+                {evalResult.safe ? <><CheckCircle className="w-4 h-4"/> Criteria Met: Safe</> : <><Flame className="w-4 h-4"/> Inadequate PPE Selected</>}
               </span>
-              <span className="text-slate-300 font-mono text-[10px]">
+              <span className="text-slate-300 font-mono text-xs">
                 Hazard: {hazardType === 'arc_flash' ? `${hazardMagnitude.toFixed(1)} cal/cm²` : `${Math.round(hazardMagnitude)}V`}
               </span>
            </span>
            
            {!evalResult.safe && evalResult.missing.length > 0 && (
-             <div className="mt-1 space-y-0.5 md:space-y-1">
+             <div className="mt-1 space-y-1">
                {evalResult.missing.map(mz => (
-                 <div key={mz} className="text-[9px] text-red-300/90 font-mono flex items-start gap-1.5 md:gap-2 leading-tight">
+                 <div key={mz} className="text-xs text-red-300 font-mono flex items-start gap-2 leading-tight">
                    <span className="text-red-500 mt-[1px]">●</span> <span className="flex-1">{mz}</span>
                  </div>
                ))}
              </div>
            )}
            {evalResult.safe && (
-             <span className="text-[9px] md:text-[10px] text-green-300/80 font-mono mt-0.5 leading-tight">
+             <span className="text-xs text-green-300 font-mono mt-0.5 leading-tight">
                All selected Personal Protective Equipment exceeds the incident exposure threshold.
              </span>
            )}
