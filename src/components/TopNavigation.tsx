@@ -34,7 +34,7 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
           </div>
           <div>
             <h1 className="text-sm lg:text-base font-black tracking-tight text-white leading-none">
-              ELECTROVISION<span className="text-orange-500 underline decoration-2 underline-offset-4 font-normal text-[8px] align-top ml-1">™</span>
+              ELECTROLIVE<span className="text-orange-500 underline decoration-2 underline-offset-4 font-normal text-[8px] align-top ml-1">™</span>
             </h1>
             <p className="text-[6.5px] tracking-widest uppercase text-slate-400 mt-0.5">Developed by DesignCalculators</p>
           </div>
