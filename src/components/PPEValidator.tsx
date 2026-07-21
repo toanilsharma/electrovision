@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Shield, HardHat, Footprints, Flame, HandMetal, Glasses, CheckCircle } from 'lucide-react';
+import { Shield, HardHat, Footprints, Flame, HandMetal, Glasses, CheckCircle, XCircle, AlertTriangle, UserCheck, UserX } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { motion } from 'motion/react';
 
@@ -64,7 +64,6 @@ interface PPEValidatorProps {
 export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PPEValidatorProps) {
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
 
-  // In real life, switching hazard types should reset selections if they differ, or just filter safely.
   const availableItems = useMemo(() => {
     switch (hazardType) {
       case 'arc_flash': return ARC_PPE;
@@ -75,16 +74,42 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
     }
   }, [hazardType]);
 
+  // Quick preset selector for Arc Flash (4 CAL, 8 CAL, 25 CAL, 40 CAL)
+  const selectQuickArcPreset = (calLevel: number) => {
+    const next = new Set<string>();
+    if (calLevel === 4) {
+      next.add('arc_body_4');
+      next.add('arc_head_12');
+      next.add('arc_hands');
+      next.add('arc_acc');
+    } else if (calLevel === 8) {
+      next.add('arc_body_8');
+      next.add('arc_head_12');
+      next.add('arc_hands');
+      next.add('arc_acc');
+    } else if (calLevel === 25) {
+      next.add('arc_body_25');
+      next.add('arc_head_40');
+      next.add('arc_hands');
+      next.add('arc_acc');
+    } else if (calLevel === 40) {
+      next.add('arc_body_40');
+      next.add('arc_head_40');
+      next.add('arc_hands');
+      next.add('arc_acc');
+    }
+    setSelectedItemIds(next);
+  };
+
   const toggleItem = (id: string) => {
     setSelectedItemIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else {
-        // Enforce single selection per category for simplicity (e.g., only one pair of gloves)
         const itemCat = availableItems.find(i => i.id === id)?.category;
         Array.from(next).forEach(existingId => {
           if (availableItems.find(i => i.id === existingId)?.category === itemCat) {
-             next.delete(existingId);
+            next.delete(existingId);
           }
         });
         next.add(id);
@@ -92,6 +117,15 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
       return next;
     });
   };
+
+  // Required minimum CAL level
+  const requiredCalLevel = useMemo(() => {
+    if (hazardMagnitude >= 40) return 40;
+    if (hazardMagnitude >= 25) return 40;
+    if (hazardMagnitude >= 8) return 25;
+    if (hazardMagnitude >= 4) return 8;
+    return 4;
+  }, [hazardMagnitude]);
 
   // Evaluation Logic
   const evalResult = useMemo(() => {
@@ -106,69 +140,34 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
       const hasAcc = selected.find(i => i.category === 'accessories');
 
       if (!hasBody) missing.push("Arc-Rated Garment required.");
-      else if (hasBody.rating < hazardMagnitude) missing.push(`Selected AR body protection (${hasBody.rating} cal) is insufficient for ${hazardMagnitude.toFixed(1)} cal/cm² hazard.`);
+      else if (hasBody.rating < hazardMagnitude) missing.push(`Body protection (${hasBody.rating} cal/cm²) is lower than ${hazardMagnitude.toFixed(1)} cal/cm² hazard.`);
 
-      if (!hasFace) missing.push("Arc-Rated Face/Head protection required.");
-      else if (hasFace.rating < hazardMagnitude) missing.push(`Selected AR head protection (${hasFace.rating} cal) is insufficient.`);
+      if (!hasFace) missing.push("Arc-Rated Face/Head hood required.");
+      else if (hasFace.rating < hazardMagnitude) missing.push(`Head protection (${hasFace.rating} cal) is insufficient.`);
 
       if (!hasHands) missing.push("Leather/AR Gloves required.");
-      if (!hasAcc) missing.push("Eye & Hearing protection required (NFPA 70E).");
+      if (!hasAcc) missing.push("Eye & Hearing protection required.");
 
       safe = missing.length === 0;
-    } else if (hazardType === 'earth_fault') {
-      const hasGloves = selected.find(i => i.category === 'hands');
-      const hasFeet = selected.find(i => i.category === 'feet');
-      const hasHelmet = selected.find(i => i.category === 'head_face');
-
-      if (!hasGloves) missing.push(`Class 1 Insulated Gloves (7.5kV) required for earth fault intervention.`);
-      if (!hasFeet) missing.push(`Dielectric Overboots (20kV) required to mitigate Ground Potential Rise.`);
-      if (!hasHelmet) missing.push(`Class E Industrial Helmet (20kV) recommended to prevent overhead flashover arc hazards.`);
-
-      safe = !!hasGloves && !!hasFeet;
-    } else if (hazardType === 'step_touch') {
-      const hasFeet = selected.find(i => i.category === 'feet');
-      const hasGloves = selected.find(i => i.category === 'hands');
-
-      if (!hasFeet) missing.push(`Dielectric Boots Class 1 or 2 required to isolate step voltage potential.`);
-      else if (hasFeet.rating < hazardMagnitude) missing.push(`Dielectric footwear rating (${hasFeet.rating}V) is inadequate for ${hazardMagnitude}V gradient.`);
-      
-      // If close to the fault (touch potential zone < 2m), require insulating gloves
-      const needsGloves = hazardMagnitude > 5000; // using hazardMagnitude to convey proximity/touch potential voltage in step_touch
-      if (needsGloves && !hasGloves) {
-        missing.push("Insulating Gloves required within critical touch potential radius (<2m).");
-      }
-
-      safe = !!hasFeet && hasFeet.rating >= hazardMagnitude && (!needsGloves || !!hasGloves);
     } else {
-      // AC or DC Shock
       const hasGloves = selected.find(i => i.category === 'hands');
       const hasFeet = selected.find(i => i.category === 'feet');
 
-      if (!hasGloves) missing.push(`Insulating Gloves rated for ≥ ${hazardMagnitude}V required.`);
-      else if (hasGloves.rating < hazardMagnitude) missing.push(`Selected Gloves (${hasGloves.rating}V) are inadequate for ${hazardMagnitude}V exposure.`);
+      if (!hasGloves) missing.push(`Insulating Gloves rated ≥ ${hazardMagnitude}V required.`);
+      else if (hasGloves.rating < hazardMagnitude) missing.push(`Selected Gloves (${hasGloves.rating}V) inadequate for ${hazardMagnitude}V.`);
 
-      // Optional but highly recommended: Di-electric boots
-      if (!hasFeet && hazardMagnitude > 50) missing.push("EH Footwear strongly recommended/required depending on step hazard.");
-      else if (hasFeet && hasFeet.rating < hazardMagnitude) missing.push(`Selected Footwear may not withstand full system voltage.`);
-
-      safe = !!hasGloves && hasGloves.rating >= hazardMagnitude && (!hasFeet || hasFeet.rating >= hazardMagnitude);
-      // Wait, EH shoes are recommended, if they are missing but gloves are fine, we could say "Partial" or "Safe but warning". 
-      // Let's enforce both for absolute safety in the sim.
-      if (safe && !hasFeet && hazardMagnitude > 50) {
-        safe = false; // Overriding to false just to be strict
-      }
+      safe = !!hasGloves && hasGloves.rating >= hazardMagnitude;
     }
 
     return { safe, missing };
   }, [selectedItemIds, availableItems, hazardType, hazardMagnitude]);
 
-  // Synchronize safety status with parent components
   useEffect(() => {
     onSafetyChange?.(evalResult.safe);
   }, [evalResult.safe, onSafetyChange]);
 
   return (
-    <div className="p-2 border rounded-xl bg-[#020617] border-slate-700/50 shadow-[inset_0_2px_20px_rgba(0,0,0,0.5)] flex flex-col mt-2 relative overflow-hidden shrink-0">
+    <div className="p-3 border rounded-xl bg-[#020617] border-slate-750 shadow-lg flex flex-col mt-2 relative overflow-hidden shrink-0">
       {/* Background glow when safe */}
       <motion.div 
         className="absolute inset-0 bg-green-500/10 pointer-events-none" 
@@ -176,71 +175,113 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
         transition={{ duration: 0.5 }}
       />
       
-      <div className="flex justify-between items-center mb-2 z-10 shrink-0">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#cbd5e1] uppercase">
+      {/* Header Bar */}
+      <div className="flex justify-between items-center mb-2.5 z-10 shrink-0">
+        <div className="flex items-center gap-2 text-xs font-black text-slate-200 uppercase tracking-wider">
           <Shield className={cn("w-4 h-4", evalResult.safe ? "text-green-500" : "text-sky-400")} /> 
-          Interactive Safety Verification Engine
+          <span>INTERACTIVE SAFETY VERIFICATION ENGINE</span>
         </div>
-        <div className="text-[10px] md:text-xs font-bold text-slate-400 tracking-wider hidden sm:block">
-           {hazardType === 'arc_flash' ? 'IEC 61482 / NFPA 70E' : 'ASTM D120 / IEC 60903'}
-        </div>
+        
+        {/* Pass/Fail Status Badge */}
+        <span className={cn(
+          "px-2.5 py-0.5 rounded text-xs font-black uppercase tracking-wider flex items-center gap-1 shadow-sm",
+          evalResult.safe ? "bg-green-500/20 text-green-300 border border-green-500/40" : "bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse"
+        )}>
+          {evalResult.safe ? <><UserCheck className="w-3.5 h-3.5" /> PASS (Protected)</> : <><UserX className="w-3.5 h-3.5" /> FAIL (Hazard Exposure)</>}
+        </span>
       </div>
-      
-      <div className="flex flex-col gap-2 z-10 flex-1 min-h-0">
-         <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5 md:gap-2">
-            {availableItems.map(item => (
-               <button
-                 key={item.id}
-                 onClick={() => toggleItem(item.id)}
-                 className={cn(
-                   "p-1.5 md:p-2 rounded-lg text-left text-[10px] md:text-xs uppercase font-bold tracking-wider flex items-center gap-2 transition-all border cursor-pointer",
-                   selectedItemIds.has(item.id) 
-                     ? "bg-sky-500/20 border-sky-500 text-sky-300 shadow-sm ring-1 ring-sky-500" 
-                     : "bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-750 hover:border-slate-600 hover:text-white"
-                 )}
-               >
-                 <div className={cn("p-1 rounded-md", selectedItemIds.has(item.id) ? "bg-sky-500/20 text-sky-400" : "bg-slate-900 text-slate-400")}>
-                   {item.icon}
-                 </div>
-                 <div className="flex-1 leading-snug">
-                   {item.name}
-                   {item.standard && <span className="block text-[9px] text-slate-400 mt-0.5">{item.standard}</span>}
-                 </div>
-                 {selectedItemIds.has(item.id) && <CheckCircle className="w-3.5 h-3.5 text-sky-400" />}
-               </button>
-            ))}
-         </div>
 
-         <div className={cn(
-            "p-2 rounded-xl border flex flex-col gap-1 transition-all mt-2 shrink-0",
-            evalResult.safe 
-              ? "bg-green-500/10 border-green-500/30 shadow-[0_0_20px_rgba(34,197,94,0.15)]" 
-              : "bg-red-500/10 border-red-500/30"
-         )}>
-           <span className="text-xs font-bold uppercase tracking-wide flex justify-between items-center">
+      {/* Quick Cal Preset Buttons for Arc Flash */}
+      {hazardType === 'arc_flash' && (
+        <div className="flex items-center gap-1.5 mb-2.5 z-10">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quick Presets:</span>
+          {[4, 8, 25, 40].map(cal => (
+            <button
+              key={cal}
+              onClick={() => selectQuickArcPreset(cal)}
+              className={cn(
+                "px-2.5 py-1 rounded text-xs font-mono font-bold transition-all cursor-pointer border",
+                cal === requiredCalLevel
+                  ? "bg-orange-500/30 border-orange-500 text-orange-300 ring-1 ring-orange-500"
+                  : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
+              )}
+            >
+              {cal} CAL {cal === requiredCalLevel && '(Req)'}
+            </button>
+          ))}
+        </div>
+      )}
+      
+      {/* Item Selection Grid */}
+      <div className="flex flex-col gap-2 z-10 flex-1 min-h-0">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+          {availableItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => toggleItem(item.id)}
+              className={cn(
+                "p-2 rounded-lg text-left text-xs uppercase font-bold tracking-wider flex items-center gap-2 transition-all border cursor-pointer",
+                selectedItemIds.has(item.id) 
+                  ? "bg-sky-500/20 border-sky-500 text-sky-300 shadow-sm ring-1 ring-sky-500" 
+                  : "bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-750 hover:border-slate-600 hover:text-white"
+              )}
+            >
+              <div className={cn("p-1 rounded-md shrink-0", selectedItemIds.has(item.id) ? "bg-sky-500/20 text-sky-400" : "bg-slate-900 text-slate-400")}>
+                {item.icon}
+              </div>
+              <div className="flex-1 leading-snug">
+                {item.name}
+              </div>
+              {selectedItemIds.has(item.id) && <CheckCircle className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
+            </button>
+          ))}
+        </div>
+
+        {/* Manikin Status Banner */}
+        <div className={cn(
+          "p-2.5 rounded-xl border flex items-center gap-3 transition-all mt-2 shrink-0",
+          evalResult.safe 
+            ? "bg-green-500/10 border-green-500/40 shadow-[0_0_20px_rgba(34,197,94,0.15)]" 
+            : "bg-red-500/15 border-red-500/50"
+        )}>
+          {/* Manikin SVG Status Icon */}
+          <div className="relative shrink-0">
+            <svg viewBox="0 0 40 40" className="w-10 h-10">
+              <circle cx="20" cy="10" r="6" fill={evalResult.safe ? "#22c55e" : "#ef4444"} />
+              <path d="M 12 18 L 28 18 L 26 36 L 14 36 Z" fill={evalResult.safe ? "#22c55e" : "#ef4444"} />
+              {!evalResult.safe && (
+                <Flame className="w-5 h-5 text-orange-400 absolute top-1 left-2.5 animate-bounce" />
+              )}
+            </svg>
+          </div>
+
+          <div className="flex-1 text-left">
+            <div className="text-xs font-black uppercase tracking-wider flex justify-between items-center">
               <span className={cn("flex items-center gap-1.5", evalResult.safe ? 'text-green-400' : 'text-red-400')}>
-                {evalResult.safe ? <><CheckCircle className="w-4 h-4"/> Criteria Met: Safe</> : <><Flame className="w-4 h-4"/> Inadequate PPE Selected</>}
+                {evalResult.safe ? <><CheckCircle className="w-4 h-4"/> Protected - PPE Rating Adequate</> : <><XCircle className="w-4 h-4"/> PPE Rating Exceeded - Severe Injury Hazard</>}
               </span>
-              <span className="text-slate-300 font-mono text-xs">
-                Hazard: {hazardType === 'arc_flash' ? `${hazardMagnitude.toFixed(1)} cal/cm²` : `${Math.round(hazardMagnitude)}V`}
+              <span className="text-slate-300 font-mono text-xs font-bold">
+                Exposure: {hazardMagnitude.toFixed(1)} cal/cm²
               </span>
-           </span>
-           
-           {!evalResult.safe && evalResult.missing.length > 0 && (
-             <div className="mt-1 space-y-1">
-               {evalResult.missing.map(mz => (
-                 <div key={mz} className="text-xs text-red-300 font-mono flex items-start gap-2 leading-tight">
-                   <span className="text-red-500 mt-[1px]">●</span> <span className="flex-1">{mz}</span>
-                 </div>
-               ))}
-             </div>
-           )}
-           {evalResult.safe && (
-             <span className="text-xs text-green-300 font-mono mt-0.5 leading-tight">
-               All selected Personal Protective Equipment exceeds the incident exposure threshold.
-             </span>
-           )}
-         </div>
+            </div>
+
+            {!evalResult.safe && evalResult.missing.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {evalResult.missing.map((mz, i) => (
+                  <div key={i} className="text-xs text-red-300 font-mono flex items-start gap-1.5 leading-tight">
+                    <span className="text-red-500 font-bold">•</span>
+                    <span>{mz}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {evalResult.safe && (
+              <p className="text-xs text-green-300 font-mono mt-0.5 leading-snug">
+                All selected Personal Protective Equipment exceeds the {hazardMagnitude.toFixed(1)} cal/cm² exposure threshold compliant with NFPA 70E.
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

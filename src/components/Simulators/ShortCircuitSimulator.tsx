@@ -411,7 +411,7 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
       <HazardOverlay 
         isActive={time >= faultIgnitionTime && !tripped}
         hazardType="short_circuit"
-        dangerLevel={letThroughEnergy > 15.0 ? "critical" : "high"}
+        dangerLevel={letThroughEnergy > 15.0 ? "critical" : "warning"}
         magnitude={`${(faultCurrent/1000).toFixed(1)} kA TRANSIENT FAULT`}
       />
 

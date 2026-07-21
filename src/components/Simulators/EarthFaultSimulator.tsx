@@ -339,7 +339,7 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
       <HazardOverlay 
         isActive={faultActive && !breakerTripped && !ppeEnabled && scenario === 'broken'}
         hazardType="earth_fault"
-        dangerLevel={physics.bodyCurrent > 100 ? "critical" : "high"}
+        dangerLevel={physics.bodyCurrent > 100 ? "critical" : "warning"}
         magnitude={`${physics.bodyCurrent.toFixed(0)} mA Touch Shock`}
       />
 
@@ -479,7 +479,6 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
               <motion.path 
                 d="M12 5 C10 1.5, 6 1.5, 4 3.5 C2 5.5, 2 9.5, 6 13.5 L12 19 L18 13.5 C22 9.5, 22 5.5, 20 3.5 C18 1.5, 14 1.5, 12 5 Z" 
                 fill={shockAnalysis.heartColor}
-                scale={heartScale}
                 animate={isCasingCharged && !ppeEnabled ? { scale: [1, 1.3, 1] } : { scale: 1 }}
                 transition={isCasingCharged && !ppeEnabled 
                   ? { duration: heartRate, repeat: Infinity, ease: "easeInOut" } 
