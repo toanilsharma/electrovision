@@ -84,7 +84,7 @@ export default function App() {
       
       <main className="flex-1 overflow-hidden bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#0f172a_100%)] relative flex flex-col">
         <div className="max-w-[1600px] w-full p-2 lg:p-4 mx-auto flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div id="alert-container" className="fixed top-3 right-3 md:right-6 w-full max-w-lg px-2 z-[100] empty:hidden pointer-events-none"></div>
+          <div id="alert-container" className="fixed top-16 left-1/2 -translate-x-1/2 w-full max-w-md px-3 z-[110] empty:hidden pointer-events-none"></div>
           <div id="mobile-action-container" className="fixed bottom-4 left-4 right-4 z-[100] lg:hidden empty:hidden pointer-events-none flex flex-col justify-end"></div>
           
           <div className="flex-1 overflow-hidden">

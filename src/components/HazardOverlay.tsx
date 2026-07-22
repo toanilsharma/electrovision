@@ -89,7 +89,7 @@ export const HazardOverlay: React.FC<HazardOverlayProps> = ({ isActive, hazardTy
 
   return (
     <>
-      {/* Full screen visual effects */}
+      {/* Full screen innovative electric shock / arc flash visual environment */}
       <AnimatePresence>
         {showOverlay && (
           <motion.div key="hazard-fullscreen" initial={{ opacity: 0 }}
@@ -97,74 +97,77 @@ export const HazardOverlay: React.FC<HazardOverlayProps> = ({ isActive, hazardTy
             exit={{ opacity: 0 }}
             className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center overflow-hidden"
           >
-            <div className={`absolute inset-0 ${dangerLevel === 'critical' ? 'bg-red-900/20' : 'bg-orange-900/10'}`} />
+            {/* Flashing Hazard Vignette background */}
+            <div className={`absolute inset-0 transition-opacity duration-200 ${dangerLevel === 'critical' ? 'bg-red-950/30' : 'bg-orange-950/20'}`} />
+            
+            {/* Pulsing Electric Arc Flash Edge Glow */}
             <motion.div animate={{ 
-                opacity: [0.1, 0.4, 0.1],
-                scale: [1, 1.02, 1] 
+                opacity: [0.2, 0.7, 0.2],
+                scale: [1, 1.01, 1] 
               }}
-              transition={{ repeat: Infinity, duration: 0.5 }}
-              className={`absolute inset-0 shadow-[inset_0_0_150px_rgba(${dangerLevel === 'critical' ? '220,38,38' : '249,115,22'},0.5)]`} 
+              transition={{ repeat: Infinity, duration: 0.3, ease: "linear" }}
+              className={`absolute inset-0 shadow-[inset_0_0_120px_rgba(${dangerLevel === 'critical' ? '239,68,68' : '249,115,22'},0.6)]`} 
             />
-            {/* Screen Shake effect on the body, handled via standard CSS animation class injected if critical */}
-            {dangerLevel === 'critical' && (
-              <style dangerouslySetInnerHTML={{__html: `
-                body { animation: screen-shake 0.4s cubic-bezier(.36,.07,.19,.97) both infinite; }
-                @keyframes screen-shake {
-                  0%, 100% { transform: translate3d(0, 0, 0); }
-                  10%, 30%, 50%, 70%, 90% { transform: translate3d(-${4 * intensity}px, 0, 0); }
-                  20%, 40%, 60%, 80% { transform: translate3d(${4 * intensity}px, 0, 0); }
-                }
-              `}} />
-            )}
+
+            {/* Top & Bottom Electric Strobe Warning Bars */}
+            <motion.div 
+              animate={{ opacity: [0.3, 0.9, 0.3] }}
+              transition={{ repeat: Infinity, duration: 0.25 }}
+              className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-500 via-amber-400 to-red-500 shadow-[0_0_20px_#ef4444]"
+            />
+            <motion.div 
+              animate={{ opacity: [0.3, 0.9, 0.3] }}
+              transition={{ repeat: Infinity, duration: 0.25 }}
+              className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-500 via-amber-400 to-red-500 shadow-[0_0_20px_#ef4444]"
+            />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Alert Banner */}
+      {/* Rock-Solid High-Contrast Stationary Alert Banner */}
       {alertContainer && createPortal(
         <AnimatePresence>
           {showOverlay && (() => {
             const { icon: Icon, title, desc } = getHazardDetails();
             return (
               <motion.div key="hazard-overlay-panel"
-                initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                initial={{ opacity: 0, y: -15, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -20, scale: 0.95, transition: { duration: 0.3 } }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                exit={{ opacity: 0, y: -15, scale: 0.95, transition: { duration: 0.2 } }}
+                transition={{ type: "spring", stiffness: 350, damping: 25 }}
                 className="w-full pointer-events-auto"
               >
                 <div 
-                  className={`relative w-full rounded-2xl border ${dangerLevel === 'critical' ? 'border-red-500 bg-red-950/95 shadow-[0_10px_40px_rgba(220,38,38,0.6)]' : 'border-orange-500 bg-orange-950/95 shadow-[0_10px_40px_rgba(249,115,22,0.5)]'} p-3 md:p-4 flex flex-row items-center gap-3 md:gap-4 text-left overflow-hidden`}
+                  className={`relative w-full rounded-2xl border-2 ${dangerLevel === 'critical' ? 'border-red-500 bg-slate-950/98 shadow-[0_12px_45px_rgba(220,38,38,0.8)] ring-2 ring-red-500/50' : 'border-orange-500 bg-slate-950/98 shadow-[0_12px_45px_rgba(249,115,22,0.7)] ring-2 ring-orange-500/50'} p-3 md:p-3.5 flex flex-row items-center gap-3.5 text-left overflow-hidden`}
                 >
                   <motion.div animate={{ x: [0, -100, 0] }}
                     transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
-                    className="absolute inset-0 opacity-[0.08] bg-[repeating-linear-gradient(45deg,transparent,transparent_15px,#fff_15px,#fff_30px)]" 
+                    className="absolute inset-0 opacity-[0.06] bg-[repeating-linear-gradient(45deg,transparent,transparent_15px,#fff_15px,#fff_30px)]" 
                   />
-                  <div className="flex-shrink-0 relative z-10">
+                  
+                  <div className="flex-shrink-0 relative z-10 p-2 rounded-xl bg-slate-900 border border-slate-700 shadow-inner">
                     <motion.div animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ repeat: Infinity, duration: 0.5 }}
+                      transition={{ repeat: Infinity, duration: 0.4 }}
                     >
-                      <Icon className={`w-8 h-8 md:w-10 md:h-10 ${dangerLevel === 'critical' ? 'text-red-500' : 'text-orange-500'} drop-shadow-[0_0_20px_currentColor]`} />
+                      <Icon className={`w-8 h-8 md:w-9 md:h-9 ${dangerLevel === 'critical' ? 'text-red-400' : 'text-orange-400'} drop-shadow-[0_0_18px_currentColor]`} />
                     </motion.div>
                   </div>
                   
                   <div className="flex-1 relative z-10 flex flex-col gap-1">
-                    <h1 className={`text-lg md:text-xl font-black uppercase tracking-tighter ${dangerLevel === 'critical' ? 'text-red-500' : 'text-orange-500'} drop-shadow-[0_2px_8px_rgba(0,0,0,1)] leading-tight`}>
-                      {title}
-                    </h1>
+                    <div className="flex items-center justify-between gap-2">
+                      <h1 className={`text-base sm:text-lg md:text-xl font-black uppercase tracking-wider ${dangerLevel === 'critical' ? 'text-red-400' : 'text-orange-400'} drop-shadow-md leading-none`}>
+                        {title}
+                      </h1>
+                      {magnitude && (
+                        <span className={`text-xs md:text-sm font-mono font-black px-2.5 py-1 rounded-lg bg-black/90 border border-amber-400/60 text-amber-300 shadow-sm whitespace-nowrap`}>
+                          ⚡ {magnitude}
+                        </span>
+                      )}
+                    </div>
                     
-                    <p className="text-sm md:text-base text-white font-bold leading-snug drop-shadow-md">
+                    <p className="text-xs sm:text-sm text-slate-100 font-bold leading-relaxed drop-shadow-sm">
                       {desc}
                     </p>
-                    
-                    {magnitude && (
-                      <div className="inline-flex flex-col mt-1 bg-black/60 px-3 py-1 rounded-lg border border-white/20 w-fit self-center sm:self-start">
-                        <div className="text-[8px] text-white/70 font-black tracking-widest uppercase mb-0.5">Magnitude</div>
-                        <div className={`text-sm md:text-base font-mono ${dangerLevel === 'critical' ? 'text-red-400 drop-shadow-[0_0_10px_rgba(248,113,113,1)]' : 'text-orange-400 drop-shadow-[0_0_10px_rgba(251,146,60,1)]'} font-black whitespace-nowrap`}>
-                          {magnitude}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </motion.div>

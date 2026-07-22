@@ -2,15 +2,18 @@ import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { InfoTooltip } from './InfoTooltip';
 import { Activity, Flame, HeartPulse, Zap } from 'lucide-react';
+import { cn } from '@/src/lib/utils';
 
 interface BodyTwinProps {
   shockPath?: 'hand-to-hand' | 'hand-to-foot' | 'none';
   intensity?: number; // 0 to 1
   isAnimating?: boolean;
   profile?: string;
+  isPPESafe?: boolean;
+  activePPENames?: string[];
 }
 
-export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating = false, profile = 'standard' }: BodyTwinProps) {
+export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating = false, profile = 'standard', isPPESafe = false, activePPENames = [] }: BodyTwinProps) {
   
   const baseColor = !isAnimating ? "#0f172a" : (intensity > 0.7 ? '#ef4444' : intensity > 0.4 ? '#f97316' : '#eab308');
   const safeNeon = "#38bdf8";
@@ -54,240 +57,284 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating =
   const pathHandToFoot = "M 30 250 Q 35 200 40 160 Q 55 100 70 80 Q 90 120 100 150 Q 120 200 130 250 Q 135 350 135 460";
 
   return (
-    <div className="relative flex items-center justify-center w-full h-full min-h-[250px] bg-slate-950/90 rounded-2xl border border-white/5 backdrop-blur-xl overflow-hidden shadow-2xl">
-      {/* Medical Scanning Grid Background */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#38bdf8_1px,transparent_1px),linear-gradient(to_bottom,#38bdf8_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.03]"></div>
-      
-      {/* Target Crosshairs */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none mix-blend-screen">
-        <div className="w-[80%] aspect-square rounded-full border border-sky-500/50"></div>
-        <div className="w-[60%] aspect-square rounded-full border border-sky-500/30"></div>
-        <div className="absolute w-full h-[1px] bg-sky-500/50"></div>
-        <div className="absolute h-full w-[1px] bg-sky-500/50"></div>
+    <div className="relative flex flex-col w-full h-full min-h-[250px] bg-slate-950/90 rounded-2xl border border-white/5 backdrop-blur-xl overflow-hidden shadow-2xl">
+      {/* Top Dedicated Human Protection & PPE Status Bar (Above Human Canvas) */}
+      <div className="w-full bg-slate-900/95 border-b border-slate-800 p-2 px-3 flex flex-wrap items-center justify-between gap-2 z-20 shrink-0">
+        <div className="flex items-center gap-2">
+          <span className={cn(
+            "px-2.5 py-1 text-[10px] sm:text-xs font-black uppercase tracking-wider rounded-lg border shadow-md flex items-center gap-1.5 transition-all whitespace-nowrap",
+            isPPESafe 
+              ? "bg-emerald-950/90 border-emerald-500/80 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.35)]" 
+              : activePPENames.length > 0 
+                ? "bg-amber-950/90 border-amber-500/80 text-amber-300"
+                : "bg-rose-950/90 border-rose-500/80 text-rose-300 animate-pulse"
+          )}>
+            {isPPESafe ? (
+              <>🛡️ CONDITION: PROTECTED WITH PPE</>
+            ) : activePPENames.length > 0 ? (
+              <>🛡️ CONDITION: INSUFFICIENT PPE RATING</>
+            ) : (
+              <>⚠️ CONDITION: UNPROTECTED (WITHOUT PPE)</>
+            )}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {activePPENames.length > 0 ? (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[9px] font-black text-sky-400 uppercase tracking-widest mr-1">
+                Equipped PPE:
+              </span>
+              {activePPENames.map((name, i) => (
+                <span key={i} className="bg-sky-500/20 text-sky-300 border border-sky-500/50 px-1.5 py-0.5 rounded font-mono font-bold text-[9px]">
+                  ✓ {name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-[9px] font-mono text-rose-300 italic">
+              No PPE items equipped
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Holographic scanner sweep */}
-      <motion.div 
-        animate={{ y: ['-100%', '800%'] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-        className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-sky-400/0 via-sky-400/10 to-sky-400/0 pointer-events-none mix-blend-screen"
-      />
+      {/* Main SVG Human Twin Canvas Area (Zero Overlapping UI Panels) */}
+      <div className="relative flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
+        {/* Medical Scanning Grid Background */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#38bdf8_1px,transparent_1px),linear-gradient(to_bottom,#38bdf8_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.03]"></div>
+        
+        {/* Target Crosshairs */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none mix-blend-screen">
+          <div className="w-[80%] aspect-square rounded-full border border-sky-500/50"></div>
+          <div className="w-[60%] aspect-square rounded-full border border-sky-500/30"></div>
+          <div className="absolute w-full h-[1px] bg-sky-500/50"></div>
+          <div className="absolute h-full w-[1px] bg-sky-500/50"></div>
+        </div>
 
-      {/* SVG Container */}
-      <div className="relative z-10 w-full h-full max-h-[500px] flex items-center justify-center p-4">
-        <svg viewBox="0 0 200 500" className="w-full h-full drop-shadow-[0_0_15px_rgba(56,189,248,0.2)]">
-          
-          
-          {/* Base Silhouette (Hologram outline) */}
-          <path 
-            d={bodySilhouette} 
-            fill={!isAnimating ? "rgba(56, 189, 248, 0.05)" : "rgba(15, 23, 42, 0.8)"}
-            stroke={!isAnimating ? "rgba(56, 189, 248, 0.4)" : "rgba(51, 65, 85, 0.8)"}
-            strokeWidth="1.5"
-            className="transition-all duration-700"
-          />
+        {/* Holographic scanner sweep */}
+        <motion.div 
+          animate={{ y: ['-100%', '800%'] }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
+          className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-sky-400/0 via-sky-400/10 to-sky-400/0 pointer-events-none mix-blend-screen"
+        />
 
-          {/* Internal Organs (Brain, Lungs, Heart) */}
-          <g className="transition-all duration-700">
-            {/* Brain */}
-            <path d={brainPath} fill={organColor} stroke={organStroke} strokeWidth="1" />
-            <path d="M 100 18 L 100 48" stroke={organStroke} strokeWidth="0.5" strokeDasharray="2,2" />
+        {/* SVG Container */}
+        <div className="relative z-10 w-full h-full max-h-[500px] flex items-center justify-center p-3">
+          <svg viewBox="0 0 200 500" className="w-full h-full drop-shadow-[0_0_15px_rgba(56,189,248,0.2)]">
             
-            {/* Lungs */}
-            <path d={leftLung} fill={organColor} stroke={organStroke} strokeWidth="1" />
-            <path d={rightLung} fill={organColor} stroke={organStroke} strokeWidth="1" />
-            
-            {/* Heart */}
-            <motion.path 
-              d={heartAnatomical}
-              fill={isAnimating && intensity >= 0.7 ? "#ef4444" : organColor}
-              stroke={isAnimating && intensity >= 0.7 ? "#f87171" : organStroke}
-              strokeWidth="1.5"
-              animate={isAnimating && intensity >= 0.7 ? {
-                scale: [1, 1.25, 0.95, 1.15, 1],
-                filter: ['drop-shadow(0 0 2px #ef4444)', 'drop-shadow(0 0 20px #ef4444)', 'drop-shadow(0 0 2px #ef4444)']
-              } : (isAnimating ? {
-                scale: [1, 1.1, 1],
-              } : {})}
-              transition={{ duration: isAnimating && intensity >= 0.7 ? 0.2 : 0.8, repeat: Infinity, repeatType: 'reverse' }}
-              style={{ transformOrigin: '100px 125px' }}
+            {/* Base Silhouette (Vibrant Glowing Neon Hologram) */}
+            <path 
+              d={bodySilhouette} 
+              fill={!isAnimating ? "rgba(56, 189, 248, 0.18)" : (intensity > 0.7 ? "rgba(239, 68, 68, 0.35)" : intensity > 0.4 ? "rgba(249, 115, 22, 0.35)" : "rgba(234, 179, 8, 0.35)")}
+              stroke={!isAnimating ? "#38bdf8" : (intensity > 0.7 ? '#ef4444' : intensity > 0.4 ? '#f97316' : '#facc15')}
+              strokeWidth={!isAnimating ? "2.5" : "3"}
+              style={{ filter: !isAnimating ? "drop-shadow(0 0 10px rgba(56, 189, 248, 0.7))" : (intensity > 0.7 ? "drop-shadow(0 0 18px #ef4444)" : "drop-shadow(0 0 18px #f97316)") }}
+              className="transition-all duration-300"
             />
-          </g>
 
-          {/* Nervous System / Vascular Tree */}
-          <g stroke={!isAnimating ? "rgba(56, 189, 248, 0.2)" : (intensity > 0.4 ? "rgba(249, 115, 22, 0.4)" : "rgba(51, 65, 85, 0.5)")} fill="none" className="transition-all duration-500">
-            <path d={centralNerve} strokeWidth="1.5" />
-            {nerveBranches.map((d, i) => (
-              <path key={i} d={d} strokeWidth="1" strokeDasharray="3,3" />
-            ))}
-          </g>
+            {/* Internal Organs (Brain, Lungs, Heart) - High Contrast */}
+            <g className="transition-all duration-300">
+              {/* Brain */}
+              <path d={brainPath} fill={!isAnimating ? "rgba(56, 189, 248, 0.35)" : organColor} stroke={!isAnimating ? "#38bdf8" : organStroke} strokeWidth="1.5" />
+              <path d="M 100 18 L 100 48" stroke={!isAnimating ? "#38bdf8" : organStroke} strokeWidth="1" strokeDasharray="2,2" />
+              
+              {/* Lungs */}
+              <path d={leftLung} fill={!isAnimating ? "rgba(56, 189, 248, 0.3)" : organColor} stroke={!isAnimating ? "#38bdf8" : organStroke} strokeWidth="1.5" />
+              <path d={rightLung} fill={!isAnimating ? "rgba(56, 189, 248, 0.3)" : organColor} stroke={!isAnimating ? "#38bdf8" : organStroke} strokeWidth="1.5" />
+              
+              {/* Heart */}
+              <motion.path 
+                d={heartAnatomical}
+                fill={isAnimating && intensity >= 0.7 ? "#ef4444" : (!isAnimating ? "rgba(56, 189, 248, 0.5)" : organColor)}
+                stroke={isAnimating && intensity >= 0.7 ? "#f87171" : (!isAnimating ? "#38bdf8" : organStroke)}
+                strokeWidth="2"
+                animate={isAnimating && intensity >= 0.7 ? {
+                  scale: [1, 1.25, 0.95, 1.15, 1],
+                  filter: ['drop-shadow(0 0 2px #ef4444)', 'drop-shadow(0 0 20px #ef4444)', 'drop-shadow(0 0 2px #ef4444)']
+                } : (isAnimating ? {
+                  scale: [1, 1.1, 1],
+                } : {
+                  scale: [1, 1.05, 1],
+                })}
+                transition={{ duration: isAnimating && intensity >= 0.7 ? 0.2 : 0.8, repeat: Infinity, repeatType: 'reverse' }}
+                style={{ transformOrigin: '100px 125px' }}
+              />
+            </g>
 
-          {/* High-Fidelity Damage Overlays */}
-          <g className="mix-blend-screen">
+            {/* Nervous System / Vascular Tree - High Contrast Neon */}
+            <g stroke={!isAnimating ? "rgba(56, 189, 248, 0.6)" : (intensity > 0.4 ? "#f97316" : "rgba(234, 179, 8, 0.8)")} fill="none" className="transition-all duration-300">
+              <path d={centralNerve} strokeWidth="2" />
+              {nerveBranches.map((d, i) => (
+                <path key={i} d={d} strokeWidth="1.5" strokeDasharray="3,3" />
+              ))}
+            </g>
+
+            {/* High-Fidelity Damage Overlays */}
+            <g className="mix-blend-screen">
+              <AnimatePresence>
+                {isAnimating && intensity >= 0.1 && (
+                  <motion.g key="nerves" initial={{opacity:0}} animate={{opacity:0.8}} exit={{opacity:0}} className="transition-all duration-500">
+                    <path d={centralNerve} stroke="#eab308" strokeWidth="6" className="drop-shadow-[0_0_10px_currentColor]" fill="none" />
+                    {nerveBranches.map((d, i) => (
+                      <path key={i} d={d} stroke="#eab308" strokeWidth="4" className="drop-shadow-[0_0_10px_currentColor]" fill="none" />
+                    ))}
+                  </motion.g>
+                )}
+                {isAnimating && intensity >= 0.4 && (
+                  <motion.rect key="burns" x="0" y="80" width="200" height="200" fill="#f97316" className="opacity-50 mix-blend-screen" initial={{opacity:0}} animate={{opacity:0.3}} exit={{opacity:0}} />
+                )}
+                {isAnimating && intensity >= 0.6 && (
+                  <motion.g key="lungs" initial={{opacity:0}} animate={{opacity:0.9}} exit={{opacity:0}}>
+                    <path d={leftLung} fill="#ef4444" className="drop-shadow-[0_0_10px_currentColor]" />
+                    <path d={rightLung} fill="#ef4444" className="drop-shadow-[0_0_10px_currentColor]" />
+                  </motion.g>
+                )}
+                {isAnimating && intensity >= 0.7 && (
+                  <motion.g key="heart" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                    <motion.path 
+                      d={heartAnatomical} fill="#ff0000" className="drop-shadow-[0_0_20px_currentColor]" 
+                      animate={{ opacity: [0.7, 1, 0.7] }} 
+                      transition={{ duration: 0.1, repeat: Infinity }}
+                    />
+                  </motion.g>
+                )}
+              </AnimatePresence>
+            </g>
+
+            {/* Electrical Shock Path Animation */}
             <AnimatePresence>
-              {isAnimating && intensity >= 0.1 && (
-                <motion.g key="nerves" initial={{opacity:0}} animate={{opacity:0.8}} exit={{opacity:0}} className="transition-all duration-500">
-                  <path d={centralNerve} stroke="#eab308" strokeWidth="6" className="drop-shadow-[0_0_10px_currentColor]" fill="none" />
-                  {nerveBranches.map((d, i) => (
-                    <path key={i} d={d} stroke="#eab308" strokeWidth="4" className="drop-shadow-[0_0_10px_currentColor]" fill="none" />
-                  ))}
-                </motion.g>
+              {isAnimating && shockPath !== 'none' && (
+                <motion.path
+                  key="shock-path-animation"
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  animate={{ pathLength: 1, opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25, repeat: Infinity, ease: 'linear' }}
+                  d={shockPath === 'hand-to-hand' ? pathHandToHand : pathHandToFoot}
+                  stroke={intensity > 0.7 ? '#ef4444' : '#f97316'}
+                  strokeWidth="4"
+                  strokeDasharray="15 15"
+                  strokeLinecap="round"
+                  fill="none"
+                  style={{ filter: `drop-shadow(0 0 12px ${intensity > 0.7 ? '#ef4444' : '#f97316'})` }}
+                />
               )}
+              
+              {/* Severe Tetanization (Muscle Spasm Lines) */}
               {isAnimating && intensity >= 0.4 && (
-                <motion.rect key="burns" x="0" y="80" width="200" height="200" fill="#f97316" className="opacity-50 mix-blend-screen" initial={{opacity:0}} animate={{opacity:0.3}} exit={{opacity:0}} />
-              )}
-              {isAnimating && intensity >= 0.6 && (
-                <motion.g key="lungs" initial={{opacity:0}} animate={{opacity:0.9}} exit={{opacity:0}}>
-                  <path d={leftLung} fill="#ef4444" className="drop-shadow-[0_0_10px_currentColor]" />
-                  <path d={rightLung} fill="#ef4444" className="drop-shadow-[0_0_10px_currentColor]" />
-                </motion.g>
-              )}
-              {isAnimating && intensity >= 0.7 && (
-                <motion.g key="heart" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
-                  <motion.path 
-                    d={heartAnatomical} fill="#ff0000" className="drop-shadow-[0_0_20px_currentColor]" 
-                    animate={{ opacity: [0.7, 1, 0.7] }} 
-                    transition={{ duration: 0.1, repeat: Infinity }}
-                  />
+                <motion.g 
+                  key="tetanization-spasms"
+                  stroke="#f97316" strokeWidth="1" fill="none" opacity="0.8"
+                  animate={{ x: [-1.5, 1.5, -1.5], y: [-1.5, 1.5, -1.5] }}
+                  transition={{ duration: 0.05, repeat: Infinity }}
+                >
+                  <path d="M 65 110 L 55 130 L 60 145 L 45 155" />
+                  <path d="M 135 110 L 145 130 L 140 145 L 155 155" />
+                  <path d="M 115 320 L 125 350 L 115 380 L 130 420" />
+                  <path d="M 85 320 L 75 350 L 85 380 L 70 420" />
                 </motion.g>
               )}
             </AnimatePresence>
-          </g>
 
-          {/* Electrical Shock Path Animation */}
-          <AnimatePresence>
-            {isAnimating && shockPath !== 'none' && (
-              <motion.path
-                key="shock-path-animation"
-                initial={{ pathLength: 0, opacity: 0 }}
-                animate={{ pathLength: 1, opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25, repeat: Infinity, ease: 'linear' }}
-                d={shockPath === 'hand-to-hand' ? pathHandToHand : pathHandToFoot}
-                stroke={intensity > 0.7 ? '#ef4444' : '#f97316'}
-                strokeWidth="4"
-                strokeDasharray="15 15"
-                strokeLinecap="round"
-                fill="none"
-                style={{ filter: `drop-shadow(0 0 12px ${intensity > 0.7 ? '#ef4444' : '#f97316'})` }}
-              />
+            {/* Tissue Burn Marks at Entry/Exit Points */}
+            {isAnimating && intensity >= 0.8 && (
+              <g fill="#ef4444" opacity="0.9" style={{ filter: 'drop-shadow(0 0 8px #ef4444)' }}>
+                <circle cx="28" cy="255" r="8" className="animate-ping" />
+                <circle cx="28" cy="255" r="4" fill="#fff" />
+                
+                {shockPath === 'hand-to-hand' && (
+                  <>
+                    <circle cx="172" cy="255" r="8" className="animate-ping" />
+                    <circle cx="172" cy="255" r="4" fill="#fff" />
+                  </>
+                )}
+                {shockPath === 'hand-to-foot' && (
+                  <>
+                    <circle cx="135" cy="475" r="8" className="animate-ping" />
+                    <circle cx="135" cy="475" r="4" fill="#fff" />
+                  </>
+                )}
+              </g>
             )}
-            
-            {/* Severe Tetanization (Muscle Spasm Lines) */}
-            {isAnimating && intensity >= 0.4 && (
-              <motion.g 
-                key="tetanization-spasms"
-                stroke="#f97316" strokeWidth="1" fill="none" opacity="0.8"
-                animate={{ x: [-1.5, 1.5, -1.5], y: [-1.5, 1.5, -1.5] }}
-                transition={{ duration: 0.05, repeat: Infinity }}
+
+          </svg>
+
+          {/* Mobile List View for Effects (Bottom Left) */}
+          <div className="md:hidden absolute bottom-2 left-2 flex flex-col gap-1 z-30 pointer-events-none">
+            <AnimatePresence>
+              {activeEffects.map((effect, index) => (
+                <motion.div
+                  key={`mobile-${effect.id}`}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ delay: index * 0.1 }}
+                  className={`flex items-center gap-1.5 bg-slate-950/95 border backdrop-blur-xl px-2 py-1 rounded shadow-xl ${effect.color} ${effect.border}`}
+                >
+                  <div className={`w-1.5 h-1.5 rounded-full animate-ping ${effect.color.replace('text-', 'bg-')}`} />
+                  <span className="text-[9px] font-black uppercase tracking-wider whitespace-nowrap">
+                    {effect.label}
+                  </span>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
+          {/* Desktop Positioned Effects */}
+          <div className="hidden md:block">
+            <AnimatePresence>
+              {activeEffects.map((effect, index) => (
+                <motion.div
+                  key={`desktop-${effect.id}`}
+                  initial={{ opacity: 0, scale: 0.8, x: -10 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ delay: index * 0.1 }}
+                  className={`absolute flex items-center gap-1.5 bg-slate-950/95 border backdrop-blur-xl px-2 py-1 rounded-lg shadow-2xl z-20 pointer-events-none ${effect.color} ${effect.border}`}
+                  style={{
+                    top: effect.top,
+                    left: effect.left,
+                    right: effect.right,
+                  }}
+                >
+                  <div className={`w-1.5 h-1.5 rounded-full animate-ping ${effect.color.replace('text-', 'bg-')}`} />
+                  <InfoTooltip title={effect.label} description={effect.desc}><span className="text-[9.5px] font-black uppercase tracking-widest whitespace-nowrap cursor-help">{effect.label}</span></InfoTooltip>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
+          {/* Medical UI Header */}
+          <div className="absolute top-2 right-2 flex justify-end items-start z-30 pointer-events-none">
+            {isAnimating && (
+              <motion.div 
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="flex flex-col items-end"
               >
-                <path d="M 65 110 L 55 130 L 60 145 L 45 155" />
-                <path d="M 135 110 L 145 130 L 140 145 L 155 155" />
-                <path d="M 115 320 L 125 350 L 115 380 L 130 420" />
-                <path d="M 85 320 L 75 350 L 85 380 L 70 420" />
-              </motion.g>
+                <div className={`px-2.5 py-1 text-[9px] uppercase font-black tracking-widest rounded-lg border backdrop-blur-sm animate-pulse shadow-xl ${
+                  intensity > 0.7 ? 'bg-red-950/80 border-red-500/50 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : 
+                  intensity > 0.4 ? 'bg-orange-950/80 border-orange-500/50 text-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.3)]' : 
+                  'bg-yellow-950/80 border-yellow-500/50 text-yellow-400'
+                }`}>
+                  {intensity > 0.7 ? 'CRITICAL TISSUE DAMAGE' : intensity > 0.4 ? 'SEVERE NERVE TRAUMA' : 'SENSORY WARNING'}
+                </div>
+              </motion.div>
             )}
-          </AnimatePresence>
+          </div>
 
-          {/* Tissue Burn Marks at Entry/Exit Points */}
-          {isAnimating && intensity >= 0.8 && (
-            <g fill="#ef4444" opacity="0.9" style={{ filter: 'drop-shadow(0 0 8px #ef4444)' }}>
-              {/* Left hand is always an entry/exit in these paths */}
-              <circle cx="28" cy="255" r="8" className="animate-ping" />
-              <circle cx="28" cy="255" r="4" fill="#fff" />
-              
-              {shockPath === 'hand-to-hand' && (
-                <>
-                  <circle cx="172" cy="255" r="8" className="animate-ping" />
-                  <circle cx="172" cy="255" r="4" fill="#fff" />
-                </>
-              )}
-              {shockPath === 'hand-to-foot' && (
-                <>
-                  <circle cx="135" cy="475" r="8" className="animate-ping" />
-                  <circle cx="135" cy="475" r="4" fill="#fff" />
-                </>
-              )}
-            </g>
+          {/* Danger Vignette */}
+          {isAnimating && intensity > 0 && (
+            <div 
+              className="absolute inset-0 pointer-events-none mix-blend-screen transition-opacity duration-300" 
+              style={{ 
+                background: `radial-gradient(circle at center, transparent 30%, ${intensity > 0.7 ? '#ef4444' : '#f97316'} 150%)`,
+                opacity: intensity * 0.9
+              }} 
+            />
           )}
-
-        </svg>
-
-        {/* Mobile List View for Effects (Bottom Left) */}
-        <div className="md:hidden absolute bottom-4 left-4 flex flex-col gap-1.5 z-30 pointer-events-none">
-          <AnimatePresence>
-            {activeEffects.map((effect, index) => (
-              <motion.div
-                key={`mobile-${effect.id}`}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ delay: index * 0.1 }}
-                className={`flex items-center gap-2 bg-slate-950/95 border backdrop-blur-xl px-2.5 py-1.5 rounded-lg shadow-2xl ${effect.color} ${effect.border}`}
-              >
-                <div className={`w-2 h-2 rounded-full animate-ping ${effect.color.replace('text-', 'bg-')}`} />
-                <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider whitespace-nowrap">
-                  {effect.label}
-                </span>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-
-        {/* Desktop Absolute Positioned Effects */}
-        <div className="hidden md:block">
-          <AnimatePresence>
-            {activeEffects.map((effect, index) => (
-              <motion.div
-                key={`desktop-${effect.id}`}
-                initial={{ opacity: 0, scale: 0.8, x: -10 }}
-                animate={{ opacity: 1, scale: 1, x: 0 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ delay: index * 0.1 }}
-                className={`absolute flex items-center gap-1.5 bg-slate-950/95 border backdrop-blur-xl px-2 py-1.5 rounded-lg shadow-2xl z-20 pointer-events-none ${effect.color} ${effect.border}`}
-                style={{
-                  top: effect.top,
-                  left: effect.left,
-                  right: effect.right,
-                }}
-              >
-                <div className={`w-1.5 h-1.5 rounded-full animate-ping ${effect.color.replace('text-', 'bg-')}`} />
-                <InfoTooltip title={effect.label} description={effect.desc}><span className="text-[10px] lg:text-xs font-black uppercase tracking-widest whitespace-nowrap cursor-help">{effect.label}</span></InfoTooltip>
-              </motion.div>
-            ))}
-          </AnimatePresence>
         </div>
       </div>
-
-      {/* Medical UI Header */}
-      <div className="absolute top-4 left-4 right-4 flex justify-end items-start z-30 pointer-events-none">
-        
-        {isAnimating && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="flex flex-col items-end"
-          >
-            <div className={`px-3 py-1.5 text-[9px] uppercase font-black tracking-widest rounded-lg border backdrop-blur-sm animate-pulse shadow-xl ${
-              intensity > 0.7 ? 'bg-red-950/80 border-red-500/50 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : 
-              intensity > 0.4 ? 'bg-orange-950/80 border-orange-500/50 text-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.3)]' : 
-              'bg-yellow-950/80 border-yellow-500/50 text-yellow-400'
-            }`}>
-              {intensity > 0.7 ? 'CRITICAL TISSUE DAMAGE' : intensity > 0.4 ? 'SEVERE NERVE TRAUMA' : 'SENSORY WARNING'}
-            </div>
-          </motion.div>
-        )}
-      </div>
-
-      {/* Danger Vignette */}
-      {isAnimating && intensity > 0 && (
-        <div 
-          className="absolute inset-0 pointer-events-none mix-blend-screen transition-opacity duration-300" 
-          style={{ 
-            background: `radial-gradient(circle at center, transparent 30%, ${intensity > 0.7 ? '#ef4444' : '#f97316'} 150%)`,
-            opacity: intensity * 0.9
-          }} 
-        />
-      )}
     </div>
   );
 }

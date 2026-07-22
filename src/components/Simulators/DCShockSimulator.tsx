@@ -3,7 +3,7 @@ import { MobileActionButton } from '../MobileActionButton';
 import { HumanBodyTwin } from '../HumanBodyTwin';
 import { EmergencyResponse } from '../EmergencyResponse';
 import { DiagnosticScope } from '../DiagnosticScope';
-import { Battery, Droplets, Zap, TrendingUp, AlertTriangle, BookOpen } from 'lucide-react';
+import { Battery, Droplets, Zap, TrendingUp, AlertTriangle, BookOpen, Clock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { ShockEffectLevel, PPEItem, UserConfig } from '@/src/types';
 import { PPEValidator } from '../PPEValidator';
@@ -19,13 +19,14 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
   const [isSimulating, setIsSimulating] = useState(false);
   const [hasSimulated, setHasSimulated] = useState(false);
   const [isPPESafe, setIsPPESafe] = useState(false);
+  const [activePPENames, setActivePPENames] = useState<string[]>([]);
   const { startHum, stopHum } = useAudioHaptics();
 
   useEffect(() => {
     if (config?.environment === 'industrial') {
-      setVoltage(600); // e.g. solar array, transit system
+      setVoltage(600);
     } else {
-      setVoltage(120); // e.g. home battery bank
+      setVoltage(120);
     }
   }, [config]);
 
@@ -45,7 +46,6 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
     setIsSimulating(true);
     setHasSimulated(true);
     setDuration(0);
-    // DC has no frequency, but a low rumble adds immersion
     startHum(30); 
   };
 
@@ -57,7 +57,7 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
   const getResistance = () => {
     let r = 0;
     if (skinCondition === 'dry') {
-       if (voltage <= 50) r = 3800; // slightly higher DC touch resistance
+       if (voltage <= 50) r = 3800;
        else if (voltage <= 120) r = 2500;
        else if (voltage <= 230) r = 1500;
        else if (voltage <= 400) r = 1000;
@@ -70,18 +70,15 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
        else r = 650;
     }
     
-    // Heart Current Factor (F_path)
     const heartFactor = path === 'hand-to-foot' ? 1.0 : 0.4;
     
     if (config?.profile === 'child') {
-      r = r * 0.7; // Lower impedance
+      r = r * 0.7;
     }
 
     return { r, heartFactor };
   };
 
-  // Exact IEC 60479-1 DC Curve Approximation (Fibrillation Threshold for DC)
-  // DC C1 threshold is much higher than AC (roughly 3-4x)
   const getC1Threshold = (tMs: number) => {
     const table = [
       [0, 800], [10, 800], [20, 600], [50, 400], [100, 280], [200, 200], [500, 160], [1000, 120], [10000, 120]
@@ -117,11 +114,10 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
     let severity = 'DC-1 (Perception)';
     
     const c1 = getC1Threshold(duration);
-    const c2 = c1 * 1.5; // Roughly Curve C2
-    const c3 = c1 * 2.5; // Roughly Curve C3
+    const c2 = c1 * 1.5;
+    const c3 = c1 * 2.5;
     
     if (effectiveHeartCurrent > 2) { level = 2; severity = 'DC-2 (Involuntary Contractions)'; }
-    // DC doesn't have a let-go threshold in the same way, but muscular reactions become severe
     if (effectiveHeartCurrent > 30) { level = 3; severity = 'DC-3 (Strong muscular reactions)'; }
     
     if (duration > 0) {
@@ -130,15 +126,9 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
        if (effectiveHeartCurrent > c3) { level = 9; severity = 'DC-4.3 (>50% V-Fib Prob)'; }
     }
     
-    // I^2t specific energy in A^2s for tissue damage visualization
     const i2t = Math.pow(currentAmp, 2) * (duration / 1000);
-    
-    // Compute a continuous intensity 0-1 based on actual physical values
-    // DC requires more current for similar severity feeling
     const intensityCurrent = Math.min(effectiveHeartCurrent / 300, 1) * 0.5;
-    // Energy contribution: 0-0.5 based on heating (0.05 A^2s starts showing burns)
     const intensityEnergy = Math.min(i2t / 0.05, 1) * 0.5;
-    
     const intensity = Math.min(intensityCurrent + intensityEnergy, 1.0);
     
     return { currentMA, effectiveHeartCurrent, r, level, severity, intensity, heartFactor };
@@ -146,197 +136,207 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
 
   const results = calculateResults();
 
-  const getPPE = (): PPEItem[] => {
-    return [
-      { id: 'shoes', name: 'EH Rated Safety Shoes', mandatory: path === 'hand-to-foot' || config?.environment === 'industrial', icon: 'shoes' },
-      { id: 'gloves', name: 'Insulating Gloves', mandatory: true, icon: 'gloves' },
-      { id: 'arc', name: 'Arc Flash PPE', mandatory: voltage >= 600 && config?.environment === 'industrial', icon: 'arc' }
-    ];
-  };
-
   return (
     <motion.div 
-      className="flex flex-col lg:flex-row h-full gap-2 overflow-y-auto lg:overflow-hidden pb-24 lg:pb-0"
+      className="flex flex-col lg:flex-row h-full gap-2.5 overflow-y-auto lg:overflow-hidden pb-24 lg:pb-0"
       animate={{ x: isSimulating ? [-1, 1, -2, 2, -1, 1, 0] : 0 }}
       transition={{ duration: 0.15, repeat: isSimulating ? Infinity : 0, ease: "linear" }}
     >
-      {/* Column 1: Controls */}
-        <div className="w-full lg:w-[320px] shrink-0 p-3 rounded-xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-lg flex flex-col h-auto lg:h-full overflow-visible lg:overflow-y-auto order-1 lg:order-1">
-          <h3 className="flex items-center gap-2 mb-2 text-[10px] font-black tracking-[0.2em] uppercase text-orange-500 border-l-2 border-orange-500 pl-2 shrink-0">
-            <Battery className="w-4 h-4 text-orange-500" /> DC Parameters
+      {/* Column 1: Controls & Prominent HOLD TO SHOCK Button */}
+      <div className="w-full lg:w-[310px] xl:w-[330px] shrink-0 p-3 rounded-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-lg flex flex-col h-auto lg:h-full overflow-visible lg:overflow-y-auto order-1 lg:order-1 justify-between">
+        <div className="space-y-3 flex-1 flex flex-col">
+          <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-teal-400 border-l-3 border-teal-500 pl-2 shrink-0">
+            <Battery className="w-4 h-4 text-teal-400" /> DC Parameters
           </h3>
           
-          <div className="space-y-3 flex-1 flex flex-col">
+          <div>
+            <label className="flex justify-between mb-1 text-xs font-bold text-white uppercase tracking-wider">
+              <span>DC Voltage (V)</span>
+              <span className="text-teal-400 font-black">{voltage} V DC</span>
+            </label>
+            <input
+              type="range"
+              min="50" max="1500" step="10"
+              value={voltage}
+              onChange={(e) => setVoltage(Number(e.target.value))}
+              className="w-full accent-teal-500 cursor-pointer"
+            />
+          </div>
+
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-teal-400"/> Shock Duration</span>
+            <span className="text-base font-black font-mono text-teal-400">{duration} ms</span>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Skin Condition</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setSkinCondition('dry')}
+                className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'dry' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+              >
+                Dry Skin
+              </button>
+              <button
+                onClick={() => setSkinCondition('wet')}
+                className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'wet' ? 'bg-blue-500/20 border-blue-500/60 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+              >
+                Wet / Perspired
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Current Path</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setPath('hand-to-hand')}
+                className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-hand' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+              >
+                Hand - Hand
+              </button>
+              <button
+                onClick={() => setPath('hand-to-foot')}
+                className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-foot' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+              >
+                Hand - Foot
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop Large Prominent HOLD TO SHOCK Button */}
+        <div className="hidden lg:block pt-3 shrink-0">
+          <button
+            onPointerDown={(e) => handleStart()}
+            onPointerUp={(e) => handleStop()}
+            onPointerLeave={handleStop}
+            onPointerCancel={handleStop}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{ touchAction: 'none' }}
+            className={cn(
+              "w-full py-4 px-3 text-sm md:text-base font-black tracking-widest uppercase transition-all rounded-2xl flex flex-col items-center justify-center gap-1 select-none border-2 cursor-pointer shadow-xl active:scale-95",
+              isSimulating
+                ? "bg-red-600 border-red-400 text-white shadow-[0_0_35px_rgba(239,68,68,0.8)] animate-pulse"
+                : "bg-gradient-to-r from-teal-400 via-cyan-400 to-teal-400 border-teal-200 text-slate-950 shadow-[0_0_25px_rgba(20,184,166,0.4)] hover:shadow-[0_0_40px_rgba(20,184,166,0.6)]"
+            )}
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-2">
+              <Zap className={cn("w-5 h-5 fill-current", isSimulating && "animate-bounce")} />
+              <span>{isSimulating ? "⚡ DC SHOCK ACTIVE..." : "⚡ HOLD TO SHOCK"}</span>
+            </div>
+            <span className="text-[9px] font-bold font-mono tracking-normal opacity-90">
+              {isSimulating ? "RELEASE TO DISCONNECT" : "PRESS & HOLD BUTTON DOWN"}
+            </span>
+          </button>
+        </div>
+
+        {/* Mobile Action Button */}
+        <MobileActionButton>
+          <button
+            onPointerDown={(e) => handleStart()}
+            onPointerUp={(e) => handleStop()}
+            onPointerLeave={handleStop}
+            onPointerCancel={handleStop}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{ touchAction: 'none' }}
+            className="w-full py-4 text-base tracking-widest font-black text-slate-950 uppercase transition-all rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 border-2 border-teal-200 active:scale-95 flex items-center justify-center gap-2 select-none shadow-[0_15px_30px_rgba(0,0,0,0.8)]"
+            aria-live="polite"
+          >
+            <Zap className="w-5 h-5 fill-current" />
+            <span>HOLD TO SHOCK</span>
+          </button>
+        </MobileActionButton>
+      </div>
+
+      {/* Column 2: Analysis & PPE */}
+      <div className="flex-1 min-w-[240px] xl:min-w-[260px] p-2.5 rounded-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-lg flex flex-col h-auto lg:h-full overflow-visible lg:overflow-hidden justify-between order-3 lg:order-2">
+        <h3 className="flex items-center gap-2 mb-1.5 text-xs font-black tracking-[0.2em] uppercase text-teal-400 border-l-3 border-teal-500 pl-2 shrink-0">
+          <TrendingUp className="w-4 h-4 text-teal-400" /> IEC 60479-1 DC Analysis
+        </h3>
+        
+        <div className="flex-1 flex flex-col min-h-0 space-y-2">
+          <div className="grid grid-cols-2 gap-2 shrink-0">
+            <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+              <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mb-0.5">Impedance (Z_T)</span>
+              <span className="text-base font-black font-mono text-white">{results.r.toFixed(0)} Ω</span>
+            </div>
+            <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+              <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mb-0.5">Heart Factor</span>
+              <span className="text-base font-black font-mono text-white">{results.heartFactor.toFixed(1)} F</span>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-end p-2.5 bg-slate-950 rounded-xl border border-slate-800 shrink-0">
             <div>
-              <label className="flex justify-between mb-1 text-[10px] font-bold text-white uppercase tracking-wider">
-                <span>DC Voltage (V)</span>
-                <span className="text-orange-400 font-black">{voltage} V</span>
-              </label>
-              <input
-                type="range"
-                min="50" max="1500" step="10"
-                value={voltage}
-                onChange={(e) => setVoltage(Number(e.target.value))}
-                className="w-full accent-orange-500"
-              />
-            </div>
-
-            <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/50 border border-white/5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Zap className="w-3 h-3"/> Shock Duration</span>
-              <span className="text-sm font-black font-mono text-orange-400">{duration} ms</span>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Skin Condition</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  onClick={() => setSkinCondition('dry')}
-                  className={cn("px-2 py-1.5 text-[9px] font-bold rounded-lg border uppercase tracking-wider transition-all", skinCondition === 'dry' ? 'bg-orange-500/20 border-orange-500/50 text-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.15)]' : 'bg-slate-900/50 border-white/10 text-slate-400 hover:bg-white/5 hover:text-white')}
-                >
-                  Dry Skin
-                </button>
-                <button
-                   onClick={() => setSkinCondition('wet')}
-                   className={cn("px-2 py-1.5 text-[9px] font-bold rounded-lg border uppercase tracking-wider transition-all", skinCondition === 'wet' ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.15)]' : 'bg-slate-900/50 border-white/10 text-slate-400 hover:bg-white/5 hover:text-white')}
-                >
-                  Wet / Perspired
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Path</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  onClick={() => setPath('hand-to-hand')}
-                  className={cn("px-2 py-1.5 text-[9px] font-bold rounded-lg border uppercase tracking-wider transition-all", path === 'hand-to-hand' ? 'bg-orange-500/20 border-orange-500/50 text-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.15)] underline underline-offset-2' : 'bg-slate-900/50 border-white/10 text-slate-400 hover:bg-white/5 hover:text-white')}
-                >
-                  Hand - Hand
-                </button>
-                <button
-                  onClick={() => setPath('hand-to-foot')}
-                  className={cn("px-2 py-1.5 text-[9px] font-bold rounded-lg border uppercase tracking-wider transition-all", path === 'hand-to-foot' ? 'bg-orange-500/20 border-orange-500/50 text-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.15)] underline underline-offset-2' : 'bg-slate-900/50 border-white/10 text-slate-400 hover:bg-white/5 hover:text-white')}
-                >
-                  Hand - Foot
-                </button>
-              </div>
-            </div>
-
-            <div className="hidden lg:block mt-auto pt-4 shrink-0">
-              <button
-                 onPointerDown={(e) => { handleStart(); }}
-                onPointerUp={(e) => { handleStop(); }}
-                onPointerLeave={handleStop}
-                onPointerCancel={handleStop}
-                onContextMenu={(e) => e.preventDefault()}
-                style={{ touchAction: 'none' }}
-                 className="w-full py-4 lg:py-2.5 text-xs lg:text-[10px] tracking-widest font-black text-slate-900 uppercase transition-all rounded-xl bg-teal-500 hover:bg-teal-400 active:scale-95 flex items-center justify-center gap-2 select-none shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_30px_rgba(20,184,166,0.5)]"
-                 aria-live="polite"
-              >
-                <Zap className="w-4 h-4 fill-current text-slate-900" />
-                HOLD TO SHOCK
-              </button>
-            </div>
-<MobileActionButton>
-
-              <button
-                 onPointerDown={(e) => { handleStart(); }}
-                onPointerUp={(e) => { handleStop(); }}
-                onPointerLeave={handleStop}
-                onPointerCancel={handleStop}
-                onContextMenu={(e) => e.preventDefault()}
-                style={{ touchAction: 'none' }}
-                 className="w-full py-4  text-[14px]  tracking-widest font-black text-slate-900 uppercase transition-all rounded-xl bg-teal-500 hover:bg-teal-400 active:scale-95 flex items-center justify-center gap-2 select-none shadow-[0_15px_30px_rgba(0,0,0,0.6)] "
-                 aria-live="polite"
-              >
-                <Zap className="w-4 h-4 fill-current text-slate-900" />
-                HOLD TO SHOCK
-              </button>
-            
-</MobileActionButton>
-
-          </div>
-        </div>
-
-        {/* Column 2: Analysis & PPE */}
-        <div className="flex-1 min-w-[280px] p-3 rounded-xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-lg flex flex-col h-auto lg:h-full overflow-visible lg:overflow-y-auto order-3 lg:order-2">
-           <h3 className="flex items-center gap-2 mb-2 text-[10px] font-black tracking-[0.2em] uppercase text-orange-500 border-l-2 border-orange-500 pl-2 shrink-0">
-            <TrendingUp className="w-4 h-4 text-orange-500" /> IEC 60479-1 DC Analysis
-          </h3>
-          
-           <div className="flex-1 flex flex-col min-h-0 space-y-2">
-             <div className="grid grid-cols-2 gap-2 shrink-0">
-               <div className="p-2 bg-slate-900/60 rounded-xl border border-white/5 shadow-inner flex flex-col justify-center">
-                  <span className="text-[8px] font-bold tracking-widest text-slate-500 uppercase mb-0.5">Impedance (Z_T)</span>
-                  <span className="text-sm font-black font-mono text-white">{results.r.toFixed(0)} Ω</span>
-               </div>
-               <div className="p-2 bg-slate-900/60 rounded-xl border border-white/5 shadow-inner flex flex-col justify-center">
-                  <span className="text-[8px] font-bold tracking-widest text-slate-500 uppercase mb-0.5">Heart Factor</span>
-                  <span className="text-sm font-black font-mono text-white">{results.heartFactor.toFixed(1)} F</span>
-               </div>
-             </div>
-
-             <div className="flex justify-between items-end p-2 bg-slate-900/60 rounded-xl border border-white/5 shadow-inner shrink-0">
-                <div>
-                  <span className="text-[8px] font-bold tracking-widest text-slate-400 uppercase mb-0.5 block">Prospective Current</span>
-                  <div className="flex items-baseline gap-1">
-                    <span className={cn("text-xl font-black font-mono tracking-tighter", isSimulating ? 'text-teal-400 drop-shadow-[0_0_15px_rgba(45,212,191,0.5)]' : 'text-white')}>
-                      {results.currentMA.toFixed(1)}
-                    </span>
-                    <span className="text-slate-400 font-mono text-[9px] uppercase">mA</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-[8px] font-bold tracking-widest text-red-500 uppercase mb-0.5 block">Eq. Heart Current</span>
-                  <span className="text-base font-black font-mono text-red-400">{results.effectiveHeartCurrent.toFixed(1)} mA</span>
-                </div>
-             </div>
-             
-             <div className="flex flex-col shrink-0 bg-slate-900/40 p-2 rounded-xl">
-                <span className="text-[8px] font-bold tracking-widest text-slate-400 uppercase mb-0.5">Shock Severity (Level {results.level}/9)</span>
-                <span className={cn("text-xs font-bold uppercase tracking-wider leading-tight", 
-                  results.level === 0 ? 'text-green-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.3)]' :
-                  results.level > 6 ? 'text-red-500' : 
-                  results.level > 3 ? 'text-orange-500' : 'text-yellow-400'
-                )}>
-                  {results.severity}
+              <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mb-0.5 block">Prospective Current</span>
+              <div className="flex items-baseline gap-1">
+                <span className={cn("text-xl font-black font-mono tracking-tighter", isSimulating ? 'text-teal-400 drop-shadow-[0_0_15px_rgba(45,212,191,0.5)]' : 'text-white')}>
+                  {results.currentMA.toFixed(1)}
                 </span>
-             </div>
-             
-             <div className="mt-2 shrink-0">
-               <PPEValidator hazardType="shock_dc" hazardMagnitude={voltage} onSafetyChange={setIsPPESafe} />
-               <EmergencyResponse isSimulating={isSimulating && !isPPESafe} hasSimulated={hasSimulated} type="shock" />
-             </div>
+                <span className="text-slate-400 font-mono text-[9px] uppercase">mA</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-[9px] font-bold tracking-widest text-rose-400 uppercase mb-0.5 block">Eq. Heart Current</span>
+              <span className="text-base font-black font-mono text-rose-400">{results.effectiveHeartCurrent.toFixed(1)} mA</span>
+            </div>
+          </div>
+          
+          <div className="flex flex-col shrink-0 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+            <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mb-0.5">Shock Severity (Level {results.level}/9)</span>
+            <span className={cn("text-xs font-bold uppercase tracking-wider leading-tight", 
+              results.level === 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(34,197,94,0.3)]' :
+              results.level > 6 ? 'text-rose-400' : 
+              results.level > 3 ? 'text-orange-400' : 'text-amber-300'
+            )}>
+              {results.severity}
+            </span>
+          </div>
+          
+          <div className="mt-2 shrink-0">
+            <PPEValidator hazardType="shock_dc" hazardMagnitude={voltage} onSafetyChange={(safe, names) => { setIsPPESafe(safe); if (names) setActivePPENames(names); }} />
+            <EmergencyResponse isSimulating={isSimulating && !isPPESafe} hasSimulated={hasSimulated} type="shock" />
           </div>
         </div>
-      {/* Column 3: Graphics & Waveforms */}
-      <div className="w-full lg:w-[450px] shrink-0 flex flex-col gap-2 h-auto lg:h-full overflow-visible lg:overflow-hidden order-2 lg:order-3 relative z-10 lg:sticky lg:top-0 lg:z-20 bg-[#020617]/95 backdrop-blur-md pb-3 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-lg lg:shadow-none">
-        <div className="flex-1 h-[340px] min-h-[340px] lg:h-auto lg:min-h-[400px] w-full relative border border-slate-700/50 rounded-xl bg-[#020617] shadow-inner overflow-hidden flex flex-col">
-          <span className="absolute top-2 left-2 text-[8px] font-black tracking-widest text-slate-600 uppercase z-20">Digital Twin</span>
+      </div>
+
+      {/* Column 3: Simulator Section Area (Expanded & Fully Viewable) */}
+      <div className="w-full lg:w-[540px] xl:w-[580px] shrink-0 flex flex-col gap-2 h-auto lg:h-full overflow-hidden order-2 lg:order-3 relative z-10 bg-slate-950/95 backdrop-blur-md pb-3 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-xl">
+        {/* Human Body Twin Container */}
+        <div className="flex-1 min-h-[220px] max-h-[300px] lg:max-h-[330px] w-full relative border border-slate-800 rounded-xl bg-slate-950 shadow-inner overflow-hidden flex flex-col">
           <HumanBodyTwin 
             shockPath={path} 
             intensity={results.intensity} 
             isAnimating={isSimulating} 
             profile={config?.profile}
+            isPPESafe={isPPESafe}
+            activePPENames={activePPENames}
           />
         </div>
         
-        <div className="grid grid-cols-2 lg:grid-cols-1 gap-2">
-           <div className="h-20 lg:h-24 shrink-0 w-full border border-slate-700/50 rounded-xl p-2 bg-[#020617] flex flex-col shadow-inner">
-              <span className="text-[8px] font-black tracking-widest text-slate-500 uppercase mb-1 flex justify-between shrink-0">
-                <span>ECG Diagnostics</span>
-                {isSimulating && <span className="text-green-500 font-bold">MONITOR</span>}
-              </span>
-              <div className="flex-1 overflow-hidden rounded-lg">
-                <DiagnosticScope type="ecg" isActive={isSimulating} intensity={results.intensity} voltage={voltage} />
-              </div>
-           </div>
-           <div className="h-20 lg:h-24 shrink-0 w-full border border-slate-700/50 rounded-xl p-2 bg-[#020617] flex flex-col shadow-inner">
-              <span className="text-[8px] font-black tracking-widest text-slate-500 uppercase mb-1 shrink-0">DC Source Scope</span>
-              <div className="flex-1 overflow-hidden rounded-lg">
-                <DiagnosticScope type="dc" isActive={isSimulating} intensity={results.intensity} voltage={voltage} />
-              </div>
-           </div>
+        {/* Side-by-Side Diagnostic Scopes Grid (100% Visible - No Vertical Overflow) */}
+        <div className="grid grid-cols-2 gap-2 shrink-0">
+          <div className="h-24 lg:h-28 shrink-0 w-full border border-slate-800 rounded-xl p-2 bg-slate-950 flex flex-col shadow-inner">
+             <span className="text-[11px] font-black tracking-wider text-teal-400 uppercase mb-1 flex justify-between items-center shrink-0">
+               <span>ECG Diagnostics</span>
+               {isSimulating && <span className="text-emerald-400 font-mono text-[9px]">LIVE ECG</span>}
+             </span>
+             <div className="flex-1 overflow-hidden rounded-lg">
+               <DiagnosticScope type="ecg" isActive={isSimulating} intensity={results.intensity} voltage={voltage} />
+             </div>
+          </div>
+
+          <div className="h-24 lg:h-28 shrink-0 w-full border border-slate-800 rounded-xl p-2 bg-slate-950 flex flex-col shadow-inner">
+             <span className="text-[11px] font-black tracking-wider text-teal-400 uppercase mb-1 flex justify-between items-center shrink-0">
+               <span>DC Source Scope</span>
+               {isSimulating && <span className="text-teal-400 animate-pulse font-mono text-[9px]">{voltage}V DC</span>}
+             </span>
+             <div className="flex-1 overflow-hidden rounded-lg">
+               <DiagnosticScope type="dc" isActive={isSimulating} intensity={results.intensity} voltage={voltage} />
+             </div>
+          </div>
         </div>
       </div>
 
