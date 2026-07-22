@@ -48,7 +48,7 @@ export default function App() {
         return <FirstAidSimulator config={userConfig} />;
 
       case 'assessment':
-        return <AssessmentModule />;
+        return <AssessmentModule config={userConfig} />;
 
       default:
         return (
