@@ -347,26 +347,38 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
 
         {/* Mobile Action Button */}
         <MobileActionButton>
-          <button
-            onPointerDown={(e) => handleStart()}
-            onPointerUp={(e) => handleStop()}
-            onPointerLeave={handleStop}
-            onPointerCancel={handleStop}
-            onContextMenu={(e) => e.preventDefault()}
-            style={{ touchAction: 'none' }}
-            className={cn(
-              "w-full py-4 text-base tracking-widest font-black uppercase transition-all rounded-2xl border-2 flex items-center justify-center gap-2 select-none shadow-[0_15px_30px_rgba(0,0,0,0.8)]",
-              isMuscleLocked
-                ? "bg-red-700 border-red-400 text-white shadow-[0_0_45px_rgba(239,68,68,1)] animate-muscle-shake"
-                : "bg-gradient-to-r from-teal-400 to-cyan-400 border-teal-200 text-slate-950 active:scale-95"
-            )}
-            aria-live="polite"
-          >
-            <Zap className="w-5 h-5 fill-current" />
-            <span>
-              {isMuscleLocked ? "MUSCLE LOCK: YOU CANNOT LET GO" : "HOLD TO SHOCK"}
-            </span>
-          </button>
+          {isMuscleLocked ? (
+            /* Mobile: Bystander cutoff replaces shock button when muscle-locked */
+            <div className="flex flex-col gap-2 w-full">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-950 border-2 border-amber-400 rounded-xl animate-pulse">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="text-xs font-black text-amber-200 uppercase tracking-widest leading-tight">
+                  Muscle Lock — You cannot let go!
+                </span>
+              </div>
+              <button
+                onClick={handleEmergencyCutoff}
+                className="w-full py-4 px-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-900 font-black text-sm uppercase tracking-widest rounded-2xl shadow-[0_0_30px_rgba(251,191,36,0.6)] border-2 border-amber-200 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+              >
+                <Zap className="w-5 h-5 fill-current" />
+                ⚡ BYSTANDER: SWITCH OFF POWER
+              </button>
+            </div>
+          ) : (
+            <button
+              onPointerDown={(e) => handleStart()}
+              onPointerUp={(e) => handleStop()}
+              onPointerLeave={handleStop}
+              onPointerCancel={handleStop}
+              onContextMenu={(e) => e.preventDefault()}
+              style={{ touchAction: 'none' }}
+              className="w-full py-4 text-base tracking-widest font-black uppercase transition-all rounded-2xl border-2 flex items-center justify-center gap-2 select-none shadow-[0_15px_30px_rgba(0,0,0,0.8)] bg-gradient-to-r from-teal-400 to-cyan-400 border-teal-200 text-slate-950 active:scale-95"
+              aria-live="polite"
+            >
+              <Zap className="w-5 h-5 fill-current" />
+              <span>HOLD TO SHOCK</span>
+            </button>
+          )}
         </MobileActionButton>
       </div>
 
