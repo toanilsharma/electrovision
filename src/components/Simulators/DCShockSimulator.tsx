@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MobileActionButton } from '../MobileActionButton';
 import { HumanBodyTwin } from '../HumanBodyTwin';
 import { EmergencyResponse } from '../EmergencyResponse';
@@ -10,6 +10,7 @@ import { PPEValidator } from '../PPEValidator';
 import { useAudioHaptics } from '../useAudioHaptics';
 import { motion } from 'motion/react';
 import { HazardOverlay } from '../HazardOverlay';
+import { SafetyLessonModal } from '../SafetyLessonModal';
 
 export function DCShockSimulator({ config }: { config?: UserConfig }) {
   const [voltage, setVoltage] = useState<number>(300);
@@ -21,6 +22,24 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
   const [isPPESafe, setIsPPESafe] = useState(false);
   const [activePPENames, setActivePPENames] = useState<string[]>([]);
   const [isMuscleLocked, setIsMuscleLocked] = useState(false);
+  const [showSafetyLesson, setShowSafetyLesson] = useState(false);
+  const [lastActiveShockData, setLastActiveShockData] = useState<{
+    currentMA: number;
+    durationMs: number;
+    skinCondition: 'dry' | 'wet';
+    path: 'hand-to-hand' | 'hand-to-foot';
+    voltage: number;
+    isPPESafe: boolean;
+    activePPENames: string[];
+  }>({
+    currentMA: 0,
+    durationMs: 0,
+    skinCondition: 'dry',
+    path: 'hand-to-foot',
+    voltage: 300,
+    isPPESafe: false,
+    activePPENames: []
+  });
   const { startHum, stopHum, triggerMuscleLockVibration } = useAudioHaptics();
 
   useEffect(() => {
@@ -30,6 +49,23 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
       setVoltage(120);
     }
   }, [config]);
+
+  // Record active DC shock parameters while simulating
+  useEffect(() => {
+    if (isSimulating) {
+      const rawBodyImpedance = skinCondition === 'dry' ? 2500 : 700;
+      const currentMA = (voltage / rawBodyImpedance) * 1000;
+      setLastActiveShockData({
+        currentMA,
+        durationMs: duration,
+        skinCondition,
+        path,
+        voltage,
+        isPPESafe,
+        activePPENames
+      });
+    }
+  }, [isSimulating, voltage, duration, skinCondition, path, isPPESafe, activePPENames]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -171,6 +207,14 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
       setIsMuscleLocked(false);
     }
   }, [isSimulating, isPPESafe, results.currentMA, isMuscleLocked]);
+
+  const prevSimulating = useRef(isSimulating);
+  useEffect(() => {
+    if (prevSimulating.current && !isSimulating && hasSimulated) {
+      setShowSafetyLesson(true);
+    }
+    prevSimulating.current = isSimulating;
+  }, [isSimulating, hasSimulated]);
 
   return (
     <motion.div 
@@ -430,6 +474,19 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
         hazardType="dc_shock"
         dangerLevel={results.level >= 6 ? 'critical' : results.level >= 3 ? 'warning' : 'safe'}
         magnitude={`${results.currentMA.toFixed(1)} mA Body Current`}
+      />
+
+      <SafetyLessonModal
+        isOpen={showSafetyLesson}
+        onClose={() => setShowSafetyLesson(false)}
+        currentMA={lastActiveShockData.currentMA}
+        durationMs={lastActiveShockData.durationMs}
+        skinCondition={lastActiveShockData.skinCondition}
+        path={lastActiveShockData.path}
+        voltage={lastActiveShockData.voltage}
+        isPPESafe={lastActiveShockData.isPPESafe}
+        equippedPPENames={lastActiveShockData.activePPENames}
+        hazardType="dc"
       />
     </motion.div>
   );

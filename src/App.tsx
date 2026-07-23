@@ -14,6 +14,39 @@ import { FirstAidSimulator } from './components/Simulators/FirstAidSimulator';
 import { AssessmentModule } from './components/AssessmentModule';
 import { SimulationType, UserConfig } from './types';
 
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("Simulator Render Error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-900 rounded-2xl border border-red-500/40">
+          <h2 className="text-lg font-black text-red-400 uppercase tracking-widest mb-2">SIMULATOR MODULE RECOVERY</h2>
+          <p className="text-xs text-slate-300 mb-4">A temporary rendering issue occurred. Click below to reload simulator state.</p>
+          <button 
+            onClick={() => this.setState({ hasError: false })}
+            className="px-6 py-2.5 bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs uppercase tracking-widest rounded-xl shadow-lg transition-all"
+          >
+            Reload Module
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [userConfig, setUserConfig] = useState<UserConfig | null>(null);
@@ -25,7 +58,7 @@ export default function App() {
   }
 
   if (!userConfig) {
-    return <GameOnboarding onComplete={(config) => setUserConfig(config)} />;
+    return <GameOnboarding onComplete={setUserConfig} />;
   }
 
   const renderModule = () => {
@@ -88,10 +121,29 @@ export default function App() {
           <div id="mobile-action-container" className="fixed bottom-4 left-4 right-4 z-[100] lg:hidden empty:hidden pointer-events-none flex flex-col justify-end"></div>
           
           <div className="flex-1 overflow-hidden">
-            {renderModule()}
+            <ErrorBoundary>
+              {renderModule()}
+            </ErrorBoundary>
           </div>
         </div>
       </main>
+
+      {/* Persistent Bottom App Status Bar Footer */}
+      <footer className="w-full bg-slate-950 border-t border-slate-800 p-1.5 px-4 flex flex-wrap items-center justify-center text-center mx-auto z-40 text-[9px] sm:text-[10px] shrink-0 gap-x-3 gap-y-1">
+        <span className="font-black text-white uppercase tracking-widest">
+          Concept, Visualisation & Engineering: Anil Sharma
+        </span>
+        <span className="text-slate-600">|</span>
+        <div className="flex items-center gap-3 font-bold">
+          <a href="https://designcalculators.co.in" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:underline">
+            designcalculators.co.in
+          </a>
+          <span className="text-slate-600">|</span>
+          <a href="https://reliabilitytools.co.in" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">
+            reliabilitytools.co.in
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }

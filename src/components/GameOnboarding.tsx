@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Home, Factory, User, Users, HardHat, ShieldCheck, Activity, Cpu } from 'lucide-react';
 import { Environment, DigitalTwinProfile, UserConfig } from '../types';
@@ -14,6 +14,11 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
   const [profile, setProfile] = useState<DigitalTwinProfile | null>(null);
   const [userName, setUserName] = useState('');
   const [loadingText, setLoadingText] = useState('INITIALIZING BIO-METRICS...');
+
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const handleEnvSelect = (env: Environment) => {
     setEnvironment(env);
@@ -46,18 +51,18 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
           i++;
         } else {
           clearInterval(interval);
-          if (environment && profile) {
-            onComplete({ 
-              environment, 
-              profile, 
-              name: userName.trim() || undefined
-            });
-          }
+          const finalEnv: Environment = environment || 'residential';
+          const finalProfile: DigitalTwinProfile = profile || (finalEnv === 'industrial' ? 'electrician' : 'adult_male');
+          onCompleteRef.current({ 
+            environment: finalEnv, 
+            profile: finalProfile, 
+            name: userName.trim() || undefined
+          });
         }
-      }, 800);
+      }, 300);
       return () => clearInterval(interval);
     }
-  }, [step, environment, profile, userName, onComplete]);
+  }, [step, environment, profile, userName]);
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#020617] bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#020617_100%)]">
@@ -228,6 +233,15 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Persistent Bottom Footer Attribution */}
+      <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-slate-950/90 border-t border-slate-800 text-center text-[10px] text-white font-black uppercase tracking-widest z-20 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+        <span>Concept, Visualisation & Engineering: Anil Sharma</span>
+        <span className="text-slate-600">|</span>
+        <a href="https://designcalculators.co.in" target="_blank" rel="noopener noreferrer" className="text-orange-400 font-bold hover:underline">designcalculators.co.in</a>
+        <span className="text-slate-600">|</span>
+        <a href="https://reliabilitytools.co.in" target="_blank" rel="noopener noreferrer" className="text-sky-400 font-bold hover:underline">reliabilitytools.co.in</a>
+      </div>
     </div>
   );
 }

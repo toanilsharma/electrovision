@@ -107,6 +107,14 @@ export function ConfigModal({ currentConfig, onClose, onSave }: ConfigModalProps
             Apply Changes
           </button>
         </div>
+
+        <div className="p-2.5 bg-slate-950 border-t border-slate-800 text-center text-[10px] text-white font-black uppercase tracking-wider flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+          <span>Concept, Visualisation & Engineering: Anil Sharma</span>
+          <span className="text-slate-600">|</span>
+          <a href="https://designcalculators.co.in" target="_blank" rel="noopener noreferrer" className="text-orange-400 font-bold hover:underline">designcalculators.co.in</a>
+          <span className="text-slate-600">|</span>
+          <a href="https://reliabilitytools.co.in" target="_blank" rel="noopener noreferrer" className="text-sky-400 font-bold hover:underline">reliabilitytools.co.in</a>
+        </div>
       </motion.div>
     </div>
   );

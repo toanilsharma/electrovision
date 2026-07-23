@@ -12,6 +12,7 @@ import { motion } from 'motion/react';
 import { InfoTooltip } from '../InfoTooltip';
 import { AfterActionReportModal, IncidentReport } from '../AfterActionReportModal';
 import { HazardOverlay } from '../HazardOverlay';
+import { SafetyLessonModal } from '../SafetyLessonModal';
 
 export function ACShockSimulator({ config }: { config?: UserConfig }) {
   const [voltage, setVoltage] = useState<number>(230);
@@ -22,6 +23,24 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
   const [hasSimulated, setHasSimulated] = useState(false);
   const [isPPESafe, setIsPPESafe] = useState(false);
   const [activePPENames, setActivePPENames] = useState<string[]>([]);
+  const [showSafetyLesson, setShowSafetyLesson] = useState(false);
+  const [lastActiveShockData, setLastActiveShockData] = useState<{
+    currentMA: number;
+    durationMs: number;
+    skinCondition: 'dry' | 'wet';
+    path: 'hand-to-hand' | 'hand-to-foot';
+    voltage: number;
+    isPPESafe: boolean;
+    activePPENames: string[];
+  }>({
+    currentMA: 0,
+    durationMs: 0,
+    skinCondition: 'dry',
+    path: 'hand-to-foot',
+    voltage: 230,
+    isPPESafe: false,
+    activePPENames: []
+  });
 
   const [showAAR, setShowAAR] = useState(false);
   const [lastReport, setLastReport] = useState<IncidentReport | null>(null);
@@ -37,6 +56,26 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
       setVoltage(230);
     }
   }, [config]);
+
+  // Record active AC shock parameters while simulating
+  useEffect(() => {
+    if (isSimulating) {
+      const baseR = skinCondition === 'dry'
+        ? (voltage <= 50 ? 3200 : voltage <= 120 ? 2200 : voltage <= 230 ? 1300 : voltage <= 400 ? 900 : 700)
+        : (voltage <= 50 ? 1500 : voltage <= 120 ? 1100 : voltage <= 230 ? 850 : voltage <= 400 ? 700 : 600);
+      const r = config?.profile === 'child' ? baseR * 0.7 : baseR;
+      const currentMA = (voltage / r) * 1000;
+      setLastActiveShockData({
+        currentMA,
+        durationMs: duration,
+        skinCondition,
+        path,
+        voltage,
+        isPPESafe,
+        activePPENames
+      });
+    }
+  }, [isSimulating, voltage, duration, skinCondition, path, isPPESafe, activePPENames, config]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -182,6 +221,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
   const prevSimulating = React.useRef(isSimulating);
   React.useEffect(() => {
     if (prevSimulating.current && !isSimulating && hasSimulated) {
+      setShowSafetyLesson(true);
       if (results.level >= 6 || (!isPPESafe && results.level >= 3)) {
         setLastReport({
           hazardType: 'AC Electrical Shock',
@@ -464,6 +504,19 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
       />
     
       {showAAR && lastReport && <AfterActionReportModal report={lastReport} onClose={() => setShowAAR(false)} />}
+
+      <SafetyLessonModal
+        isOpen={showSafetyLesson}
+        onClose={() => setShowSafetyLesson(false)}
+        currentMA={lastActiveShockData.currentMA}
+        durationMs={lastActiveShockData.durationMs}
+        skinCondition={lastActiveShockData.skinCondition}
+        path={lastActiveShockData.path}
+        voltage={lastActiveShockData.voltage}
+        isPPESafe={lastActiveShockData.isPPESafe}
+        equippedPPENames={lastActiveShockData.activePPENames}
+        hazardType="ac"
+      />
     </motion.div>
   );
 }
