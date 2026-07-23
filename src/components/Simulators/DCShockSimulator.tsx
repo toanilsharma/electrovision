@@ -287,19 +287,19 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
 
           {/* Bystander Emergency Power Cutoff when Muscle Locked */}
           {isMuscleLocked && (
-            <div className="mt-2 p-3 bg-red-950 border-2 border-red-500 rounded-xl shadow-2xl space-y-2 animate-pulse">
-              <div className="flex items-center gap-1.5 text-xs font-black text-yellow-300 uppercase tracking-widest">
-                <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+            <div className="mt-2 p-3 bg-amber-950 border-2 border-amber-400 rounded-xl shadow-2xl space-y-2 animate-pulse">
+              <div className="flex items-center gap-1.5 text-xs font-black text-amber-300 uppercase tracking-widest">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>Tetanization (&gt;20mA)</span>
               </div>
-              <p className="text-[11px] font-bold text-white leading-tight">
+              <p className="text-[11px] font-bold text-amber-100 leading-tight">
                 Flexor muscles locked! You cannot release the DC contact electrode. Wait for someone to trip the breaker.
               </p>
               <button
                 onClick={handleEmergencyCutoff}
-                className="w-full py-2.5 px-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs uppercase tracking-widest rounded-lg shadow-lg border-2 border-amber-300 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                className="w-full py-2.5 px-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-900 font-black text-xs uppercase tracking-widest rounded-lg shadow-lg border-2 border-amber-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
               >
-                <Zap className="w-4 h-4 fill-current text-yellow-300" />
+                <Zap className="w-4 h-4 fill-current text-slate-900" />
                 <span>⚡ BYSTANDER: SWITCH OFF POWER</span>
               </button>
             </div>
