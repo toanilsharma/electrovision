@@ -398,7 +398,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
       </div>
 
       {/* Column 2: Analysis & PPE */}
-      <div className="flex-1 min-w-[280px] xl:min-w-[320px] p-2.5 rounded-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-lg flex flex-col h-auto lg:h-full overflow-y-auto order-3 lg:order-2 justify-between space-y-2">
+      <div className="flex-1 min-w-[280px] xl:min-w-[320px] p-2.5 rounded-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-lg flex flex-col h-auto lg:h-full overflow-y-auto order-2 lg:order-2 justify-between space-y-2">
         <h3 className="flex items-center gap-2 mb-1.5 text-xs font-black tracking-[0.2em] uppercase text-orange-400 border-l-3 border-orange-500 pl-2 shrink-0">
           <TrendingUp className="w-4 h-4 text-orange-400" /> IEC 60479-1 Analysis
         </h3>
@@ -450,7 +450,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
       </div>
 
       {/* Column 3: Human Section & Always-Visible Scopes Area (Zero Scrolling Required) */}
-      <div className="w-full lg:w-[480px] xl:w-[540px] shrink-0 flex flex-col gap-2 h-auto lg:h-full overflow-hidden order-2 lg:order-3 relative z-10 bg-slate-950/95 backdrop-blur-md pb-3 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-xl">
+      <div className="w-full lg:w-[480px] xl:w-[540px] shrink-0 flex flex-col gap-2 h-auto lg:h-full overflow-hidden order-3 lg:order-3 relative z-10 bg-slate-950/95 backdrop-blur-md pb-3 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-xl">
         {/* Human Body Twin Container - Dynamically scales with flex-1 min-h-0 */}
         <div className="flex-1 min-h-0 w-full relative border border-slate-800 rounded-xl bg-slate-950 shadow-inner overflow-hidden flex flex-col">
           <HumanBodyTwin 

@@ -76,7 +76,7 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, y: -20 }}
-            className="relative z-10 flex flex-col items-center w-full max-w-4xl p-8"
+            className="relative z-10 flex flex-col items-center w-full max-w-md lg:max-w-5xl xl:max-w-6xl p-4 sm:p-8"
           >
             <div className="mb-12 text-center">
               <h1 className="text-sm font-black tracking-[0.3em] uppercase text-orange-500 mb-4 flex items-center justify-center gap-3">
@@ -119,7 +119,7 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, y: -20 }}
-            className="relative z-10 flex flex-col items-center w-full max-w-4xl p-8"
+            className="relative z-10 flex flex-col items-center w-full max-w-md lg:max-w-5xl xl:max-w-6xl p-4 sm:p-8"
           >
             <div className="mb-12 text-center">
               <h1 className="text-sm font-black tracking-[0.3em] uppercase text-orange-500 mb-4 flex items-center justify-center gap-3">
