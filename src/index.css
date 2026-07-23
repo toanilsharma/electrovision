@@ -57,3 +57,20 @@ body {
   0%, 100% { box-shadow: 0 0 5px rgba(249, 115, 22, 0.1); }
   50% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.3); }
 }
+
+@keyframes muscle-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  10% { transform: translate(-4px, -3px) rotate(-1.5deg); }
+  20% { transform: translate(5px, 2px) rotate(1.5deg); }
+  30% { transform: translate(-5px, 3px) rotate(-1deg); }
+  40% { transform: translate(4px, -2px) rotate(2deg); }
+  50% { transform: translate(-3px, 4px) rotate(-2deg); }
+  60% { transform: translate(4px, 2px) rotate(1deg); }
+  70% { transform: translate(-4px, -4px) rotate(-1deg); }
+  80% { transform: translate(3px, 3px) rotate(1.5deg); }
+  90% { transform: translate(-3px, -2px) rotate(-1deg); }
+}
+
+.animate-muscle-shake {
+  animation: muscle-shake 0.1s infinite ease-in-out !important;
+}

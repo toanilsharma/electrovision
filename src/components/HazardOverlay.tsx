@@ -155,7 +155,7 @@ export const HazardOverlay: React.FC<HazardOverlayProps> = ({ isActive, hazardTy
                   
                   <div className="flex-1 relative z-10 flex flex-col gap-1">
                     <div className="flex items-center justify-between gap-2">
-                      <h1 className={`text-base sm:text-lg md:text-xl font-black uppercase tracking-wider ${dangerLevel === 'critical' ? 'text-red-400' : 'text-orange-400'} drop-shadow-md leading-none`}>
+                      <h1 className={`text-base sm:text-lg md:text-xl font-black uppercase tracking-wider ${dangerLevel === 'critical' ? 'text-yellow-300 drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]' : 'text-orange-400'} drop-shadow-md leading-none`}>
                         {title}
                       </h1>
                       {magnitude && (

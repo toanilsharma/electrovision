@@ -1,15 +1,40 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { useAudioHaptics } from './useAudioHaptics';
 
 interface DiagnosticScopeProps {
   type: 'ac' | 'dc' | 'ecg';
   isActive: boolean;
   intensity: number; // 0 to 1
   voltage?: number;
+  skinCondition?: 'dry' | 'wet';
+  path?: 'hand-to-hand' | 'hand-to-foot';
 }
 
-export function DiagnosticScope({ type, isActive, intensity, voltage = 230 }: DiagnosticScopeProps) {
+export function DiagnosticScope({
+  type,
+  isActive,
+  intensity,
+  voltage = 230,
+  skinCondition = 'dry',
+  path = 'hand-to-foot'
+}: DiagnosticScopeProps) {
   const [points, setPoints] = useState<string>('');
+  const { startHeartbeat, stopHeartbeat } = useAudioHaptics();
+
+  const isFibrillation = isActive && skinCondition === 'wet' && path === 'hand-to-foot';
+
+  useEffect(() => {
+    if (type === 'ecg' && isActive) {
+      startHeartbeat(isFibrillation);
+    } else if (type === 'ecg') {
+      stopHeartbeat();
+    }
+    return () => {
+      if (type === 'ecg') {
+        stopHeartbeat();
+      }
+    };
+  }, [type, isActive, isFibrillation, startHeartbeat, stopHeartbeat]);
 
   useEffect(() => {
     let animationFrameId: number;
@@ -18,7 +43,6 @@ export function DiagnosticScope({ type, isActive, intensity, voltage = 230 }: Di
     const renderPath = () => {
       const width = 300;
       const height = 100;
-      let path = '';
       const pointsArray = [];
 
       for (let x = 0; x <= width; x += 2) {
@@ -38,16 +62,16 @@ export function DiagnosticScope({ type, isActive, intensity, voltage = 230 }: Di
           y -= offset;
         } else if (type === 'ecg') {
           // ECG Waveform
-          const bpm = isActive ? (intensity > 0.6 ? 250 : 120) : 70; // 250 = V-Fib
-          const speed = bpm / 60; // beats per second
-          const currentPhase = (normalizedX * 5 - time * speed) % 1;
-          const phase = currentPhase < 0 ? 1 + currentPhase : currentPhase;
-          
-          if (isActive && intensity > 0.8) {
-            // V-Fib chaotic wave
-            y += Math.sin(x * 0.1 - time * 5) * 15 + (Math.random() - 0.5) * 20;
+          if (isFibrillation) {
+            // Chaotic Ventricular Fibrillation Waveform
+            y += Math.sin(x * 0.12 - time * 6) * 18 + (Math.random() - 0.5) * 26;
           } else {
-            // Normal / Tachycardia ECG Shape
+            // Normal / Tachycardia ECG Shape (Dry skin / normal beat)
+            const bpm = isActive ? 120 : 70;
+            const speed = bpm / 60; // beats per second
+            const currentPhase = (normalizedX * 5 - time * speed) % 1;
+            const phase = currentPhase < 0 ? 1 + currentPhase : currentPhase;
+
             if (phase > 0.4 && phase < 0.45) {
               y -= 10; // P wave
             } else if (phase > 0.5 && phase < 0.52) {
@@ -59,9 +83,9 @@ export function DiagnosticScope({ type, isActive, intensity, voltage = 230 }: Di
             } else if (phase > 0.7 && phase < 0.8) {
               y -= 12; // T wave
             }
-            // Add noise if mildly shocked
+            // Mild disturbance if non-fibrillation shock active
             if (isActive && intensity > 0) {
-               y += (Math.random() - 0.5) * intensity * 10;
+              y += (Math.random() - 0.5) * intensity * 8;
             }
           }
         }
@@ -77,7 +101,9 @@ export function DiagnosticScope({ type, isActive, intensity, voltage = 230 }: Di
     renderPath();
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [type, isActive, intensity, voltage]);
+  }, [type, isActive, intensity, voltage, isFibrillation]);
+
+  const strokeColor = type === 'ecg' ? (isFibrillation ? '#ef4444' : '#22c55e') : '#f97316';
 
   return (
     <div className="relative w-full h-full min-h-0 bg-[#020617] rounded-lg border border-slate-700/50 shadow-inner overflow-hidden">
@@ -92,19 +118,23 @@ export function DiagnosticScope({ type, isActive, intensity, voltage = 230 }: Di
         <polyline
           points={points}
           fill="none"
-          stroke={type === 'ecg' ? '#22c55e' : '#f97316'}
+          stroke={strokeColor}
           strokeWidth="2"
           vectorEffect="non-scaling-stroke"
           strokeLinecap="round"
           strokeLinejoin="round"
           style={{ 
-            filter: `drop-shadow(0 0 4px ${type === 'ecg' ? '#22c55e' : '#f97316'})` 
+            filter: `drop-shadow(0 0 4px ${strokeColor})` 
           }}
         />
       </svg>
-      {type === 'ecg' && isActive && intensity > 0.8 && (
-        <div className="absolute top-2 right-2 text-[10px] font-black text-red-500 animate-pulse uppercase tracking-widest bg-red-500/20 px-1 rounded">V-FIB</div>
+      {type === 'ecg' && isFibrillation && (
+        <div className="absolute top-2 right-2 text-[10px] font-black text-red-500 animate-pulse uppercase tracking-widest bg-red-500/20 px-1.5 py-0.5 rounded border border-red-500/40">CHAOTIC V-FIB</div>
+      )}
+      {type === 'ecg' && isActive && !isFibrillation && (
+        <div className="absolute top-2 right-2 text-[10px] font-black text-emerald-400 animate-pulse uppercase tracking-widest bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-500/40">HEART MONITOR</div>
       )}
     </div>
   );
 }
+

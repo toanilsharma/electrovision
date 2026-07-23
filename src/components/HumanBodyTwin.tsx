@@ -1,27 +1,112 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { InfoTooltip } from './InfoTooltip';
-import { Activity, Flame, HeartPulse, Zap } from 'lucide-react';
+import { Activity, Flame, HeartPulse, Zap, RotateCcw } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 
 interface BodyTwinProps {
   shockPath?: 'hand-to-hand' | 'hand-to-foot' | 'none';
   intensity?: number; // 0 to 1
+  currentMA?: number;
+  durationMs?: number;
   isAnimating?: boolean;
   profile?: string;
   isPPESafe?: boolean;
   activePPENames?: string[];
 }
 
-export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating = false, profile = 'standard', isPPESafe = false, activePPENames = [] }: BodyTwinProps) {
-  
-  const baseColor = !isAnimating ? "#0f172a" : (intensity > 0.7 ? '#ef4444' : intensity > 0.4 ? '#f97316' : '#eab308');
-  const safeNeon = "#38bdf8";
-  const organColor = !isAnimating ? "rgba(56, 189, 248, 0.15)" : (intensity > 0.7 ? "rgba(239, 68, 68, 0.4)" : "rgba(249, 115, 22, 0.3)");
-  const organStroke = !isAnimating ? "rgba(56, 189, 248, 0.4)" : (intensity > 0.7 ? "rgba(239, 68, 68, 0.8)" : "rgba(249, 115, 22, 0.6)");
+export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0, durationMs = 3000, isAnimating = false, profile = 'standard', isPPESafe = false, activePPENames = [] }: BodyTwinProps) {
+  const [persistentDamage, setPersistentDamage] = useState<{
+    active: boolean;
+    intensity: number;
+    shockPath: 'hand-to-hand' | 'hand-to-foot' | 'none';
+    currentMA: number;
+    durationMs: number;
+  }>({ active: false, intensity: 0, shockPath: 'none', currentMA: 0, durationMs: 0 });
+
+  const [recoverySeconds, setRecoverySeconds] = useState<number>(6);
+  const prevAnimatingRef = useRef(isAnimating);
+  const currentMaxIntensity = useRef(intensity);
+  const currentMaxMA = useRef(currentMA);
+
+  // Track max intensity during active shock
+  useEffect(() => {
+    if (isAnimating) {
+      if (intensity > currentMaxIntensity.current) {
+        currentMaxIntensity.current = intensity;
+      }
+      if (currentMA > currentMaxMA.current) {
+        currentMaxMA.current = currentMA;
+      }
+    }
+  }, [isAnimating, intensity, currentMA]);
+
+  // When shock finishes (isAnimating goes from true to false), lock in persistent damage
+  useEffect(() => {
+    if (prevAnimatingRef.current && !isAnimating) {
+      const damageInt = currentMaxIntensity.current > 0 ? currentMaxIntensity.current : intensity;
+      const damageMA = currentMaxMA.current > 0 ? currentMaxMA.current : currentMA;
+      if (damageInt > 0 && !isPPESafe) {
+        setPersistentDamage({
+          active: true,
+          intensity: damageInt,
+          shockPath: shockPath,
+          currentMA: damageMA,
+          durationMs: durationMs
+        });
+        setRecoverySeconds(6);
+      }
+      currentMaxIntensity.current = 0;
+      currentMaxMA.current = 0;
+    } else if (!prevAnimatingRef.current && isAnimating) {
+      // Starting new shock -> reset previous recovery state
+      setPersistentDamage({ active: false, intensity: 0, shockPath: 'none', currentMA: 0, durationMs: 0 });
+      currentMaxIntensity.current = intensity;
+      currentMaxMA.current = currentMA;
+    }
+    prevAnimatingRef.current = isAnimating;
+  }, [isAnimating, intensity, currentMA, durationMs, isPPESafe, shockPath]);
+
+  // 6-second recovery timer countdown
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+    if (persistentDamage.active && recoverySeconds > 0) {
+      timer = setInterval(() => {
+        setRecoverySeconds(prev => Math.max(0, prev - 1));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [persistentDamage.active, recoverySeconds]);
+
+  const handleResetDamage = () => {
+    setPersistentDamage({ active: false, intensity: 0, shockPath: 'none', currentMA: 0, durationMs: 0 });
+    setRecoverySeconds(0);
+  };
+
+  const getRecoveryPrognosis = (ma: number, duration: number) => {
+    if (ma <= 0) return { timeText: "No Trauma", desc: "No current passed through the body." };
+    if (ma < 10) return { timeText: "Recovery: 10 - 30 Minutes", desc: "Transient nerve stimulation & mild perception threshold." };
+    if (ma < 50) return { timeText: "Recovery: 1 - 7 Days (Muscle Soreness & Rest)", desc: "Flexor muscle spasms, joint stiffness & rest required." };
+    if (ma < 200) return { timeText: "Recovery: 1 - 3 Months (Nerve Therapy)", desc: "Respiratory spasm, peripheral neuropathy & nerve rehab." };
+    if (ma < 1000) return { timeText: "Recovery: 6 - 12 Months (Cardiac Care)", desc: "Ventricular fibrillation arrhythmia & 2nd-degree burns." };
+    return { timeText: "Recovery: Years & Multiple Surgeries / Permanent Damage", desc: "Severe 3rd-degree burns, multi-organ shock & surgical skin grafts." };
+  };
+
+  const activeIntensity = isAnimating ? intensity : (persistentDamage.active ? persistentDamage.intensity : 0);
+  const activePath = isAnimating ? shockPath : (persistentDamage.active ? persistentDamage.shockPath : 'none');
+  const activeMA = isAnimating ? currentMA : (persistentDamage.active ? persistentDamage.currentMA : 0);
+  const activeDuration = isAnimating ? durationMs : (persistentDamage.active ? persistentDamage.durationMs : 0);
+  const hasDamage = isAnimating ? (intensity > 0 && !isPPESafe) : persistentDamage.active;
+
+  const prognosis = getRecoveryPrognosis(activeMA, activeDuration);
+
+  const organColor = !hasDamage ? "rgba(56, 189, 248, 0.15)" : (activeIntensity > 0.7 ? "rgba(239, 68, 68, 0.4)" : "rgba(249, 115, 22, 0.3)");
+  const organStroke = !hasDamage ? "rgba(56, 189, 248, 0.4)" : (activeIntensity > 0.7 ? "rgba(239, 68, 68, 0.8)" : "rgba(249, 115, 22, 0.6)");
 
   const getEffects = (int: number) => {
-    if (!isAnimating || int === 0) return [];
+    if (!hasDamage || int === 0) return [];
     const effects = [];
     if (int >= 0.1) effects.push({ id: 'perception', label: 'Sensory Perception', desc: 'Mild tingling sensation at the points of contact. Current is above the perception threshold of ~0.5mA.', top: '15%', left: '5%', color: 'text-yellow-400', border: 'border-yellow-500/30' });
     if (int >= 0.4) effects.push({ id: 'tetanization', label: 'Muscle Tetanization', desc: 'Involuntary muscle contractions occur, making it impossible to let go of the energized conductor (Let-go threshold ~10mA).', top: '35%', left: '0%', color: 'text-orange-500', border: 'border-orange-500/30' });
@@ -31,7 +116,7 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating =
     return effects;
   };
 
-  const activeEffects = useMemo(() => getEffects(intensity), [intensity, isAnimating]);
+  const activeEffects = useMemo(() => getEffects(activeIntensity), [activeIntensity, hasDamage]);
 
   // High-fidelity anatomical silhouette
   const bodySilhouette = "M 100 15 C 112 15, 115 25, 115 35 C 115 45, 110 55, 108 60 C 115 62, 125 65, 135 68 C 145 70, 150 80, 155 100 C 158 120, 160 140, 162 160 C 165 190, 170 210, 172 230 C 175 240, 178 250, 172 255 C 168 260, 162 255, 162 245 C 160 230, 158 215, 155 200 C 145 150, 135 110, 130 90 C 130 110, 128 140, 126 170 C 128 200, 132 230, 132 250 C 134 290, 135 330, 132 370 C 130 400, 128 430, 132 450 C 138 460, 142 468, 135 475 C 125 478, 118 472, 115 460 C 112 430, 110 400, 108 370 C 105 320, 105 280, 105 250 C 102 245, 98 245, 95 250 C 95 280, 95 320, 92 370 C 90 400, 88 430, 85 460 C 82 472, 75 478, 65 475 C 58 468, 62 460, 68 450 C 72 430, 70 400, 68 370 C 65 330, 66 290, 68 250 C 68 230, 72 200, 74 170 C 72 140, 70 110, 70 90 C 65 110, 55 150, 45 200 C 42 215, 40 230, 38 245 C 38 255, 32 260, 28 255 C 22 250, 25 240, 28 230 C 30 210, 35 190, 38 160 C 40 140, 42 120, 45 100 C 50 80, 55 70, 65 68 C 75 65, 85 62, 92 60 C 90 55, 85 45, 85 35 C 85 25, 88 15, 100 15 Z";
@@ -66,8 +151,8 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating =
             isPPESafe 
               ? "bg-emerald-950/90 border-emerald-500/80 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.35)]" 
               : activePPENames.length > 0 
-                ? "bg-amber-950/90 border-amber-500/80 text-amber-300"
-                : "bg-rose-950/90 border-rose-500/80 text-rose-300 animate-pulse"
+                ? "bg-amber-950/90 border-amber-500/80 text-amber-300 font-black"
+                : "bg-red-950 border-2 border-red-500 text-yellow-300 font-black shadow-[0_0_20px_rgba(239,68,68,0.6)] animate-pulse"
           )}>
             {isPPESafe ? (
               <>🛡️ CONDITION: PROTECTED WITH PPE</>
@@ -92,14 +177,34 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating =
               ))}
             </div>
           ) : (
-            <span className="text-[9px] font-mono text-rose-300 italic">
+            <span className="text-[9px] font-mono text-amber-300 font-bold italic">
               No PPE items equipped
             </span>
           )}
         </div>
       </div>
 
-      {/* Main SVG Human Twin Canvas Area (Zero Overlapping UI Panels) */}
+      {/* Persistent Trauma Recovery Notification Bar */}
+      {persistentDamage.active && (
+        <div className="w-full bg-red-950 border-b-2 border-red-500 p-2 px-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 z-20 shrink-0 animate-pulse shadow-[0_4px_20px_rgba(239,68,68,0.5)]">
+          <div className="flex items-center gap-2">
+            <Flame className="w-4 h-4 text-red-500 fill-current shrink-0 animate-bounce" />
+            <div className="flex flex-col">
+              <span className="text-xs sm:text-sm font-black text-yellow-300 uppercase tracking-widest leading-tight">
+                {prognosis.timeText}
+              </span>
+              <span className="text-[9.5px] font-bold text-white leading-tight">
+                {prognosis.desc}
+              </span>
+            </div>
+          </div>
+          <span className="text-[10px] text-amber-300 font-mono font-black shrink-0 self-end sm:self-center">
+            {recoverySeconds > 0 ? `TRAUMA TIMER: ${recoverySeconds}s` : 'RECOVERY PHASE COMPLETED'}
+          </span>
+        </div>
+      )}
+
+      {/* Main SVG Human Twin Canvas Area */}
       <div className="relative flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
         {/* Medical Scanning Grid Background */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#38bdf8_1px,transparent_1px),linear-gradient(to_bottom,#38bdf8_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.03]"></div>
@@ -111,6 +216,19 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating =
           <div className="absolute w-full h-[1px] bg-sky-500/50"></div>
           <div className="absolute h-full w-[1px] bg-sky-500/50"></div>
         </div>
+
+        {/* RESET HUMAN TWIN Button - Placed in Clean Empty Screen Area (Top Right) */}
+        {persistentDamage.active && (
+          <div className="absolute top-3 right-3 z-40 pointer-events-auto">
+            <button
+              onClick={handleResetDamage}
+              className="py-2 px-3.5 bg-slate-900/95 hover:bg-slate-800 text-sky-300 hover:text-white border-2 border-sky-400 font-black text-xs uppercase tracking-widest rounded-xl shadow-[0_0_20px_rgba(56,189,248,0.4)] flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+            >
+              <RotateCcw className="w-4 h-4 text-sky-400" />
+              <span>🔄 RESET HUMAN TWIN</span>
+            </button>
+          </div>
+        )}
 
         {/* Holographic scanner sweep */}
         <motion.div 
@@ -126,103 +244,99 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating =
             {/* Base Silhouette (Vibrant Glowing Neon Hologram) */}
             <path 
               d={bodySilhouette} 
-              fill={!isAnimating ? "rgba(56, 189, 248, 0.18)" : (intensity > 0.7 ? "rgba(239, 68, 68, 0.35)" : intensity > 0.4 ? "rgba(249, 115, 22, 0.35)" : "rgba(234, 179, 8, 0.35)")}
-              stroke={!isAnimating ? "#38bdf8" : (intensity > 0.7 ? '#ef4444' : intensity > 0.4 ? '#f97316' : '#facc15')}
-              strokeWidth={!isAnimating ? "2.5" : "3"}
-              style={{ filter: !isAnimating ? "drop-shadow(0 0 10px rgba(56, 189, 248, 0.7))" : (intensity > 0.7 ? "drop-shadow(0 0 18px #ef4444)" : "drop-shadow(0 0 18px #f97316)") }}
+              fill={!hasDamage ? "rgba(56, 189, 248, 0.18)" : (activeIntensity > 0.7 ? "rgba(239, 68, 68, 0.45)" : activeIntensity > 0.4 ? "rgba(249, 115, 22, 0.45)" : "rgba(234, 179, 8, 0.45)")}
+              stroke={!hasDamage ? "#38bdf8" : (activeIntensity > 0.7 ? '#ef4444' : activeIntensity > 0.4 ? '#f97316' : '#facc15')}
+              strokeWidth={!hasDamage ? "2.5" : "3.5"}
+              style={{ filter: !hasDamage ? "drop-shadow(0 0 10px rgba(56, 189, 248, 0.7))" : (activeIntensity > 0.7 ? "drop-shadow(0 0 22px #ef4444)" : "drop-shadow(0 0 22px #f97316)") }}
               className="transition-all duration-300"
             />
 
-            {/* Internal Organs (Brain, Lungs, Heart) - High Contrast */}
+            {/* Internal Organs (Brain, Lungs, Heart) - Leaves Red Heart on when damaged */}
             <g className="transition-all duration-300">
               {/* Brain */}
-              <path d={brainPath} fill={!isAnimating ? "rgba(56, 189, 248, 0.35)" : organColor} stroke={!isAnimating ? "#38bdf8" : organStroke} strokeWidth="1.5" />
-              <path d="M 100 18 L 100 48" stroke={!isAnimating ? "#38bdf8" : organStroke} strokeWidth="1" strokeDasharray="2,2" />
+              <path d={brainPath} fill={!hasDamage ? "rgba(56, 189, 248, 0.35)" : organColor} stroke={!hasDamage ? "#38bdf8" : organStroke} strokeWidth="1.5" />
+              <path d="M 100 18 L 100 48" stroke={!hasDamage ? "#38bdf8" : organStroke} strokeWidth="1" strokeDasharray="2,2" />
               
               {/* Lungs */}
-              <path d={leftLung} fill={!isAnimating ? "rgba(56, 189, 248, 0.3)" : organColor} stroke={!isAnimating ? "#38bdf8" : organStroke} strokeWidth="1.5" />
-              <path d={rightLung} fill={!isAnimating ? "rgba(56, 189, 248, 0.3)" : organColor} stroke={!isAnimating ? "#38bdf8" : organStroke} strokeWidth="1.5" />
+              <path d={leftLung} fill={!hasDamage ? "rgba(56, 189, 248, 0.3)" : organColor} stroke={!hasDamage ? "#38bdf8" : organStroke} strokeWidth="1.5" />
+              <path d={rightLung} fill={!hasDamage ? "rgba(56, 189, 248, 0.3)" : organColor} stroke={!hasDamage ? "#38bdf8" : organStroke} strokeWidth="1.5" />
               
-              {/* Heart */}
+              {/* Heart - Red Heart persistent */}
               <motion.path 
                 d={heartAnatomical}
-                fill={isAnimating && intensity >= 0.7 ? "#ef4444" : (!isAnimating ? "rgba(56, 189, 248, 0.5)" : organColor)}
-                stroke={isAnimating && intensity >= 0.7 ? "#f87171" : (!isAnimating ? "#38bdf8" : organStroke)}
-                strokeWidth="2"
-                animate={isAnimating && intensity >= 0.7 ? {
+                fill={hasDamage && activeIntensity >= 0.1 ? "#ef4444" : (!hasDamage ? "rgba(56, 189, 248, 0.5)" : organColor)}
+                stroke={hasDamage && activeIntensity >= 0.1 ? "#f87171" : (!hasDamage ? "#38bdf8" : organStroke)}
+                strokeWidth="2.5"
+                animate={hasDamage ? {
                   scale: [1, 1.25, 0.95, 1.15, 1],
-                  filter: ['drop-shadow(0 0 2px #ef4444)', 'drop-shadow(0 0 20px #ef4444)', 'drop-shadow(0 0 2px #ef4444)']
-                } : (isAnimating ? {
-                  scale: [1, 1.1, 1],
+                  filter: ['drop-shadow(0 0 4px #ef4444)', 'drop-shadow(0 0 22px #ef4444)', 'drop-shadow(0 0 4px #ef4444)']
                 } : {
                   scale: [1, 1.05, 1],
-                })}
-                transition={{ duration: isAnimating && intensity >= 0.7 ? 0.2 : 0.8, repeat: Infinity, repeatType: 'reverse' }}
+                }}
+                transition={{ duration: hasDamage ? 0.3 : 0.8, repeat: Infinity, repeatType: 'reverse' }}
                 style={{ transformOrigin: '100px 125px' }}
               />
             </g>
 
-            {/* Nervous System / Vascular Tree - High Contrast Neon */}
-            <g stroke={!isAnimating ? "rgba(56, 189, 248, 0.6)" : (intensity > 0.4 ? "#f97316" : "rgba(234, 179, 8, 0.8)")} fill="none" className="transition-all duration-300">
-              <path d={centralNerve} strokeWidth="2" />
+            {/* Nervous System / Vascular Tree - Nerves Burned */}
+            <g stroke={!hasDamage ? "rgba(56, 189, 248, 0.6)" : (activeIntensity > 0.4 ? "#f97316" : "#eab308")} fill="none" className="transition-all duration-300">
+              <path d={centralNerve} strokeWidth={hasDamage ? "3" : "2"} />
               {nerveBranches.map((d, i) => (
-                <path key={i} d={d} strokeWidth="1.5" strokeDasharray="3,3" />
+                <path key={i} d={d} strokeWidth={hasDamage ? "2" : "1.5"} strokeDasharray={hasDamage ? undefined : "3,3"} />
               ))}
             </g>
 
             {/* High-Fidelity Damage Overlays */}
             <g className="mix-blend-screen">
-              <AnimatePresence>
-                {isAnimating && intensity >= 0.1 && (
-                  <motion.g key="nerves" initial={{opacity:0}} animate={{opacity:0.8}} exit={{opacity:0}} className="transition-all duration-500">
-                    <path d={centralNerve} stroke="#eab308" strokeWidth="6" className="drop-shadow-[0_0_10px_currentColor]" fill="none" />
-                    {nerveBranches.map((d, i) => (
-                      <path key={i} d={d} stroke="#eab308" strokeWidth="4" className="drop-shadow-[0_0_10px_currentColor]" fill="none" />
-                    ))}
-                  </motion.g>
-                )}
-                {isAnimating && intensity >= 0.4 && (
-                  <motion.rect key="burns" x="0" y="80" width="200" height="200" fill="#f97316" className="opacity-50 mix-blend-screen" initial={{opacity:0}} animate={{opacity:0.3}} exit={{opacity:0}} />
-                )}
-                {isAnimating && intensity >= 0.6 && (
-                  <motion.g key="lungs" initial={{opacity:0}} animate={{opacity:0.9}} exit={{opacity:0}}>
-                    <path d={leftLung} fill="#ef4444" className="drop-shadow-[0_0_10px_currentColor]" />
-                    <path d={rightLung} fill="#ef4444" className="drop-shadow-[0_0_10px_currentColor]" />
-                  </motion.g>
-                )}
-                {isAnimating && intensity >= 0.7 && (
-                  <motion.g key="heart" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
-                    <motion.path 
-                      d={heartAnatomical} fill="#ff0000" className="drop-shadow-[0_0_20px_currentColor]" 
-                      animate={{ opacity: [0.7, 1, 0.7] }} 
-                      transition={{ duration: 0.1, repeat: Infinity }}
-                    />
-                  </motion.g>
-                )}
-              </AnimatePresence>
+              {hasDamage && activeIntensity >= 0.1 && (
+                <g key="nerves-burned" className="transition-all duration-500">
+                  <path d={centralNerve} stroke="#f97316" strokeWidth="6" className="drop-shadow-[0_0_12px_#f97316]" fill="none" />
+                  {nerveBranches.map((d, i) => (
+                    <path key={i} d={d} stroke="#eab308" strokeWidth="4.5" className="drop-shadow-[0_0_12px_#eab308]" fill="none" />
+                  ))}
+                </g>
+              )}
+              {hasDamage && activeIntensity >= 0.4 && (
+                <rect x="0" y="80" width="200" height="200" fill="#f97316" className="opacity-50 mix-blend-screen" />
+              )}
+              {hasDamage && activeIntensity >= 0.6 && (
+                <g key="lungs-damaged">
+                  <path d={leftLung} fill="#ef4444" className="drop-shadow-[0_0_10px_#ef4444]" />
+                  <path d={rightLung} fill="#ef4444" className="drop-shadow-[0_0_10px_#ef4444]" />
+                </g>
+              )}
+              {hasDamage && activeIntensity >= 0.7 && (
+                <g key="heart-critical">
+                  <motion.path 
+                    d={heartAnatomical} fill="#ff0000" className="drop-shadow-[0_0_25px_#ff0000]" 
+                    animate={{ opacity: [0.8, 1, 0.8] }} 
+                    transition={{ duration: 0.15, repeat: Infinity }}
+                  />
+                </g>
+              )}
             </g>
 
             {/* Electrical Shock Path Animation */}
             <AnimatePresence>
-              {isAnimating && shockPath !== 'none' && (
+              {isAnimating && activePath !== 'none' && (
                 <motion.path
                   key="shock-path-animation"
                   initial={{ pathLength: 0, opacity: 0 }}
                   animate={{ pathLength: 1, opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.25, repeat: Infinity, ease: 'linear' }}
-                  d={shockPath === 'hand-to-hand' ? pathHandToHand : pathHandToFoot}
-                  stroke={intensity > 0.7 ? '#ef4444' : '#f97316'}
+                  d={activePath === 'hand-to-hand' ? pathHandToHand : pathHandToFoot}
+                  stroke={activeIntensity > 0.7 ? '#ef4444' : '#f97316'}
                   strokeWidth="4"
                   strokeDasharray="15 15"
                   strokeLinecap="round"
                   fill="none"
-                  style={{ filter: `drop-shadow(0 0 12px ${intensity > 0.7 ? '#ef4444' : '#f97316'})` }}
+                  style={{ filter: `drop-shadow(0 0 12px ${activeIntensity > 0.7 ? '#ef4444' : '#f97316'})` }}
                 />
               )}
               
               {/* Severe Tetanization (Muscle Spasm Lines) */}
-              {isAnimating && intensity >= 0.4 && (
+              {hasDamage && activeIntensity >= 0.4 && (
                 <motion.g 
                   key="tetanization-spasms"
                   stroke="#f97316" strokeWidth="1" fill="none" opacity="0.8"
@@ -238,18 +352,18 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating =
             </AnimatePresence>
 
             {/* Tissue Burn Marks at Entry/Exit Points */}
-            {isAnimating && intensity >= 0.8 && (
+            {hasDamage && activeIntensity >= 0.8 && (
               <g fill="#ef4444" opacity="0.9" style={{ filter: 'drop-shadow(0 0 8px #ef4444)' }}>
                 <circle cx="28" cy="255" r="8" className="animate-ping" />
                 <circle cx="28" cy="255" r="4" fill="#fff" />
                 
-                {shockPath === 'hand-to-hand' && (
+                {activePath === 'hand-to-hand' && (
                   <>
                     <circle cx="172" cy="255" r="8" className="animate-ping" />
                     <circle cx="172" cy="255" r="4" fill="#fff" />
                   </>
                 )}
-                {shockPath === 'hand-to-foot' && (
+                {activePath === 'hand-to-foot' && (
                   <>
                     <circle cx="135" cy="475" r="8" className="animate-ping" />
                     <circle cx="135" cy="475" r="4" fill="#fff" />
@@ -307,29 +421,29 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, isAnimating =
 
           {/* Medical UI Header */}
           <div className="absolute top-2 right-2 flex justify-end items-start z-30 pointer-events-none">
-            {isAnimating && (
+            {hasDamage && (
               <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 className="flex flex-col items-end"
               >
                 <div className={`px-2.5 py-1 text-[9px] uppercase font-black tracking-widest rounded-lg border backdrop-blur-sm animate-pulse shadow-xl ${
-                  intensity > 0.7 ? 'bg-red-950/80 border-red-500/50 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : 
-                  intensity > 0.4 ? 'bg-orange-950/80 border-orange-500/50 text-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.3)]' : 
+                  activeIntensity > 0.7 ? 'bg-red-950/80 border-red-500/50 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : 
+                  activeIntensity > 0.4 ? 'bg-orange-950/80 border-orange-500/50 text-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.3)]' : 
                   'bg-yellow-950/80 border-yellow-500/50 text-yellow-400'
                 }`}>
-                  {intensity > 0.7 ? 'CRITICAL TISSUE DAMAGE' : intensity > 0.4 ? 'SEVERE NERVE TRAUMA' : 'SENSORY WARNING'}
+                  {activeIntensity > 0.7 ? 'CRITICAL TISSUE DAMAGE' : activeIntensity > 0.4 ? 'SEVERE NERVE TRAUMA' : 'SENSORY WARNING'}
                 </div>
               </motion.div>
             )}
           </div>
 
           {/* Danger Vignette */}
-          {isAnimating && intensity > 0 && (
+          {hasDamage && activeIntensity > 0 && (
             <div 
               className="absolute inset-0 pointer-events-none mix-blend-screen transition-opacity duration-300" 
               style={{ 
-                background: `radial-gradient(circle at center, transparent 30%, ${intensity > 0.7 ? '#ef4444' : '#f97316'} 150%)`,
-                opacity: intensity * 0.9
+                background: `radial-gradient(circle at center, transparent 30%, ${activeIntensity > 0.7 ? '#ef4444' : '#f97316'} 150%)`,
+                opacity: activeIntensity * 0.9
               }} 
             />
           )}
