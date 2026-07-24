@@ -158,39 +158,39 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
   }, [evalResult.safe, availableItems, hazardMagnitude]);
 
   return (
-    <div className="p-2.5 border rounded-xl bg-slate-950 border-slate-800 shadow-md flex flex-col mt-1.5 relative overflow-hidden shrink-0">
+    <div className="p-3 border-2 rounded-2xl bg-slate-950/95 border-slate-800 shadow-xl flex flex-col mt-2 relative shrink-0">
       {/* Background glow when safe */}
       <motion.div 
-        className="absolute inset-0 bg-emerald-500/10 pointer-events-none" 
+        className="absolute inset-0 bg-emerald-500/10 pointer-events-none rounded-2xl" 
         animate={{ opacity: evalResult.safe ? 1 : 0 }} 
         transition={{ duration: 0.5 }}
       />
       
       {/* Header Bar */}
-      <div className="flex justify-between items-center mb-1.5 z-10 shrink-0">
-        <div className="flex items-center gap-1.5 text-xs font-black text-white uppercase tracking-wider">
-          <Shield className={cn("w-4 h-4", evalResult.safe ? "text-emerald-400" : "text-sky-400")} /> 
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-2 z-10 shrink-0">
+        <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-white uppercase tracking-wider">
+          <Shield className={cn("w-4 h-4 sm:w-4.5 sm:h-4.5 shrink-0", evalResult.safe ? "text-emerald-400" : "text-sky-400")} /> 
           <span>Safety Verification Engine</span>
         </div>
         
         {/* Pass/Fail Status Badge */}
         <span className={cn(
-          "px-2.5 py-0.5 rounded-full text-[9.5px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm border",
+          "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md border shrink-0",
           evalResult.safe
-            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-            : "bg-rose-500/20 text-rose-300 border-rose-500/50 animate-pulse"
+            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.35)]"
+            : "bg-rose-500/25 text-rose-200 border-rose-500/60 animate-pulse"
         )}>
           {evalResult.safe ? <><UserCheck className="w-3.5 h-3.5 text-emerald-400" /> PASS (Insulated)</> : <><UserX className="w-3.5 h-3.5 text-rose-400" /> UNPROTECTED (Hazard Risk)</>}
         </span>
       </div>
 
-      {/* Clear Instruction Banner with Larger Font & Vibrant Color */}
-      <div className="bg-gradient-to-r from-amber-950/80 via-amber-900/40 to-slate-900 border-2 border-amber-400/80 shadow-[0_0_15px_rgba(245,158,11,0.25)] rounded-xl p-2 md:p-2.5 mb-2.5 flex items-center gap-2 text-xs md:text-sm font-semibold text-slate-100 z-10 leading-snug">
-        <Lightbulb className="w-5 h-5 text-amber-300 shrink-0 animate-pulse drop-shadow-[0_0_8px_rgba(252,211,77,0.8)]" />
+      {/* Clear Instruction Banner with Vibrant Visibility */}
+      <div className="bg-gradient-to-r from-amber-950/90 via-amber-900/50 to-slate-900 border border-amber-400/80 shadow-[0_0_15px_rgba(245,158,11,0.25)] rounded-xl p-2.5 mb-2.5 flex items-start sm:items-center gap-2 text-xs sm:text-sm font-semibold text-slate-100 z-10 leading-snug">
+        <Lightbulb className="w-5 h-5 text-amber-300 shrink-0 animate-pulse drop-shadow-[0_0_8px_rgba(252,211,77,0.8)] mt-0.5 sm:mt-0" />
         <div>
-          <span className="font-black text-amber-300 uppercase tracking-wide mr-1">Instruction:</span>
+          <span className="font-black text-amber-300 uppercase tracking-wide mr-1 block sm:inline">Instruction:</span>
           <span>To get safety & PASS status, select the required PPE gear buttons below rated for your system voltage (</span>
-          <span className="text-amber-300 font-black font-mono px-1.5 py-0.5 bg-amber-950/90 rounded border border-amber-400/60 shadow-sm">
+          <span className="text-amber-300 font-black font-mono px-1.5 py-0.5 bg-amber-950 rounded border border-amber-400/60 shadow-sm">
             {hazardMagnitude.toFixed(0)}{hazardType === 'arc_flash' ? ' cal/cm²' : 'V'}
           </span>
           <span>).</span>
@@ -199,14 +199,14 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
 
       {/* Quick Cal Presets for Arc Flash */}
       {hazardType === 'arc_flash' && (
-        <div className="flex items-center gap-1 mb-2 z-10">
-          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Presets:</span>
+        <div className="flex items-center gap-1.5 mb-2.5 z-10 flex-wrap">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Presets:</span>
           {[4, 8, 25, 40].map(cal => (
             <button
               key={cal}
               onClick={() => selectQuickArcPreset(cal)}
               className={cn(
-                "px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer border",
+                "px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer border active:scale-95",
                 cal === requiredCalLevel
                   ? "bg-orange-500/30 border-orange-500 text-orange-300 ring-1 ring-orange-500"
                   : "bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800"
@@ -218,9 +218,9 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
         </div>
       )}
       
-      {/* High-Visibility PPE Selection Buttons Grid */}
-      <div className="flex flex-col gap-1.5 z-10 flex-1 min-h-0">
-        <div className="grid grid-cols-2 gap-1.5">
+      {/* High-Visibility PPE Selection Buttons Grid (1-column on mobile, 2-column on tablet/desktop) */}
+      <div className="flex flex-col gap-2 z-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {availableItems.map(item => {
             const isSelected = selectedItemIds.has(item.id);
             return (
@@ -228,19 +228,29 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
                 key={item.id}
                 onClick={() => toggleItem(item.id)}
                 className={cn(
-                  "p-2 rounded-xl text-left text-[10px] uppercase font-black tracking-wider flex items-center gap-2 transition-all border cursor-pointer active:scale-95 shadow-sm",
+                  "p-2.5 rounded-xl text-left text-xs uppercase font-black tracking-wider flex items-center justify-between gap-2.5 transition-all border cursor-pointer active:scale-98 shadow-sm min-h-[44px]",
                   isSelected 
-                    ? "bg-sky-500/25 border-sky-400 text-white shadow-[0_0_12px_rgba(56,189,248,0.35)] ring-1 ring-sky-400" 
-                    : "bg-slate-900 border-slate-750 text-slate-200 hover:border-slate-600 hover:text-white"
+                    ? "bg-sky-500/25 border-sky-400 text-white shadow-[0_0_14px_rgba(56,189,248,0.4)] ring-1 ring-sky-400" 
+                    : "bg-slate-900/90 border-slate-750 text-slate-200 hover:border-slate-600 hover:text-white"
                 )}
               >
-                <div className={cn("p-1 rounded-lg shrink-0 transition-colors", isSelected ? "bg-sky-400 text-slate-950 font-bold" : "bg-slate-950 text-slate-400")}>
-                  {item.icon}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={cn("p-1.5 rounded-lg shrink-0 transition-colors", isSelected ? "bg-sky-400 text-slate-950 font-bold" : "bg-slate-950 text-slate-400 border border-slate-800")}>
+                    {item.icon}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="block font-black tracking-wide text-xs text-white truncate">{item.name}</span>
+                    {item.standard && <span className="text-[9px] font-mono text-slate-400 font-bold">{item.standard}</span>}
+                  </div>
                 </div>
-                <div className="flex-1 leading-tight min-w-0">
-                  <span className="block truncate">{item.name}</span>
-                </div>
-                {isSelected && <CheckCircle className="w-3.5 h-3.5 text-sky-300 shrink-0" />}
+
+                {isSelected ? (
+                  <CheckCircle className="w-4 h-4 text-sky-300 shrink-0" />
+                ) : (
+                  <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800 shrink-0">
+                    SELECT
+                  </span>
+                )}
               </button>
             );
           })}
@@ -248,10 +258,10 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
 
         {/* Dynamic Status / Suggestion Banner */}
         <div className={cn(
-          "p-2 rounded-xl border flex items-center gap-2 transition-all shrink-0 mt-0.5",
+          "p-2.5 rounded-xl border flex items-center gap-2.5 transition-all shrink-0 mt-0.5",
           evalResult.safe 
-            ? "bg-emerald-950/40 border-emerald-500/50" 
-            : "bg-rose-950/40 border-rose-500/50"
+            ? "bg-emerald-950/60 border-emerald-500/60" 
+            : "bg-rose-950/60 border-rose-500/60"
         )}>
           <div className="shrink-0">
             {evalResult.safe ? (
@@ -263,14 +273,14 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
 
           <div className="flex-1 min-w-0 text-left">
             {evalResult.safe ? (
-              <div className="text-[10px] font-black text-emerald-300 uppercase tracking-wider">
+              <div className="text-xs font-black text-emerald-300 uppercase tracking-wider">
                 ✓ PPE Insulation Active — Full Body Protection Confirmed
               </div>
             ) : (
-              <div className="text-[10px] font-medium text-rose-200">
+              <div className="text-xs font-medium text-rose-200 leading-tight">
                 <span className="font-black uppercase text-rose-300">Action Required: </span>
                 {recommendedItem ? (
-                  <span>Click <strong className="text-white underline">{recommendedItem.name}</strong> above to protect against {hazardMagnitude.toFixed(0)}{hazardType === 'arc_flash' ? ' cal' : 'V'} hazard.</span>
+                  <span>Click <strong className="text-white underline font-black">{recommendedItem.name}</strong> above to protect against {hazardMagnitude.toFixed(0)}{hazardType === 'arc_flash' ? ' cal' : 'V'} hazard.</span>
                 ) : (
                   <span>Select required PPE items above to insulate operator.</span>
                 )}
