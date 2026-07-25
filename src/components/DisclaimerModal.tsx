@@ -37,7 +37,7 @@ export function DisclaimerModal({ onAccept }: DisclaimerProps) {
             </div>
           </div>
 
-          {/* Scrollable Commercial Grid / Disclaimer Cards */}
+          {/* Step-wise Educational & Risk Disclaimer Cards */}
           <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
               {/* Card 1: Educational Scope */}
@@ -50,7 +50,7 @@ export function DisclaimerModal({ onAccept }: DisclaimerProps) {
                     </h3>
                   </div>
                   <p className="text-[11px] sm:text-xs text-slate-400 leading-normal sm:leading-relaxed">
-                    Visualizes electrical hazards safely without danger. Models align with <strong className="text-slate-300">OSHA, NFPA 70E, IEEE 1584, & IEC</strong> standards.
+                    Visualizes electrical hazards safely without real danger. Physics models align strictly with <strong className="text-slate-300">OSHA, NFPA 70E, IEEE 1584, & IEC</strong> standards.
                   </p>
                 </div>
                 <div className="mt-2 sm:mt-4 pt-1.5 sm:pt-3 border-t border-white/10 flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] text-sky-400/90 font-medium">
@@ -68,7 +68,7 @@ export function DisclaimerModal({ onAccept }: DisclaimerProps) {
                     </h3>
                   </div>
                   <p className="text-[11px] sm:text-xs text-slate-400 leading-normal sm:leading-relaxed">
-                    Actual shock and arc flash severity depends on body resistance, contact surface, path, duration, voltage, and PPE.
+                    Actual shock and arc flash severity depends on body resistance, contact surface, current path, duration, system voltage, and rated PPE insulation.
                   </p>
                 </div>
                 <div className="mt-2 sm:mt-4 pt-1.5 sm:pt-3 border-t border-white/10 flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] text-amber-400/90 font-medium">
@@ -86,7 +86,7 @@ export function DisclaimerModal({ onAccept }: DisclaimerProps) {
                     </h3>
                   </div>
                   <p className="text-[11px] sm:text-xs text-slate-400 leading-normal sm:leading-relaxed">
-                    Not for engineering design, medical diagnosis, or legal compliance. Never attempt physical recreation of hazards.
+                    Not for engineering design signoff, medical diagnosis, or legal compliance. Never attempt physical recreation of electrical hazards.
                   </p>
                 </div>
                 <div className="mt-2 sm:mt-4 pt-1.5 sm:pt-3 border-t border-white/10 flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] text-orange-400/90 font-medium">

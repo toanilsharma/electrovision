@@ -143,9 +143,14 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
     
     const heartFactor = path === 'hand-to-foot' ? 1.0 : 0.4;
     
-    if (config?.profile === 'child') {
-      r = r * 0.7;
-    }
+    // IEC 60479-1 / IEEE 80 Persona Resistance & Body Mass Scaling
+    let profileMultiplier = 1.0;
+    if (config?.profile === 'child') profileMultiplier = 0.60;
+    else if (config?.profile === 'teenager') profileMultiplier = 0.75;
+    else if (config?.profile === 'adult_female') profileMultiplier = 0.85;
+    else if (config?.profile === 'electrician') profileMultiplier = 1.15;
+
+    r = Math.round(r * profileMultiplier);
 
     return { r, heartFactor };
   };
@@ -154,18 +159,29 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
     const table = [
       [0, 200], [10, 200], [20, 150], [50, 100], [100, 70], [200, 50], [500, 40], [1000, 30], [10000, 30]
     ];
-    if (tMs <= table[0][0]) return table[0][1];
-    if (tMs >= table[table.length - 1][0]) return table[table.length - 1][1];
-    for (let i = 0; i < table.length - 1; i++) {
-      if (tMs >= table[i][0] && tMs <= table[i+1][0]) {
-        const t1 = table[i][0];
-        const i1 = table[i][1];
-        const t2 = table[i+1][0];
-        const i2 = table[i+1][1];
-        return i1 + ((tMs - t1) / (t2 - t1)) * (i2 - i1);
+    let baseThreshold = 30;
+    if (tMs <= table[0][0]) baseThreshold = table[0][1];
+    else if (tMs >= table[table.length - 1][0]) baseThreshold = table[table.length - 1][1];
+    else {
+      for (let i = 0; i < table.length - 1; i++) {
+        if (tMs >= table[i][0] && tMs <= table[i+1][0]) {
+          const t1 = table[i][0];
+          const i1 = table[i][1];
+          const t2 = table[i+1][0];
+          const i2 = table[i+1][1];
+          baseThreshold = i1 + ((tMs - t1) / (t2 - t1)) * (i2 - i1);
+          break;
+        }
       }
     }
-    return 30;
+
+    // IEC 60479-1 Clause 4.3 Fibrillation Threshold Scaling by Body Mass
+    let thresholdMultiplier = 1.0;
+    if (config?.profile === 'child') thresholdMultiplier = 0.50;
+    else if (config?.profile === 'teenager') thresholdMultiplier = 0.70;
+    else if (config?.profile === 'adult_female') thresholdMultiplier = 0.80;
+
+    return baseThreshold * thresholdMultiplier;
   };
 
   const calculateResults = () => {

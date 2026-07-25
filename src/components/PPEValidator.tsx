@@ -462,7 +462,7 @@ export function PPEValidator({ hazardType, hazardMagnitude, onSafetyChange }: PP
       <div className="flex flex-wrap justify-between items-center gap-1.5 mb-2 z-10 shrink-0">
         <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-white uppercase tracking-wider">
           <Shield className={cn("w-4 h-4 sm:w-5 sm:h-5 shrink-0", evalResult.safe ? "text-emerald-400" : "text-amber-400")} /> 
-          <span>Equip PPEs to Save Yourself from Electrical Hazards</span>
+          <span>Choose from below PPEs to save your self.</span>
         </div>
         
         <span className={cn(

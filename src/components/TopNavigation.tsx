@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ShieldAlert, Zap, ShieldCheck, Battery, Activity, Shield, ActivitySquare, ChevronDown, LayoutGrid, X, Check } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ShieldAlert, Zap, ShieldCheck, Battery, Activity, Shield, ActivitySquare, ChevronDown, LayoutGrid, X, Check, Home, Factory } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { SimulationType, UserConfig } from '@/src/types';
 import { TrainerToolbar } from './TrainerToolbar';
@@ -24,12 +24,20 @@ const modules: { id: SimulationType; label: string; icon: React.ElementType; tag
   { id: 'assessment', label: 'Assessment Mode', icon: ShieldCheck, tag: 'Test Knowledge' },
 ];
 
+const RESIDENTIAL_MODULE_IDS: SimulationType[] = ['ac_shock', 'earth_fault', 'short_circuit', 'first_aid', 'assessment'];
+
 export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigure }: TopNavProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const activeModuleObj = modules.find(m => m.id === activeModule) || modules[0];
-  const activeIndex = modules.findIndex(m => m.id === activeModule) + 1;
-  const ActiveIcon = activeModuleObj.icon;
+  const visibleModules = useMemo(() => {
+    if (userConfig?.environment === 'residential') {
+      return modules.filter(m => RESIDENTIAL_MODULE_IDS.includes(m.id));
+    }
+    return modules;
+  }, [userConfig?.environment]);
+
+  const activeModuleObj = visibleModules.find(m => m.id === activeModule) || visibleModules[0] || modules[0];
+  const activeIndex = visibleModules.findIndex(m => m.id === activeModule) + 1;
 
   const handleModuleSelect = (id: SimulationType) => {
     onSelect(id);
@@ -53,6 +61,25 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
         </div>
         
         <div className="flex items-center gap-2 md:gap-4">
+          {/* Domain Filter Indicator Badge */}
+          {userConfig && (
+            <span className={cn(
+              "hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider border cursor-pointer transition-colors",
+              userConfig.environment === 'residential' 
+                ? "bg-amber-950/80 text-amber-300 border-amber-500/50 shadow-sm" 
+                : "bg-orange-950/80 text-orange-400 border-orange-500/50 shadow-sm"
+            )}
+            onClick={onReconfigure}
+            title="Click to switch Domain (Residential vs Industrial)"
+            >
+              {userConfig.environment === 'residential' ? (
+                <><Home className="w-3 h-3 text-amber-400" /> RESIDENTIAL (5 Simulators)</>
+              ) : (
+                <><Factory className="w-3 h-3 text-orange-400" /> INDUSTRIAL (All 9 Simulators)</>
+              )}
+            </span>
+          )}
+
           {/* Mobile Module Selector Button */}
           <button
             onClick={() => setIsMobileMenuOpen(true)}
@@ -64,7 +91,7 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
               {activeModuleObj.label}
             </span>
             <span className="text-[9px] font-mono text-orange-400 bg-slate-950 px-1 py-0.2 rounded border border-orange-500/30">
-              {activeIndex}/9
+              {activeIndex}/{visibleModules.length}
             </span>
             <ChevronDown className="w-3 h-3 text-orange-400 shrink-0 ml-0.5" />
           </button>
@@ -76,7 +103,7 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
                 onClick={onReconfigure}
                 className="hidden sm:block px-3 py-1 bg-slate-950/60 rounded-full border border-slate-800 text-[9px] md:text-[10px] font-black text-slate-200 tracking-wider uppercase hover:bg-slate-800 hover:border-orange-500/50 transition-colors cursor-pointer"
               >
-                {userConfig.environment} | {userConfig.profile.replace('_', ' ')}
+                {userConfig.profile.replace('_', ' ')}
               </button>
               <button 
                 onClick={onReconfigure}
@@ -89,19 +116,14 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
         </div>
       </div>
       
-      {/* Scrollable Module Selector Row with Left/Right Gradient Fade & Cue */}
+      {/* Scrollable Domain-Filtered Module Selector Row */}
       <div className="relative px-3 sm:px-4 pb-2">
-        {/* Right Fade Indicator for horizontal scroll hint on mobile */}
-        <div className="pointer-events-none absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-slate-900 via-slate-900/80 to-transparent sm:hidden z-10 flex items-center justify-end pr-1 text-slate-400">
-          <span className="text-[9px] font-mono font-bold animate-pulse text-orange-400">▶</span>
-        </div>
-
         <div className="overflow-x-auto no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <style dangerouslySetInnerHTML={{__html: `
             .no-scrollbar::-webkit-scrollbar { display: none; }
           `}} />
           <nav className="flex space-x-1.5 lg:space-x-2 no-scrollbar pr-6 sm:pr-0">
-            {modules.map((m) => {
+            {visibleModules.map((m) => {
               const isActive = m.id === activeModule;
               const Icon = m.icon;
               return (
@@ -124,11 +146,10 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
         </div>
       </div>
 
-      {/* Mobile All Modules Drawer / Modal Overlay */}
+      {/* Mobile Domain-Filtered Modules Drawer */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <div className="fixed inset-0 z-[100] flex flex-col justify-end sm:hidden">
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -137,36 +158,30 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
               className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
             />
 
-            {/* Bottom Sheet Drawer */}
             <motion.div
-              initial={{ y: '100%' }}
+              initial={{ y: "100%" }}
               animate={{ y: 0 }}
-              exit={{ y: '100%' }}
+              exit={{ y: "100%" }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative w-full bg-slate-900 border-t-2 border-orange-500 rounded-t-2xl shadow-2xl p-4 flex flex-col max-h-[85vh] z-10 overflow-hidden"
+              className="relative bg-slate-900 border-t border-slate-800 rounded-t-2xl p-4 max-h-[80vh] overflow-y-auto flex flex-col z-10"
             >
-              {/* Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
                 <div className="flex items-center gap-2">
-                  <LayoutGrid className="w-5 h-5 text-orange-400" />
-                  <div>
-                    <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                      SELECT SIMULATION MODULE
-                    </h3>
-                    <p className="text-[10px] text-slate-400">9 Safety & Hazard Modules Available</p>
-                  </div>
+                  <LayoutGrid className="w-5 h-5 text-orange-500" />
+                  <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                    Select Module ({userConfig?.environment.toUpperCase()})
+                  </h3>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+                  className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Module Grid List */}
-              <div className="py-3 grid grid-cols-1 gap-2 overflow-y-auto max-h-[60vh]">
-                {modules.map((m, index) => {
+              <div className="grid grid-cols-1 gap-2">
+                {visibleModules.map((m) => {
                   const isActive = m.id === activeModule;
                   const Icon = m.icon;
                   return (
@@ -174,36 +189,22 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
                       key={m.id}
                       onClick={() => handleModuleSelect(m.id)}
                       className={cn(
-                        "p-3 rounded-xl flex items-center justify-between text-left border transition-all cursor-pointer active:scale-98",
+                        "p-3 rounded-xl border flex items-center justify-between text-left transition-all",
                         isActive
-                          ? "bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 border-amber-300 shadow-lg shadow-orange-500/20 font-black"
-                          : "bg-slate-950 border-slate-800 text-slate-200 hover:bg-slate-800 hover:border-slate-700"
+                          ? "bg-orange-500/20 border-orange-500 text-white"
+                          : "bg-slate-950 border-slate-800 text-slate-300"
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={cn("p-2 rounded-lg shrink-0", isActive ? "bg-slate-950 text-orange-400" : "bg-slate-900 text-slate-400")}>
-                          <Icon className="w-5 h-5" />
+                        <div className={cn("p-2 rounded-lg", isActive ? "bg-orange-500 text-slate-950 font-bold" : "bg-slate-900 text-slate-400")}>
+                          <Icon className="w-4 h-4" />
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-black uppercase tracking-wider">
-                              {m.label}
-                            </span>
-                            <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase", isActive ? "bg-slate-950 text-amber-300" : "bg-slate-900 text-slate-400 border border-slate-800")}>
-                              {index + 1}/9
-                            </span>
-                          </div>
-                          <span className={cn("text-[10px] block mt-0.5 font-medium", isActive ? "text-slate-900 font-bold" : "text-slate-400")}>
-                            {m.tag}
-                          </span>
+                          <span className="block font-black text-xs uppercase">{m.label}</span>
+                          {m.tag && <span className="text-[9px] text-slate-400 font-mono">{m.tag}</span>}
                         </div>
                       </div>
-
-                      {isActive && (
-                        <div className="w-6 h-6 rounded-full bg-slate-950 flex items-center justify-center shrink-0">
-                          <Check className="w-4 h-4 text-orange-400 font-bold" />
-                        </div>
-                      )}
+                      {isActive && <Check className="w-4 h-4 text-orange-400" />}
                     </button>
                   );
                 })}
