@@ -410,54 +410,48 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
       </div>
 
       {/* Column 2: Analysis & PPE */}
-      <div className="flex-1 min-w-[280px] xl:min-w-[320px] p-2.5 rounded-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-lg flex flex-col h-auto lg:h-full overflow-y-auto order-3 lg:order-2 justify-between space-y-2">
-        <h3 className="flex items-center gap-2 mb-1.5 text-xs font-black tracking-[0.2em] uppercase text-orange-400 border-l-3 border-orange-500 pl-2 shrink-0">
-          <TrendingUp className="w-4 h-4 text-orange-400" /> IEC 60479-1 Analysis
-        </h3>
+      <div className="flex-1 min-w-[280px] xl:min-w-[340px] p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full overflow-y-auto order-3 lg:order-2 space-y-2">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+          <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-orange-400 border-l-3 border-orange-500 pl-2">
+            <TrendingUp className="w-4 h-4 text-orange-400" /> IEC 60479-1 Analysis
+          </h3>
+          <span className="text-[9.5px] font-mono font-black text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/40">
+            Eq. Heart: {results.effectiveHeartCurrent.toFixed(1)} mA
+          </span>
+        </div>
         
-        <div className="flex-1 flex flex-col justify-between space-y-2 min-h-0">
-          <div className="grid grid-cols-2 gap-2 shrink-0">
-            <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
-              <InfoTooltip title="Total Body Impedance (Z_T)" description="According to IEC 60479-1, total body impedance drops significantly at higher voltages due to skin breakdown."><span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mb-0.5">Impedance (Z_T)</span></InfoTooltip>
-              <span className="text-base font-black font-mono text-white">{results.r.toFixed(0)} Ω</span>
-            </div>
-            <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
-              <InfoTooltip title="Heart Current Factor (F)" description="A multiplier representing the proportion of current passing through the heart region. Left-hand to both feet is typically 1.0 (highest risk)."><span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mb-0.5">Heart Factor</span></InfoTooltip>
-              <span className="text-base font-black font-mono text-white">{results.heartFactor.toFixed(1)} F</span>
-            </div>
+        {/* 4 Metric Cards Grid */}
+        <div className="grid grid-cols-2 gap-1.5 shrink-0">
+          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Impedance (Z_T)</span>
+            <span className="text-xs sm:text-sm font-black font-mono text-white">{results.r.toFixed(0)} Ω</span>
           </div>
-
-          <div className="flex justify-between items-end p-2.5 bg-slate-950 rounded-xl border border-slate-800 shrink-0">
-            <div>
-              <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mb-0.5 block">Prospective Current</span>
-              <div className="flex items-baseline gap-1">
-                <span className={cn("text-xl font-black font-mono tracking-tighter", isSimulating ? 'text-orange-400 drop-shadow-[0_0_15px_rgba(249,115,22,0.5)]' : 'text-white')}>
-                  {results.currentMA.toFixed(1)}
-                </span>
-                <span className="text-slate-400 font-mono text-[9px] uppercase">mA</span>
-              </div>
-            </div>
-            <div className="text-right">
-              <InfoTooltip title="Equivalent Heart Current" description="I_eq = Total Body Current x Heart Factor. This value determines the physiological effects on the heart such as Ventricular Fibrillation (V-Fib)."><span className="text-[9px] font-bold tracking-widest text-amber-300 uppercase mb-0.5 block">Eq. Heart Current</span></InfoTooltip>
-              <span className="text-base font-black font-mono text-yellow-300 drop-shadow">{results.effectiveHeartCurrent.toFixed(1)} mA</span>
-            </div>
+          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Heart Factor</span>
+            <span className="text-xs sm:text-sm font-black font-mono text-white">{results.heartFactor.toFixed(1)} F</span>
           </div>
-          
-          <div className="flex flex-col shrink-0 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-            <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mb-0.5">Shock Severity (Level {results.level}/9)</span>
-            <span className={cn("text-xs font-black uppercase tracking-wider leading-tight", 
-              results.level === 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(34,197,94,0.3)]' :
-              results.level > 6 ? 'text-yellow-300 bg-red-950/90 px-2 py-1 rounded border border-red-500 shadow-lg' : 
+          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Prospective Current</span>
+            <span className={cn("text-xs sm:text-sm font-black font-mono", isSimulating ? 'text-orange-400 drop-shadow' : 'text-white')}>
+              {results.currentMA.toFixed(1)} mA
+            </span>
+          </div>
+          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Shock Severity</span>
+            <span className={cn("text-[10.5px] font-black uppercase truncate", 
+              results.level === 0 ? 'text-emerald-400' :
+              results.level > 6 ? 'text-rose-400' : 
               results.level > 3 ? 'text-orange-300' : 'text-amber-300'
             )}>
               {results.severity}
             </span>
           </div>
-          
-          <div className="mt-2 shrink-0">
-            <PPEValidator hazardType="shock_ac" hazardMagnitude={voltage} onSafetyChange={(safe, names) => { setIsPPESafe(safe); if (names) setActivePPENames(names); }} />
-            <EmergencyResponse isSimulating={isSimulating && !isPPESafe} hasSimulated={hasSimulated} type="shock" />
-          </div>
+        </div>
+
+        {/* PPE Validator & Emergency Response */}
+        <div className="flex-1 flex flex-col min-h-0 justify-between">
+          <PPEValidator hazardType="shock_ac" hazardMagnitude={voltage} onSafetyChange={(safe, names) => { setIsPPESafe(safe); if (names) setActivePPENames(names); }} />
+          <EmergencyResponse isSimulating={isSimulating && !isPPESafe} hasSimulated={hasSimulated} type="shock" />
         </div>
       </div>
 

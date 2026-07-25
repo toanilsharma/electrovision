@@ -44,12 +44,14 @@ export const SafetyLessonModal: React.FC<SafetyLessonModalProps> = ({
 
   const getSurvivalRecommendations = (v: number, skin: string) => {
     const recs: string[] = [];
-    if (v <= 500) recs.push("Class 00 Insulating Gloves (up to 500V)");
-    else if (v <= 1000) recs.push("Class 0 Insulating Gloves (up to 1000V)");
-    else if (v <= 7500) recs.push("Class 1 HV Gloves (up to 7.5kV)");
-    else recs.push("Class 2 HV Gloves (up to 17kV)");
+    if (v <= 500) recs.push("Class 00 Rubber Gloves (IEC 60903 / ASTM D120 up to 500V)");
+    else if (v <= 1000) recs.push("Class 0 Rubber Gloves (IEC 60903 / ASTM D120 up to 1000V)");
+    else if (v <= 7500) recs.push("Class 1 HV Gloves (IEC 60903 / ASTM D120 up to 7.5kV)");
+    else recs.push("Class 2 HV Gloves (IEC 60903 / ASTM D120 up to 17kV)");
 
-    recs.push("Dielectric Safety Boots (Stops ground return path)");
+    recs.push("Dielectric EH Boots (ASTM F2413 / ASTM F1117)");
+    recs.push("Eye Goggles & Arc Face Shield (ANSI Z87.1 / NFPA 70E)");
+    recs.push("Arc-Rated / IFR Suit (NFPA 70E / IEC 61482 cal/cm² rated)");
     if (skin === 'wet') recs.push("Keep hands & skin completely dry");
 
     return recs;
