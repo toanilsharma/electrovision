@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { MobileActionButton } from '../MobileActionButton';
 import { HumanBodyTwin } from '../HumanBodyTwin';
 import { EmergencyResponse } from '../EmergencyResponse';
 import { DiagnosticScope } from '../DiagnosticScope';
-import { Activity, Droplets, Zap, Clock, UserSquare2, TrendingUp, AlertTriangle, BookOpen } from 'lucide-react';
+import { Activity, Droplets, Zap, Clock, UserSquare2, TrendingUp, AlertTriangle, BookOpen, RotateCcw } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { ShockEffectLevel, PPEItem, UserConfig } from '@/src/types';
 import { PPEValidator } from '../PPEValidator';
@@ -14,8 +14,21 @@ import { AfterActionReportModal, IncidentReport } from '../AfterActionReportModa
 import { HazardOverlay } from '../HazardOverlay';
 import { SafetyLessonModal } from '../SafetyLessonModal';
 
+// IEC 60479-1 AC Touch Voltage Reference Levels (Residential capped ≤415V AC)
+const ALL_AC_VOLTAGES = [
+  { value: 50, label: '50V (SELV Limit / Safe Touch Voltage)' },
+  { value: 120, label: '120V (Low Voltage Nominal)' },
+  { value: 230, label: '230V (Single-Phase AC Mains)' },
+  { value: 415, label: '415V (3-Phase Residential/Commercial AC)' },
+  { value: 700, label: '700V (Elevated Industrial Voltage)', industrialOnly: true },
+  { value: 1000, label: '1000V (IEC 60479-1 Upper Limit)', industrialOnly: true },
+];
+
 export function ACShockSimulator({ config }: { config?: UserConfig }) {
-  const [voltage, setVoltage] = useState<number>(230);
+  const isResidential = config?.environment === 'residential';
+  const maxVoltageLimit = isResidential ? 415 : 1000;
+  
+  const [voltage, setVoltage] = useState<number>(isResidential ? 230 : 230);
   const [duration, setDuration] = useState<number>(0);
   const [skinCondition, setSkinCondition] = useState<'dry' | 'wet'>('dry');
   const [path, setPath] = useState<'hand-to-hand' | 'hand-to-foot'>('hand-to-foot');
@@ -49,13 +62,43 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
 
   const { startHum, stopHum, triggerMuscleLockVibration } = useAudioHaptics();
 
+  const standardVoltages = useMemo(() => {
+    return ALL_AC_VOLTAGES.filter(v => !isResidential || !v.industrialOnly);
+  }, [isResidential]);
+
   useEffect(() => {
-    if (config?.environment === 'industrial') {
-      setVoltage(415);
-    } else {
-      setVoltage(230);
+    if (isResidential) {
+      if (voltage > 415) setVoltage(415);
     }
-  }, [config]);
+  }, [isResidential, voltage]);
+
+  // Synchronized voltage dropdown state binding (strictly IEC 60479-1 levels)
+  const isStandardVoltage = standardVoltages.some(item => item.value === voltage);
+  const dropdownValue = isStandardVoltage ? voltage.toString() : 'custom';
+
+  const handleDropdownChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val !== 'custom') {
+      setVoltage(Number(val));
+    }
+  };
+
+  const handleSafetyChange = useCallback((safe: boolean, names?: string[]) => {
+    setIsPPESafe(safe);
+    if (names) setActivePPENames(names);
+  }, []);
+
+  const handleResetSimulator = () => {
+    setIsSimulating(false);
+    setIsMuscleLocked(false);
+    stopHum();
+    setVoltage(isResidential ? 230 : 415);
+    setDuration(0);
+    setSkinCondition('dry');
+    setPath('hand-to-foot');
+    setIsPPESafe(false);
+    setActivePPENames([]);
+  };
 
   // Record active AC shock parameters while simulating
   useEffect(() => {
@@ -234,8 +277,8 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
     }
   }, [isSimulating, isPPESafe, results.currentMA, isMuscleLocked]);
 
-  const prevSimulating = React.useRef(isSimulating);
-  React.useEffect(() => {
+  const prevSimulating = useRef(isSimulating);
+  useEffect(() => {
     if (prevSimulating.current && !isSimulating && hasSimulated) {
       setShowSafetyLesson(true);
       if (results.level >= 6 || (!isPPESafe && results.level >= 3)) {
@@ -265,43 +308,85 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
       animate={{ x: isSimulating ? [-2, 2, -3, 3, -1, 1, 0] : 0 }}
       transition={{ duration: 0.2, repeat: isSimulating ? Infinity : 0, ease: "linear" }}
     >
-      {/* Column 1: Controls & Prominent HOLD TO SHOCK Button */}
-      <div className="w-full lg:w-[310px] xl:w-[330px] shrink-0 p-3 rounded-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-lg flex flex-col h-[40vh] lg:h-full overflow-y-auto lg:overflow-y-auto order-1 lg:order-1 justify-between">
+      {/* Column 1: Left Controls Panel */}
+      <div className="w-full lg:w-[310px] xl:w-[330px] shrink-0 p-3 rounded-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-lg flex flex-col h-[40vh] lg:h-full overflow-y-auto order-1 lg:order-1 justify-between">
         <div className="space-y-3 flex-1 flex flex-col">
-          <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-orange-400 border-l-3 border-orange-500 pl-2 shrink-0">
-            <Zap className="w-4 h-4 text-orange-400" /> AC Parameters
-          </h3>
+          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+            <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-orange-400 border-l-3 border-orange-500 pl-2">
+              <Zap className="w-4 h-4 text-orange-400" /> AC Parameters
+            </h3>
+            {/* Distinct Rose Reset Button */}
+            <button
+              type="button"
+              onClick={handleResetSimulator}
+              className="px-2 py-1 text-[10.5px] font-mono font-black rounded-lg bg-rose-950/80 hover:bg-rose-900/90 border border-rose-500/60 hover:border-rose-400 text-rose-200 transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-md"
+              title="Reset AC simulator parameters to baseline defaults"
+            >
+              <RotateCcw className="w-3 h-3 text-rose-400 stroke-[3]" />
+              <span>Reset</span>
+            </button>
+          </div>
           
-          <div>
-            <label className="flex justify-between mb-1 text-xs font-bold text-white uppercase tracking-wider">
-              <span>Voltage (V_t)</span>
-              <span className="text-orange-400 font-black">{voltage} V AC</span>
+          {/* Synchronized Voltage Section: Dropdown + Slider */}
+          <div className="space-y-1.5 p-2.5 bg-slate-950 border border-orange-500/50 rounded-xl shadow-md">
+            <label className="flex justify-between items-center text-xs font-bold text-slate-200 uppercase tracking-wider">
+              <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-orange-400" /> Voltage (V_t)</span>
+              <span className="text-orange-300 font-black font-mono px-2 py-0.5 rounded bg-orange-500/10 border border-orange-500/30">
+                {voltage} V AC
+              </span>
             </label>
+
+            {/* High Contrast Voltage Dropdown Select */}
+            <select
+              value={dropdownValue}
+              onChange={handleDropdownChange}
+              disabled={isMuscleLocked}
+              className="w-full bg-slate-950 border border-orange-500/60 hover:border-orange-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-500/50 text-slate-100 text-xs font-mono font-bold rounded-xl px-3 py-2 cursor-pointer disabled:opacity-50 transition-colors"
+            >
+              {standardVoltages.map(v => (
+                <option key={v.value} value={v.value} className="bg-slate-950 text-slate-200 font-bold">
+                  {v.label}
+                </option>
+              ))}
+              <option value="custom" className="bg-slate-950 text-orange-400 font-bold">
+                Custom Voltage ({voltage}V)
+              </option>
+            </select>
+
+            {/* Synchronized Slider Range Input (Capped to 415V in Residential mode) */}
             <input
               type="range"
-              min="50" max="1000" step="10"
+              min="50"
+              max={maxVoltageLimit}
+              step="10"
               value={voltage}
               onChange={(e) => setVoltage(Number(e.target.value))}
               disabled={isMuscleLocked}
-              className="w-full accent-orange-500 cursor-pointer disabled:opacity-50"
+              className="w-full accent-orange-500 cursor-pointer disabled:opacity-50 mt-1"
             />
           </div>
 
+          {/* Shock Duration Display */}
           <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800">
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-orange-400"/> Shock Duration</span>
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-orange-400"/> Shock Duration
+            </span>
             <span className="text-base font-black font-mono text-orange-400">{duration} ms</span>
           </div>
 
+          {/* Skin Condition Input */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Skin Condition</label>
             <div className="grid grid-cols-2 gap-1.5">
               <button
+                type="button"
                 onClick={() => !isMuscleLocked && setSkinCondition('dry')}
                 className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'dry' ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
                 Dry Skin
               </button>
               <button
+                type="button"
                 onClick={() => !isMuscleLocked && setSkinCondition('wet')}
                 className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'wet' ? 'bg-blue-500/20 border-blue-500/60 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
@@ -310,16 +395,19 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
             </div>
           </div>
 
+          {/* Current Path Input */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Current Path</label>
             <div className="grid grid-cols-2 gap-1.5">
               <button
+                type="button"
                 onClick={() => !isMuscleLocked && setPath('hand-to-hand')}
                 className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-hand' ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
                 Hand - Hand
               </button>
               <button
+                type="button"
                 onClick={() => !isMuscleLocked && setPath('hand-to-foot')}
                 className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-foot' ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
@@ -339,6 +427,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
                 Hand flexor muscles locked! You cannot release the hold button. Wait for someone to trip the breaker.
               </p>
               <button
+                type="button"
                 onClick={handleEmergencyCutoff}
                 className="w-full py-2.5 px-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-900 font-black text-xs uppercase tracking-widest rounded-lg shadow-lg border-2 border-amber-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
               >
@@ -391,7 +480,6 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
         {/* Mobile Action Button */}
         <MobileActionButton>
           {isMuscleLocked ? (
-            /* Mobile: Bystander cutoff replaces shock button when muscle-locked */
             <div className="flex flex-col gap-2 w-full">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-950 border-2 border-amber-400 rounded-xl animate-pulse">
                 <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -400,6 +488,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
                 </span>
               </div>
               <button
+                type="button"
                 onClick={handleEmergencyCutoff}
                 className="w-full py-4 px-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-900 font-black text-sm uppercase tracking-widest rounded-2xl shadow-[0_0_30px_rgba(251,191,36,0.6)] border-2 border-amber-200 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
               >
@@ -425,8 +514,8 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
         </MobileActionButton>
       </div>
 
-      {/* Column 2: Analysis & PPE */}
-      <div className="flex-1 min-w-[280px] xl:min-w-[340px] p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full overflow-y-auto order-3 lg:order-2 space-y-2">
+      {/* Column 2: Center Panel (IEC 60479-1 Analysis & Multi-Select PPE Dropdown Component) */}
+      <div className="flex-1 min-w-[280px] xl:min-w-[340px] p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full overflow-y-auto order-3 lg:order-2 space-y-3">
         <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
           <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-orange-400 border-l-3 border-orange-500 pl-2">
             <TrendingUp className="w-4 h-4 text-orange-400" /> IEC 60479-1 Analysis
@@ -438,22 +527,22 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
         
         {/* 4 Metric Cards Grid */}
         <div className="grid grid-cols-2 gap-1.5 shrink-0">
-          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Impedance (Z_T)</span>
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Impedance (Z_T)</span>
             <span className="text-xs sm:text-sm font-black font-mono text-white">{results.r.toFixed(0)} Ω</span>
           </div>
-          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Heart Factor</span>
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Heart Factor</span>
             <span className="text-xs sm:text-sm font-black font-mono text-white">{results.heartFactor.toFixed(1)} F</span>
           </div>
-          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Prospective Current</span>
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Prospective Current</span>
             <span className={cn("text-xs sm:text-sm font-black font-mono", isSimulating ? 'text-orange-400 drop-shadow' : 'text-white')}>
               {results.currentMA.toFixed(1)} mA
             </span>
           </div>
-          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Shock Severity</span>
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Shock Severity</span>
             <span className={cn("text-[10.5px] font-black uppercase truncate", 
               results.level === 0 ? 'text-emerald-400' :
               results.level > 6 ? 'text-rose-400' : 
@@ -464,16 +553,22 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           </div>
         </div>
 
-        {/* PPE Validator & Emergency Response */}
-        <div className="flex-1 flex flex-col min-h-0 justify-between">
-          <PPEValidator hazardType="shock_ac" hazardMagnitude={voltage} onSafetyChange={(safe, names) => { setIsPPESafe(safe); if (names) setActivePPENames(names); }} />
+        {/* Multi-Select PPE Dropdown Component (Domain-Filtered for Residential vs Industrial) */}
+        <div className="flex-1 flex flex-col min-h-0 justify-between space-y-3">
+          <PPEValidator
+            hazardType="shock_ac"
+            hazardMagnitude={voltage}
+            environment={config?.environment}
+            onSafetyChange={handleSafetyChange}
+          />
+
           <EmergencyResponse isSimulating={isSimulating && !isPPESafe} hasSimulated={hasSimulated} type="shock" />
         </div>
       </div>
 
-      {/* Column 3: Human Section & Always-Visible Scopes Area (Zero Scrolling Required) */}
+      {/* Column 3: Human Section & Scopes */}
       <div className="w-full lg:w-[480px] xl:w-[540px] shrink-0 flex flex-col gap-2 h-[45vh] lg:h-full overflow-hidden order-2 lg:order-3 relative z-10 bg-slate-950/95 backdrop-blur-md pb-3 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-xl">
-        {/* Human Body Twin Container - Dynamically scales with flex-1 min-h-0 */}
+        {/* Human Body Twin Container */}
         <div className="flex-1 min-h-0 w-full relative border border-slate-800 rounded-xl bg-slate-950 shadow-inner overflow-hidden flex flex-col">
           <HumanBodyTwin 
             shockPath={path} 
@@ -487,7 +582,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           />
         </div>
         
-        {/* Side-by-Side Diagnostic Scopes Grid (100% ALWAYS VISIBLE AT BOTTOM - ZERO SCROLLING) */}
+        {/* Side-by-Side Diagnostic Scopes Grid */}
         <div className="grid grid-cols-2 gap-2 h-24 lg:h-26 shrink-0 w-full">
           <div className="h-full w-full border border-slate-800 rounded-xl p-2 bg-slate-950 flex flex-col shadow-inner overflow-hidden">
              <span className="text-[10px] font-black tracking-wider text-orange-400 uppercase mb-0.5 flex justify-between items-center shrink-0">

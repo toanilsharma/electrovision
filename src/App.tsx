@@ -52,6 +52,7 @@ export default function App() {
   const [userConfig, setUserConfig] = useState<UserConfig | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [activeModule, setActiveModule] = useState<SimulationType>('ac_shock');
+  const [resetKey, setResetKey] = useState<number>(0);
 
   if (showDisclaimer) {
     return <DisclaimerModal onAccept={() => setShowDisclaimer(false)} />;
@@ -61,27 +62,30 @@ export default function App() {
     return <GameOnboarding onComplete={setUserConfig} />;
   }
 
+  const handleResetSimulator = () => {
+    setResetKey(prev => prev + 1);
+  };
+
   const renderModule = () => {
     switch (activeModule) {
       case 'ac_shock':
-        return <ACShockSimulator config={userConfig} />;
+        return <ACShockSimulator key={resetKey} config={userConfig} />;
       case 'dc_shock':
-        return <DCShockSimulator config={userConfig} />;
+        return <DCShockSimulator key={resetKey} config={userConfig} />;
       case 'earth_fault':
-        return <EarthFaultSimulator config={userConfig} />;
+        return <EarthFaultSimulator key={resetKey} config={userConfig} />;
       case 'short_circuit':
-        return <ShortCircuitSimulator config={userConfig} />;
+        return <ShortCircuitSimulator key={resetKey} config={userConfig} />;
       case 'step_touch':
-        return <StepTouchSimulator config={userConfig} />;
+        return <StepTouchSimulator key={resetKey} config={userConfig} />;
       case 'arc_flash':
-        return <ArcFlashSimulator config={userConfig} />;
+        return <ArcFlashSimulator key={resetKey} config={userConfig} />;
       case 'loto':
-        return <LOTOSimulator config={userConfig} />;
+        return <LOTOSimulator key={resetKey} config={userConfig} />;
       case 'first_aid':
-        return <FirstAidSimulator config={userConfig} />;
-
+        return <FirstAidSimulator key={resetKey} config={userConfig} />;
       case 'assessment':
-        return <AssessmentModule config={userConfig} />;
+        return <AssessmentModule key={resetKey} config={userConfig} />;
 
       default:
         return (
@@ -102,6 +106,7 @@ export default function App() {
         onSelect={setActiveModule} 
         userConfig={userConfig}
         onReconfigure={() => setShowConfigModal(true)}
+        onResetSimulator={handleResetSimulator}
       />
       
       {showConfigModal && userConfig && (

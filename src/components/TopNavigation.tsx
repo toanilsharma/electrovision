@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ShieldAlert, Zap, ShieldCheck, Battery, Activity, Shield, ActivitySquare, ChevronDown, LayoutGrid, X, Check, Home, Factory } from 'lucide-react';
+import { ShieldAlert, Zap, ShieldCheck, Battery, Activity, Shield, ActivitySquare, ChevronDown, LayoutGrid, X, Check, Home, Factory, RotateCcw } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { SimulationType, UserConfig } from '@/src/types';
 import { TrainerToolbar } from './TrainerToolbar';
@@ -10,6 +10,7 @@ interface TopNavProps {
   onSelect: (module: SimulationType) => void;
   userConfig?: UserConfig;
   onReconfigure?: () => void;
+  onResetSimulator?: () => void;
 }
 
 const modules: { id: SimulationType; label: string; icon: React.ElementType; tag?: string }[] = [
@@ -26,7 +27,7 @@ const modules: { id: SimulationType; label: string; icon: React.ElementType; tag
 
 const RESIDENTIAL_MODULE_IDS: SimulationType[] = ['ac_shock', 'earth_fault', 'short_circuit', 'first_aid', 'assessment'];
 
-export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigure }: TopNavProps) {
+export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigure, onResetSimulator }: TopNavProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const visibleModules = useMemo(() => {
@@ -60,7 +61,18 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
           </div>
         </div>
         
-        <div className="flex items-center gap-2 md:gap-4">
+        <div className="flex items-center gap-2 md:gap-3">
+          {/* Global Reset Simulator Button with Distinct Font & Vibrant Rose Theme */}
+          <button
+            type="button"
+            onClick={onResetSimulator}
+            className="flex items-center gap-1.5 px-3 py-1 bg-rose-950/90 hover:bg-rose-900 border-2 border-rose-500/70 hover:border-rose-400 rounded-full text-[9px] md:text-[10px] font-mono font-black text-rose-200 uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-md"
+            title="Reset active simulator parameters & state back to defaults"
+          >
+            <RotateCcw className="w-3 h-3 text-rose-400 stroke-[3]" />
+            <span>Reset Simulator</span>
+          </button>
+
           {/* Domain Filter Indicator Badge */}
           {userConfig && (
             <span className={cn(
@@ -118,70 +130,54 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
       
       {/* Scrollable Domain-Filtered Module Selector Row */}
       <div className="relative px-3 sm:px-4 pb-2">
-        <div className="overflow-x-auto no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <style dangerouslySetInnerHTML={{__html: `
-            .no-scrollbar::-webkit-scrollbar { display: none; }
-          `}} />
-          <nav className="flex space-x-1.5 lg:space-x-2 no-scrollbar pr-6 sm:pr-0">
-            {visibleModules.map((m) => {
-              const isActive = m.id === activeModule;
-              const Icon = m.icon;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => onSelect(m.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 lg:gap-2 px-3 lg:px-4 py-1.5 text-[9px] lg:text-[10px] font-bold tracking-wider transition-all rounded-lg uppercase whitespace-nowrap shrink-0 border cursor-pointer",
-                    isActive 
-                      ? "bg-orange-500 text-slate-950 border-orange-400 shadow-md shadow-orange-500/10" 
-                      : "bg-slate-950/40 text-slate-300 border-slate-800/80 hover:text-white hover:bg-slate-800 hover:border-slate-700/60"
-                  )}
-                >
-                  <Icon className={cn("w-3 h-3 lg:w-3.5 lg:h-3.5", isActive ? "text-slate-950" : "text-slate-400")} />
-                  {m.label}
-                </button>
-              );
-            })}
-          </nav>
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+          {visibleModules.map(m => {
+            const isActive = m.id === activeModule;
+            const Icon = m.icon;
+            return (
+              <button
+                key={m.id}
+                onClick={() => handleModuleSelect(m.id)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer border select-none",
+                  isActive
+                    ? "bg-orange-500 text-slate-950 border-orange-400 shadow-md shadow-orange-500/10"
+                    : "bg-slate-950/60 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white"
+                )}
+              >
+                <Icon className={cn("w-3.5 h-3.5", isActive ? "text-slate-950" : "text-orange-400")} />
+                <span>{m.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Mobile Domain-Filtered Modules Drawer */}
+      {/* Mobile Drawer Menu */}
       <AnimatePresence>
         {isMobileMenuOpen && (
-          <div className="fixed inset-0 z-[100] flex flex-col justify-end sm:hidden">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
-            />
-
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative bg-slate-900 border-t border-slate-800 rounded-t-2xl p-4 max-h-[80vh] overflow-y-auto flex flex-col z-10"
-            >
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="sm:hidden fixed inset-0 bg-slate-950/95 backdrop-blur-xl z-[120] p-4 flex flex-col justify-between"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div className="flex items-center gap-2">
                   <LayoutGrid className="w-5 h-5 text-orange-500" />
-                  <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                    Select Module ({userConfig?.environment.toUpperCase()})
-                  </h3>
+                  <span className="text-sm font-black uppercase text-white tracking-widest">Select Simulator</span>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+                  className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 gap-2">
-                {visibleModules.map((m) => {
+              <div className="grid grid-cols-1 gap-2 max-h-[70vh] overflow-y-auto">
+                {visibleModules.map(m => {
                   const isActive = m.id === activeModule;
                   const Icon = m.icon;
                   return (
@@ -189,10 +185,10 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
                       key={m.id}
                       onClick={() => handleModuleSelect(m.id)}
                       className={cn(
-                        "p-3 rounded-xl border flex items-center justify-between text-left transition-all",
+                        "flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer",
                         isActive
                           ? "bg-orange-500/20 border-orange-500 text-white"
-                          : "bg-slate-950 border-slate-800 text-slate-300"
+                          : "bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-850"
                       )}
                     >
                       <div className="flex items-center gap-3">
@@ -200,8 +196,8 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
                           <Icon className="w-4 h-4" />
                         </div>
                         <div>
-                          <span className="block font-black text-xs uppercase">{m.label}</span>
-                          {m.tag && <span className="text-[9px] text-slate-400 font-mono">{m.tag}</span>}
+                          <p className="text-xs font-black uppercase tracking-wider">{m.label}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">{m.tag}</p>
                         </div>
                       </div>
                       {isActive && <Check className="w-4 h-4 text-orange-400" />}
@@ -209,8 +205,8 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
                   );
                 })}
               </div>
-            </motion.div>
-          </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

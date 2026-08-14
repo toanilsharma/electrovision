@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { MobileActionButton } from '../MobileActionButton';
 import { HumanBodyTwin } from '../HumanBodyTwin';
 import { EmergencyResponse } from '../EmergencyResponse';
 import { DiagnosticScope } from '../DiagnosticScope';
-import { Battery, Droplets, Zap, TrendingUp, AlertTriangle, BookOpen, Clock } from 'lucide-react';
+import { Battery, Droplets, Zap, TrendingUp, AlertTriangle, BookOpen, Clock, RotateCcw } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { ShockEffectLevel, PPEItem, UserConfig } from '@/src/types';
 import { PPEValidator } from '../PPEValidator';
@@ -12,8 +12,21 @@ import { motion } from 'motion/react';
 import { HazardOverlay } from '../HazardOverlay';
 import { SafetyLessonModal } from '../SafetyLessonModal';
 
+// IEC 60479-1 Standard DC Touch Voltage Reference Levels (Residential capped ≤300V DC)
+const ALL_DC_VOLTAGES = [
+  { value: 60, label: '60V DC (SELV Limit / Touch Voltage)' },
+  { value: 120, label: '120V DC (Low Voltage DC Nominal)' },
+  { value: 300, label: '300V DC (EV Battery / PV String)' },
+  { value: 600, label: '600V DC (Industrial Traction / Array)', industrialOnly: true },
+  { value: 1000, label: '1000V DC (Utility Solar / ESS)', industrialOnly: true },
+  { value: 1500, label: '1500V DC (IEC 60479-1 Upper Limit)', industrialOnly: true },
+];
+
 export function DCShockSimulator({ config }: { config?: UserConfig }) {
-  const [voltage, setVoltage] = useState<number>(300);
+  const isResidential = config?.environment === 'residential';
+  const maxDcVoltageLimit = isResidential ? 300 : 1500;
+
+  const [voltage, setVoltage] = useState<number>(isResidential ? 120 : 300);
   const [duration, setDuration] = useState<number>(0);
   const [skinCondition, setSkinCondition] = useState<'dry' | 'wet'>('dry');
   const [path, setPath] = useState<'hand-to-hand' | 'hand-to-foot'>('hand-to-hand');
@@ -40,15 +53,46 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
     isPPESafe: false,
     activePPENames: []
   });
+
   const { startHum, stopHum, triggerMuscleLockVibration } = useAudioHaptics();
 
+  const standardDcVoltages = useMemo(() => {
+    return ALL_DC_VOLTAGES.filter(v => !isResidential || !v.industrialOnly);
+  }, [isResidential]);
+
   useEffect(() => {
-    if (config?.environment === 'industrial') {
-      setVoltage(600);
-    } else {
-      setVoltage(120);
+    if (isResidential) {
+      if (voltage > 300) setVoltage(300);
     }
-  }, [config]);
+  }, [isResidential, voltage]);
+
+  // Synchronized DC voltage dropdown state binding (IEC 60479-1 DC Analysis)
+  const isStandardVoltage = standardDcVoltages.some(item => item.value === voltage);
+  const dropdownValue = isStandardVoltage ? voltage.toString() : 'custom';
+
+  const handleDropdownChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val !== 'custom') {
+      setVoltage(Number(val));
+    }
+  };
+
+  const handleSafetyChange = useCallback((safe: boolean, names?: string[]) => {
+    setIsPPESafe(safe);
+    if (names) setActivePPENames(names);
+  }, []);
+
+  const handleResetSimulator = () => {
+    setIsSimulating(false);
+    setIsMuscleLocked(false);
+    stopHum();
+    setVoltage(isResidential ? 120 : 600);
+    setDuration(0);
+    setSkinCondition('dry');
+    setPath('hand-to-foot');
+    setIsPPESafe(false);
+    setActivePPENames([]);
+  };
 
   // Record active DC shock parameters while simulating
   useEffect(() => {
@@ -239,24 +283,60 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
       transition={{ duration: 0.15, repeat: isSimulating ? Infinity : 0, ease: "linear" }}
     >
       {/* Column 1: Controls & Prominent HOLD TO SHOCK Button */}
-      <div className="w-full lg:w-[310px] xl:w-[330px] shrink-0 p-3 rounded-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-lg flex flex-col h-[40vh] lg:h-full overflow-y-auto lg:overflow-y-auto order-1 lg:order-1 justify-between">
+      <div className="w-full lg:w-[310px] xl:w-[330px] shrink-0 p-3 rounded-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-lg flex flex-col h-[40vh] lg:h-full overflow-y-auto order-1 lg:order-1 justify-between">
         <div className="space-y-3 flex-1 flex flex-col">
-          <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-teal-400 border-l-3 border-teal-500 pl-2 shrink-0">
-            <Battery className="w-4 h-4 text-teal-400" /> DC Parameters
-          </h3>
+          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+            <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-teal-400 border-l-3 border-teal-500 pl-2">
+              <Battery className="w-4 h-4 text-teal-400" /> DC Parameters
+            </h3>
+            {/* Distinct Rose Reset Button */}
+            <button
+              type="button"
+              onClick={handleResetSimulator}
+              className="px-2 py-1 text-[10.5px] font-mono font-black rounded-lg bg-rose-950/80 hover:bg-rose-900/90 border border-rose-500/60 hover:border-rose-400 text-rose-200 transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-md"
+              title="Reset DC simulator parameters to defaults"
+            >
+              <RotateCcw className="w-3 h-3 text-rose-400 stroke-[3]" />
+              <span>Reset</span>
+            </button>
+          </div>
           
-          <div>
-            <label className="flex justify-between mb-1 text-xs font-bold text-white uppercase tracking-wider">
-              <span>DC Voltage (V)</span>
-              <span className="text-teal-400 font-black">{voltage} V DC</span>
+          {/* Synchronized Voltage Section: Dropdown + Slider (IEC 60479-1 DC Reference Levels) */}
+          <div className="space-y-1.5 p-2.5 bg-slate-950 border border-teal-500/50 rounded-xl shadow-md">
+            <label className="flex justify-between items-center text-xs font-bold text-slate-200 uppercase tracking-wider">
+              <span className="flex items-center gap-1.5"><Battery className="w-3.5 h-3.5 text-teal-400" /> DC Voltage (V)</span>
+              <span className="text-teal-300 font-black font-mono px-2 py-0.5 rounded bg-teal-500/10 border border-teal-500/30">
+                {voltage} V DC
+              </span>
             </label>
+
+            {/* Synchronized DC Voltage Dropdown Select */}
+            <select
+              value={dropdownValue}
+              onChange={handleDropdownChange}
+              disabled={isMuscleLocked}
+              className="w-full bg-slate-950 border border-teal-500/50 hover:border-teal-400 focus:border-teal-400 focus:ring-1 focus:ring-teal-500/50 text-slate-100 text-xs font-mono font-bold rounded-xl px-3 py-2 cursor-pointer disabled:opacity-50 transition-colors"
+            >
+              {standardDcVoltages.map(v => (
+                <option key={v.value} value={v.value} className="bg-slate-950 text-slate-200">
+                  {v.label}
+                </option>
+              ))}
+              <option value="custom" className="bg-slate-950 text-teal-400 font-bold">
+                Custom DC Voltage ({voltage}V)
+              </option>
+            </select>
+
+            {/* Synchronized Slider Range Input (Capped to 300V in Residential mode) */}
             <input
               type="range"
-              min="50" max="1500" step="10"
+              min="50"
+              max={maxDcVoltageLimit}
+              step="10"
               value={voltage}
               onChange={(e) => setVoltage(Number(e.target.value))}
               disabled={isMuscleLocked}
-              className="w-full accent-teal-500 cursor-pointer disabled:opacity-50"
+              className="w-full accent-teal-500 cursor-pointer disabled:opacity-50 mt-1"
             />
           </div>
 
@@ -269,12 +349,14 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
             <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Skin Condition</label>
             <div className="grid grid-cols-2 gap-1.5">
               <button
+                type="button"
                 onClick={() => !isMuscleLocked && setSkinCondition('dry')}
                 className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'dry' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
                 Dry Skin
               </button>
               <button
+                type="button"
                 onClick={() => !isMuscleLocked && setSkinCondition('wet')}
                 className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'wet' ? 'bg-blue-500/20 border-blue-500/60 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
@@ -287,12 +369,14 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
             <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Current Path</label>
             <div className="grid grid-cols-2 gap-1.5">
               <button
+                type="button"
                 onClick={() => !isMuscleLocked && setPath('hand-to-hand')}
                 className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-hand' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
                 Hand - Hand
               </button>
               <button
+                type="button"
                 onClick={() => !isMuscleLocked && setPath('hand-to-foot')}
                 className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-foot' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-[0_0_15px_rgba(20,184,166,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
@@ -312,6 +396,7 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
                 Flexor muscles locked! You cannot release the DC contact electrode. Wait for someone to trip the breaker.
               </p>
               <button
+                type="button"
                 onClick={handleEmergencyCutoff}
                 className="w-full py-2.5 px-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-900 font-black text-xs uppercase tracking-widest rounded-lg shadow-lg border-2 border-amber-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
               >
@@ -364,7 +449,6 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
         {/* Mobile Action Button */}
         <MobileActionButton>
           {isMuscleLocked ? (
-            /* Mobile: Bystander cutoff replaces shock button when muscle-locked */
             <div className="flex flex-col gap-2 w-full">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-950 border-2 border-amber-400 rounded-xl animate-pulse">
                 <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -373,6 +457,7 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
                 </span>
               </div>
               <button
+                type="button"
                 onClick={handleEmergencyCutoff}
                 className="w-full py-4 px-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-900 font-black text-sm uppercase tracking-widest rounded-2xl shadow-[0_0_30px_rgba(251,191,36,0.6)] border-2 border-amber-200 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
               >
@@ -388,7 +473,7 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
               onPointerCancel={handleStop}
               onContextMenu={(e) => e.preventDefault()}
               style={{ touchAction: 'none' }}
-              className="w-full py-4 text-base tracking-widest font-black uppercase transition-all rounded-2xl border-2 flex items-center justify-center gap-2 select-none shadow-[0_15px_30px_rgba(0,0,0,0.8)] bg-gradient-to-r from-teal-400 to-cyan-400 border-teal-200 text-slate-950 active:scale-95"
+              className="w-full py-4 text-base tracking-widest font-black uppercase transition-all rounded-2xl border-2 flex items-center justify-center gap-2 select-none shadow-[0_15px_30px_rgba(0,0,0,0.8)] bg-gradient-to-r from-teal-400 to-cyan-500 border-cyan-200 text-slate-950 active:scale-95"
               aria-live="polite"
             >
               <Zap className="w-5 h-5 fill-current" />
@@ -430,7 +515,7 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
             <span className={cn("text-[10.5px] font-black uppercase truncate", 
               results.level === 0 ? 'text-emerald-400' :
               results.level > 6 ? 'text-rose-400' : 
-              results.level > 3 ? 'text-orange-300' : 'text-amber-300'
+              results.level > 3 ? 'text-amber-300' : 'text-teal-300'
             )}>
               {results.severity}
             </span>
@@ -438,15 +523,20 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
         </div>
 
         {/* PPE Validator & Emergency Response */}
-        <div className="flex-1 flex flex-col min-h-0 justify-between">
-          <PPEValidator hazardType="shock_dc" hazardMagnitude={voltage} onSafetyChange={(safe, names) => { setIsPPESafe(safe); if (names) setActivePPENames(names); }} />
+        <div className="flex-1 flex flex-col min-h-0 justify-between space-y-2">
+          <PPEValidator
+            hazardType="shock_dc"
+            hazardMagnitude={voltage}
+            environment={config?.environment}
+            onSafetyChange={handleSafetyChange}
+          />
           <EmergencyResponse isSimulating={isSimulating && !isPPESafe} hasSimulated={hasSimulated} type="shock" />
         </div>
       </div>
 
-      {/* Column 3: Human Section & Always-Visible Scopes Area (Zero Scrolling Required) */}
+      {/* Column 3: Human Section & Always-Visible Scopes Area */}
       <div className="w-full lg:w-[480px] xl:w-[540px] shrink-0 flex flex-col gap-2 h-[45vh] lg:h-full overflow-hidden order-2 lg:order-3 relative z-10 bg-slate-950/95 backdrop-blur-md pb-3 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-xl">
-        {/* Human Body Twin Container - Dynamically scales with flex-1 min-h-0 */}
+        {/* Human Body Twin Container */}
         <div className="flex-1 min-h-0 w-full relative border border-slate-800 rounded-xl bg-slate-950 shadow-inner overflow-hidden flex flex-col">
           <HumanBodyTwin 
             shockPath={path} 
@@ -460,12 +550,12 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
           />
         </div>
         
-        {/* Side-by-Side Diagnostic Scopes Grid (100% ALWAYS VISIBLE AT BOTTOM - ZERO SCROLLING) */}
+        {/* Side-by-Side Diagnostic Scopes Grid */}
         <div className="grid grid-cols-2 gap-2 h-24 lg:h-26 shrink-0 w-full">
           <div className="h-full w-full border border-slate-800 rounded-xl p-2 bg-slate-950 flex flex-col shadow-inner overflow-hidden">
              <span className="text-[10px] font-black tracking-wider text-teal-400 uppercase mb-0.5 flex justify-between items-center shrink-0">
                <span>ECG Diagnostics</span>
-               {isSimulating && <span className="text-emerald-400 font-mono text-[9px]">LIVE ECG</span>}
+               {isSimulating && <span className="text-emerald-400 animate-pulse font-mono text-[9px]">LIVE ECG</span>}
              </span>
              <div className="flex-1 overflow-hidden rounded-lg">
                <DiagnosticScope
@@ -481,7 +571,7 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
 
           <div className="h-full w-full border border-slate-800 rounded-xl p-2 bg-slate-950 flex flex-col shadow-inner overflow-hidden">
              <span className="text-[10px] font-black tracking-wider text-teal-400 uppercase mb-0.5 flex justify-between items-center shrink-0">
-               <span>DC Source Scope</span>
+               <span>DC Waveform</span>
                {isSimulating && <span className="text-teal-400 animate-pulse font-mono text-[9px]">{voltage}V DC</span>}
              </span>
              <div className="flex-1 overflow-hidden rounded-lg">
