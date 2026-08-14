@@ -1,22 +1,85 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Zap, AlertTriangle, ShieldCheck, ShieldAlert, Activity, 
-  Info, Sliders, Settings, RotateCcw, Shield, CheckCircle2, Flame, HeartPulse, Gauge
+  Info, Sliders, Settings, RotateCcw, Shield, CheckCircle2, Flame, HeartPulse, Gauge, Clock
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserConfig } from '@/src/types';
 import { HazardOverlay } from '../HazardOverlay';
+import { HumanBodyTwin } from '../HumanBodyTwin';
+import { SafetyLessonModal } from '../SafetyLessonModal';
+
+// IEC 60479-1 Earth Fault System Voltage Reference Levels
+const ALL_EARTH_VOLTAGES = [
+  { value: 50, label: '50V (SELV Safe Touch Voltage Limit)' },
+  { value: 120, label: '120V (Low Voltage Nominal)' },
+  { value: 230, label: '230V (Single-Phase AC Mains)' },
+  { value: 415, label: '415V (3-Phase Residential/Commercial AC)' },
+  { value: 700, label: '700V (Elevated Industrial System)', industrialOnly: true },
+  { value: 1000, label: '1000V (IEC 60479-1 Upper LV Limit)', industrialOnly: true },
+];
 
 export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
-  // Simulator State
+  const isResidential = config?.environment === 'residential';
+  const maxVoltageLimit = isResidential ? 415 : 1000;
+
+  // Simulator Dials & Voltage State
+  const [voltage, setVoltage] = useState<number>(isResidential ? 230 : 230);
   const [scenario, setScenario] = useState<'solid' | 'broken'>('solid');
   const [ppeEnabled, setPpeEnabled] = useState<boolean>(false);
   const [faultActive, setFaultActive] = useState<boolean>(false);
   const [breakerTripped, setBreakerTripped] = useState<boolean>(false);
+  const [durationMs, setDurationMs] = useState<number>(0);
+  const [showSafetyLesson, setShowSafetyLesson] = useState<boolean>(false);
 
-  const isIndustrial = config?.environment === 'industrial';
-  const systemVoltage = isIndustrial ? 415 : 230;
+  const [lastActiveFaultData, setLastActiveFaultData] = useState<{
+    currentMA: number;
+    durationMs: number;
+    voltage: number;
+    isPPESafe: boolean;
+    activePPENames: string[];
+  }>({
+    currentMA: 0,
+    durationMs: 0,
+    voltage: 230,
+    isPPESafe: false,
+    activePPENames: []
+  });
+
+  const standardVoltages = useMemo(() => {
+    return ALL_EARTH_VOLTAGES.filter(v => !isResidential || !v.industrialOnly);
+  }, [isResidential]);
+
+  useEffect(() => {
+    if (isResidential && voltage > 415) {
+      setVoltage(415);
+    }
+  }, [isResidential, voltage]);
+
+  // Synchronized voltage dropdown binding
+  const isStandardVoltage = standardVoltages.some(item => item.value === voltage);
+  const dropdownValue = isStandardVoltage ? voltage.toString() : 'custom';
+
+  const handleDropdownChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val !== 'custom') {
+      setVoltage(Number(val));
+    }
+  };
+
+  // Duration timer while fault is active
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (faultActive && !breakerTripped) {
+      interval = setInterval(() => {
+        setDurationMs(prev => Math.min(prev + 50, 10000));
+      }, 50);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [faultActive, breakerTripped]);
 
   // Upstream protective breaker trip simulation on Solid Ground Fault
   useEffect(() => {
@@ -28,26 +91,28 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
     }
   }, [faultActive, scenario]);
 
-  // Reset breaker when fault is cleared or scenario changed
+  // Reset breaker when fault is cleared
   useEffect(() => {
     if (!faultActive) {
       setBreakerTripped(false);
+      setDurationMs(0);
     }
-  }, [faultActive, scenario]);
+  }, [faultActive]);
 
   const handleResetSimulator = () => {
     setFaultActive(false);
     setBreakerTripped(false);
     setScenario('solid');
     setPpeEnabled(false);
+    setVoltage(isResidential ? 230 : 415);
+    setDurationMs(0);
   };
 
   // ----------------------------------------------------
   // PHYSICS ENGINE CALCULATIONS (APPROVED IEC 60479-1 / IEEE 80 STANDARDS)
   // ----------------------------------------------------
   const physics = useMemo(() => {
-    // Standard human body resistance for touch path (IEC 60479-1 Clause 4)
-    const rBody = 1000; // Ohms
+    const rBody = 1000; // Ohms (IEC 60479-1 human touch path)
     
     // PPE Isolation resistances
     const rShoes = ppeEnabled ? 1000000 : 1500; // 1MΩ dielectric boots vs 1.5kΩ standard
@@ -55,7 +120,7 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
     const rTotalBodyPath = rBody + rShoes + rGloves;
 
     // Ground electrode resistance
-    const rEarth = 2.0; // Ohms (Standard grounding rod resistance)
+    const rEarth = 2.0; // Ohms (Standard copper earth rod)
 
     let bodyCurrent = 0; // mA
     let groundCurrent = 0; // A
@@ -64,26 +129,53 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
     if (faultActive && !breakerTripped) {
       if (scenario === 'solid') {
         // Solid Earthing: Low resistance copper ground wire shunts fault current
-        groundCurrent = systemVoltage / rEarth; // e.g. 230V / 2Ω = 115A
+        groundCurrent = voltage / rEarth; // e.g. 230V / 2Ω = 115A
         touchVoltage = 2.0; // Shunted to safe low touch voltage (< 50V SELV limit)
         bodyCurrent = (touchVoltage / (rBody + rShoes)) * 1000; // in mA
       } else {
         // Broken Earthing (Severed PE conductor): Casing energized at full line potential!
         groundCurrent = 0; // No ground return current -> Breaker DOES NOT TRIP!
-        touchVoltage = systemVoltage; // Full 230V / 415V line potential on metal shell
+        touchVoltage = voltage; // Full line potential on metal shell
         bodyCurrent = (touchVoltage / rTotalBodyPath) * 1000; // in mA
       }
     }
+
+    const intensity = Math.min(bodyCurrent / 100, 1.0);
+    const isPPESafe = ppeEnabled || (scenario === 'solid' && bodyCurrent < 1);
 
     return {
       rTotalBodyPath,
       bodyCurrent,
       groundCurrent,
-      touchVoltage
+      touchVoltage,
+      intensity,
+      isPPESafe
     };
-  }, [faultActive, breakerTripped, scenario, ppeEnabled, systemVoltage]);
+  }, [faultActive, breakerTripped, scenario, ppeEnabled, voltage]);
 
-  // IEC 60479-1 Shock Hazard Severity & Trauma Analysis
+  // Track active fault parameters for SafetyLessonModal analysis
+  useEffect(() => {
+    if (faultActive && !breakerTripped) {
+      setLastActiveFaultData({
+        currentMA: physics.bodyCurrent,
+        durationMs: durationMs,
+        voltage,
+        isPPESafe: physics.isPPESafe,
+        activePPENames: ppeEnabled ? ['Class 00 Rubber Gloves (500V)', 'Dielectric EH Boots (ASTM F2413)'] : []
+      });
+    }
+  }, [faultActive, breakerTripped, physics.bodyCurrent, durationMs, voltage, physics.isPPESafe, ppeEnabled]);
+
+  // Open SafetyLessonModal when fault completes or is cleared
+  const prevFaultActive = useRef(faultActive);
+  useEffect(() => {
+    if (prevFaultActive.current && !faultActive) {
+      setShowSafetyLesson(true);
+    }
+    prevFaultActive.current = faultActive;
+  }, [faultActive]);
+
+  // IEC 60479-1 Shock Hazard Severity Analysis
   const shockAnalysis = useMemo(() => {
     const current = physics.bodyCurrent;
     
@@ -94,7 +186,7 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
         color: 'bg-emerald-950 border-2 border-emerald-500 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.3)]',
         heartColor: '#10b981',
         heartRate: 1.2,
-        desc: 'Upstream protective breaker detected high ground fault current (115A) and tripped in 30ms. Touch voltage cleared.'
+        desc: 'Upstream protective breaker detected high ground fault current and tripped in 30ms. Touch voltage cleared.'
       };
     }
 
@@ -166,8 +258,8 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
   return (
     <div className="flex flex-col lg:flex-row h-full w-full gap-3 bg-transparent text-slate-100 overflow-y-auto lg:overflow-hidden p-2 md:p-0 pb-20 lg:pb-0">
       
-      {/* LEFT COLUMN: Controls, Telemetry Dials, and Educational Safety Lessons */}
-      <div className="flex flex-col w-full lg:w-[380px] xl:w-[420px] shrink-0 h-auto lg:h-full overflow-y-auto order-1 lg:order-1 gap-3">
+      {/* LEFT COLUMN: Controls, Settable Voltage Dropdown & Telemetry */}
+      <div className="flex flex-col w-full lg:w-[360px] xl:w-[390px] shrink-0 h-auto lg:h-full overflow-y-auto order-1 lg:order-1 gap-3">
         
         {/* Core Controls Panel */}
         <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 backdrop-blur-xl shadow-xl flex flex-col gap-3">
@@ -189,6 +281,43 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
           </div>
 
           <div className="space-y-3">
+            {/* Synchronized Voltage Dropdown & Slider (IEC 60479-1 Voltage Levels) */}
+            <div className="space-y-1.5 p-2.5 bg-slate-950 border border-cyan-500/50 rounded-xl shadow-md">
+              <label className="flex justify-between items-center text-xs font-bold text-slate-200 uppercase tracking-wider">
+                <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-cyan-400" /> Voltage (V_t)</span>
+                <span className="text-cyan-300 font-black font-mono px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30">
+                  {voltage} V AC
+                </span>
+              </label>
+
+              {/* High Contrast Voltage Select Dropdown */}
+              <select
+                value={dropdownValue}
+                onChange={handleDropdownChange}
+                className="w-full bg-slate-950 border border-cyan-500/60 hover:border-cyan-400 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500/50 text-slate-100 text-xs font-mono font-bold rounded-xl px-3 py-2 cursor-pointer transition-colors"
+              >
+                {standardVoltages.map(v => (
+                  <option key={v.value} value={v.value} className="bg-slate-950 text-slate-200 font-bold">
+                    {v.label}
+                  </option>
+                ))}
+                <option value="custom" className="bg-slate-950 text-cyan-400 font-bold">
+                  Custom Voltage ({voltage}V)
+                </option>
+              </select>
+
+              {/* Synchronized Slider Range Input */}
+              <input
+                type="range"
+                min="50"
+                max={maxVoltageLimit}
+                step="10"
+                value={voltage}
+                onChange={(e) => setVoltage(Number(e.target.value))}
+                className="w-full accent-cyan-500 cursor-pointer mt-1"
+              />
+            </div>
+
             {/* Earthing System Toggle */}
             <div>
               <label className="text-xs font-bold text-slate-300 block mb-1.5 uppercase tracking-wider">
@@ -317,7 +446,7 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
               <AlertTriangle className="w-4 h-4 shrink-0" /> {shockAnalysis.label}
             </span>
             <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/40 border border-white/20">
-              {systemVoltage}V AC Grid
+              {voltage}V AC Grid
             </span>
           </div>
           <p className="text-xs sm:text-sm leading-relaxed font-bold">
@@ -325,31 +454,26 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
           </p>
         </div>
 
-        {/* Grounding Safety Rulebook */}
-        <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl flex flex-col gap-2.5">
-          <h3 className="text-xs font-black tracking-wider uppercase text-amber-400 border-b border-slate-800 pb-2 flex items-center gap-1.5">
-            📖 Standard Protective Earthing Principles (IEC 60479-1)
-          </h3>
-          <div className="space-y-2 text-xs leading-relaxed text-slate-300 font-medium">
-            <p>
-              <strong className="text-emerald-400 block font-bold">1. How Solid Earthing Protects Human Life:</strong>
-              Low-resistance copper ground wire (2 Ω) provides a path back to neutral. When winding insulation fails, a massive ground fault current (115A) flows to earth. This instantly trips the upstream circuit breaker in ≤ 30ms, clearing line voltage before human contact occurs!
-            </p>
-            <p>
-              <strong className="text-rose-400 block font-bold">2. Why Broken Earthing is Deadly:</strong>
-              If the protective earth conductor (PE) is severed, no ground current flows. The circuit breaker <strong className="text-red-400">DOES NOT TRIP</strong>. The metal enclosure remains energized at full grid voltage (230V). Touching the shell sends touch current (230mA) directly through the heart!
-            </p>
-            <p>
-              <strong className="text-cyan-400 block font-bold">3. Role of Rated Insulating PPE:</strong>
-              Dielectric boots & rubber gloves add 1,000,000 Ω resistance in series, blocking dangerous touch current down to safe microampere levels (less than 0.1 mA).
-            </p>
-          </div>
-        </div>
-
       </div>
 
-      {/* RIGHT COLUMN: Balanced Professional Visual Canvas at Original Position */}
-      <div className="flex-1 min-w-[300px] w-full h-[380px] sm:h-[450px] lg:h-full order-2 lg:order-2 bg-slate-950 border-2 border-slate-800 lg:rounded-2xl overflow-hidden flex flex-col relative shadow-2xl">
+      {/* CENTER COLUMN: Human Body Twin Component (Shows All Probable Effects) */}
+      <div className="w-full lg:w-[460px] xl:w-[500px] shrink-0 flex flex-col gap-2 h-[45vh] lg:h-full overflow-hidden order-2 lg:order-2 relative z-10 bg-slate-950/95 backdrop-blur-md border-b border-slate-800 lg:border-b-0 shadow-xl">
+        <div className="flex-1 min-h-0 w-full relative border border-slate-800 rounded-2xl bg-slate-950 shadow-inner overflow-hidden flex flex-col">
+          <HumanBodyTwin 
+            shockPath="hand-to-foot" 
+            intensity={physics.intensity}
+            currentMA={physics.bodyCurrent}
+            durationMs={durationMs} 
+            isAnimating={faultActive && !breakerTripped} 
+            profile={config?.profile}
+            isPPESafe={physics.isPPESafe}
+            activePPENames={ppeEnabled ? ['Class 00 Rubber Gloves (500V)', 'Dielectric EH Boots (ASTM F2413)'] : []}
+          />
+        </div>
+      </div>
+
+      {/* RIGHT COLUMN: Substation Schematic Visual Canvas */}
+      <div className="flex-1 min-w-[280px] w-full h-[350px] sm:h-[400px] lg:h-full order-3 lg:order-3 bg-slate-950 border-2 border-slate-800 lg:rounded-2xl overflow-hidden flex flex-col relative shadow-2xl">
         {renderProfessionalSubstationVisual()}
       </div>
 
@@ -359,6 +483,20 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
         hazardType="earth_fault"
         dangerLevel={physics.bodyCurrent > 100 ? "critical" : "warning"}
         magnitude={`${physics.bodyCurrent.toFixed(0)} mA Touch Current`}
+      />
+
+      {/* Post-Shock Hazard Analysis Card (Same Size & Layout as AC/DC Simulators) */}
+      <SafetyLessonModal
+        isOpen={showSafetyLesson}
+        onClose={() => setShowSafetyLesson(false)}
+        currentMA={lastActiveFaultData.currentMA}
+        durationMs={lastActiveFaultData.durationMs}
+        skinCondition="dry"
+        path="hand-to-foot"
+        voltage={lastActiveFaultData.voltage}
+        isPPESafe={lastActiveFaultData.isPPESafe}
+        equippedPPENames={lastActiveFaultData.activePPENames}
+        hazardType="ac"
       />
 
     </div>
@@ -388,13 +526,13 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
                     ? "bg-emerald-950 border-emerald-400 text-emerald-300"
                     : "bg-slate-900/90 border-slate-700 text-slate-300"
             )}>
-              {breakerTripped ? "🟢 BREAKER TRIPPED SAFELY" : isCasingCharged ? "🚨 ENCLOSURE CHARGED: 230V TOUCH HAZARD" : isFaultActive ? "⚡ FAULT ACTIVE: SOLID EARTH SHUNTING" : "⚡ SYSTEM NORMAL: INSULATION OK"}
+              {breakerTripped ? "🟢 BREAKER TRIPPED SAFELY" : isCasingCharged ? `🚨 ENCLOSURE CHARGED: ${voltage}V TOUCH HAZARD` : isFaultActive ? "⚡ FAULT ACTIVE: SOLID EARTH SHUNTING" : "⚡ SYSTEM NORMAL: INSULATION OK"}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-1 text-xs font-mono font-black text-cyan-300 bg-slate-900/90 border border-slate-700 rounded-xl shadow-md">
-              GRID: {systemVoltage}V AC
+              GRID: {voltage}V AC
             </span>
           </div>
         </div>
@@ -425,7 +563,7 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
             <g transform="translate(40, 40)">
               <rect x="0" y="0" width="420" height="12" rx="4" fill="#f59e0b" className="drop-shadow-[0_0_10px_#f59e0b]" />
               <text x="210" y="-8" textAnchor="middle" fill="#f59e0b" fontSize="11" fontWeight="black" fontFamily="monospace">
-                HIGH VOLTAGE POWER GRID SUPPLY LINE ({systemVoltage}V AC)
+                HIGH VOLTAGE POWER GRID SUPPLY LINE ({voltage}V AC)
               </text>
             </g>
 
@@ -516,7 +654,7 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
                       transition={{ duration: 1.2, repeat: Infinity }}
                     />
                     <text x="0" y="80" textAnchor="middle" fill="#38bdf8" fontSize="8" fontWeight="bold" fontFamily="monospace">
-                      115A GROUND FAULT CURRENT SHUNTED
+                      {(voltage/2.0).toFixed(0)}A GROUND FAULT CURRENT SHUNTED
                     </text>
                   </g>
                 )}
