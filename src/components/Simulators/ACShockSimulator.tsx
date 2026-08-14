@@ -241,19 +241,19 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
     }
     
     let level: ShockEffectLevel = 1;
-    let severity = 'AC-1 (Perception)';
+    let severity = 'Level 1: Slight Tingling (Perception)';
     
     const c1 = getC1Threshold(duration);
     const c2 = c1 * 1.5;
     const c3 = c1 * 2.5;
     
-    if (effectiveHeartCurrent > 0.5) { level = 2; severity = 'AC-2 (Involuntary Contractions)'; }
-    if (effectiveHeartCurrent > 10) { level = 3; severity = 'AC-3 (Let-go impossible, cramping)'; }
+    if (effectiveHeartCurrent > 0.5) { level = 2; severity = 'Level 2: Muscle Twitching'; }
+    if (effectiveHeartCurrent > 10) { level = 3; severity = 'Level 3: Muscle Lock (Cannot Let Go)'; }
     
     if (duration > 0) {
-       if (effectiveHeartCurrent > c1) { level = 7; severity = 'AC-4.1 (<5% V-Fib Prob)'; }
-       if (effectiveHeartCurrent > c2) { level = 8; severity = 'AC-4.2 (<50% V-Fib Prob)'; }
-       if (effectiveHeartCurrent > c3) { level = 9; severity = 'AC-4.3 (>50% V-Fib Prob)'; }
+       if (effectiveHeartCurrent > c1) { level = 7; severity = 'Level 4.1: High Danger to Heart (<5% V-Fib)'; }
+       if (effectiveHeartCurrent > c2) { level = 8; severity = 'Level 4.2: Extreme Heart Danger (<50% V-Fib)'; }
+       if (effectiveHeartCurrent > c3) { level = 9; severity = 'Level 4.3: Fatal Heart Arrest (>50% V-Fib)'; }
     }
     
     const i2t = Math.pow(currentAmp, 2) * (duration / 1000);
@@ -543,10 +543,10 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           </div>
           <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
             <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Shock Severity</span>
-            <span className={cn("text-[10.5px] font-black uppercase truncate", 
-              results.level === 0 ? 'text-emerald-400' :
-              results.level > 6 ? 'text-rose-400' : 
-              results.level > 3 ? 'text-orange-300' : 'text-amber-300'
+            <span className={cn("text-xs sm:text-sm font-black uppercase tracking-wider rounded-lg px-2 py-1 border shadow-sm truncate", 
+              results.level === 0 ? 'bg-emerald-950 text-emerald-300 border-emerald-500/60' :
+              results.level >= 7 ? 'bg-red-950 text-white border-2 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.7)] animate-pulse' : 
+              results.level >= 3 ? 'bg-orange-950 text-amber-200 border-2 border-orange-500/60' : 'bg-amber-950 text-yellow-300 border border-amber-500/50'
             )}>
               {results.severity}
             </span>

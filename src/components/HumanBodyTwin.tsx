@@ -86,12 +86,12 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
   };
 
   const getRecoveryPrognosis = (ma: number, duration: number) => {
-    if (ma <= 0) return { timeText: "No Trauma", desc: "No current passed through the body." };
-    if (ma < 10) return { timeText: "Recovery: 10 - 30 Minutes", desc: "Transient nerve stimulation & mild perception threshold." };
-    if (ma < 50) return { timeText: "Recovery: 1 - 7 Days (Muscle Soreness & Rest)", desc: "Flexor muscle spasms, joint stiffness & rest required." };
-    if (ma < 200) return { timeText: "Recovery: 1 - 3 Months (Nerve Therapy)", desc: "Respiratory spasm, peripheral neuropathy & nerve rehab." };
-    if (ma < 1000) return { timeText: "Recovery: 6 - 12 Months (Cardiac Care)", desc: "Ventricular fibrillation arrhythmia & 2nd-degree burns." };
-    return { timeText: "Recovery: Years & Multiple Surgeries / Permanent Damage", desc: "Severe 3rd-degree burns, multi-organ shock & surgical skin grafts." };
+    if (ma <= 0) return { timeText: "No Electrical Contact", desc: "No current passed through the body." };
+    if (ma < 10) return { timeText: "Recovery: 10 - 30 Minutes", desc: "Slight nerve tingle & mild skin sensation." };
+    if (ma < 50) return { timeText: "Recovery: 1 - 7 Days (Rest & Care)", desc: "Muscle cramps, arm stiffness & rest needed." };
+    if (ma < 200) return { timeText: "Recovery: 1 - 3 Months (Medical Therapy)", desc: "Chest muscle spasm, breathing difficulty & medical care required." };
+    if (ma < 1000) return { timeText: "Recovery: 6 - 12 Months (Cardiac Intensive Care)", desc: "Dangerous heart arrhythmia & electrical skin burns." };
+    return { timeText: "Recovery: Severe / Fatal Risk (Immediate Emergency Care)", desc: "Fatal heart arrest, deep skin burns & severe multi-organ trauma." };
   };
 
   const activeIntensity = isAnimating ? intensity : (persistentDamage.active ? persistentDamage.intensity : 0);
@@ -102,17 +102,58 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
 
   const prognosis = getRecoveryPrognosis(activeMA, activeDuration);
 
-  const organColor = !hasDamage ? "rgba(56, 189, 248, 0.15)" : (activeIntensity > 0.7 ? "rgba(239, 68, 68, 0.4)" : "rgba(249, 115, 22, 0.3)");
-  const organStroke = !hasDamage ? "rgba(56, 189, 248, 0.4)" : (activeIntensity > 0.7 ? "rgba(239, 68, 68, 0.8)" : "rgba(249, 115, 22, 0.6)");
+  const organColor = !hasDamage ? "rgba(56, 189, 248, 0.15)" : (activeIntensity > 0.7 ? "rgba(239, 68, 68, 0.45)" : "rgba(249, 115, 22, 0.35)");
+  const organStroke = !hasDamage ? "rgba(56, 189, 248, 0.4)" : (activeIntensity > 0.7 ? "rgba(239, 68, 68, 0.9)" : "rgba(249, 115, 22, 0.7)");
 
+  // Plain-English translations & high-visibility styling for all users (homeowners, students, non-technical users)
   const getEffects = (int: number) => {
     if (!hasDamage || int === 0) return [];
     const effects = [];
-    if (int >= 0.1) effects.push({ id: 'perception', label: 'Sensory Perception', desc: 'Mild tingling sensation at the points of contact. Current is above the perception threshold of ~0.5mA.', top: '15%', left: '5%', color: 'text-yellow-400', border: 'border-yellow-500/30' });
-    if (int >= 0.4) effects.push({ id: 'tetanization', label: 'Muscle Tetanization', desc: 'Involuntary muscle contractions occur, making it impossible to let go of the energized conductor (Let-go threshold ~10mA).', top: '35%', left: '0%', color: 'text-orange-500', border: 'border-orange-500/30' });
-    if (int >= 0.6) effects.push({ id: 'respiratory', label: 'Respiratory Paralysis', desc: 'Current passing through the chest causes the diaphragm muscles to spasm, preventing breathing.', top: '25%', right: '0%', color: 'text-red-400', border: 'border-red-400/30' });
-    if (int >= 0.7) effects.push({ id: 'vfib', label: 'Ventricular Fibrillation', desc: 'Current passing through the heart disrupts the electrical rhythm, leading to fatal cardiac arrest if not treated with an AED.', top: '45%', right: '2%', color: 'text-red-500', border: 'border-red-500/30' });
-    if (int >= 0.8) effects.push({ id: 'burns', label: 'Severe Tissue Burns', desc: 'High specific energy (I²t) causes resistive heating, resulting in severe 3rd degree burns at current entry and exit points.', top: '65%', right: '8%', color: 'text-orange-600', border: 'border-orange-600/30' });
+    if (int >= 0.1) effects.push({
+      id: 'perception',
+      label: '⚡ MILD TINGLE (Sensory Perception)',
+      desc: 'Light electrical tingling sensation at point of contact. Current is above perception threshold (~0.5mA).',
+      top: '15%',
+      left: '4%',
+      badgeStyle: 'bg-yellow-950 border-2 border-yellow-400 text-yellow-200 font-extrabold shadow-[0_0_15px_rgba(250,204,21,0.6)]',
+      dotStyle: 'bg-yellow-400'
+    });
+    if (int >= 0.4) effects.push({
+      id: 'tetanization',
+      label: '✊ MUSCLE LOCK (Cannot Let Go)',
+      desc: 'Hand muscles contract violently into a tight fist. You cannot release your grip on the live electrical wire (~10mA+).',
+      top: '36%',
+      left: '2%',
+      badgeStyle: 'bg-orange-950 border-2 border-orange-400 text-amber-100 font-extrabold shadow-[0_0_15px_rgba(249,115,22,0.6)]',
+      dotStyle: 'bg-orange-400'
+    });
+    if (int >= 0.6) effects.push({
+      id: 'respiratory',
+      label: '🫁 CANNOT BREATHE (Chest Spasm)',
+      desc: 'Electric current passing through chest causes severe muscle spasm in lungs & chest, making breathing impossible.',
+      top: '25%',
+      right: '2%',
+      badgeStyle: 'bg-rose-950 border-2 border-rose-400 text-rose-100 font-extrabold shadow-[0_0_15px_rgba(244,63,94,0.6)]',
+      dotStyle: 'bg-rose-400'
+    });
+    if (int >= 0.7) effects.push({
+      id: 'vfib',
+      label: '💔 FATAL HEART ARREST (Heart Stops Pumping)',
+      desc: 'Electrical current disrupts heart rhythm (Ventricular Fibrillation). Heart stops pumping blood to brain. Fatal without immediate AED CPR.',
+      top: '46%',
+      right: '2%',
+      badgeStyle: 'bg-red-950 border-2 border-red-500 text-white font-black shadow-[0_0_20px_rgba(239,68,68,0.9)] animate-pulse',
+      dotStyle: 'bg-red-500'
+    });
+    if (int >= 0.8) effects.push({
+      id: 'burns',
+      label: '🔥 DEEP SKIN BURNS (Burn Damage)',
+      desc: 'High electrical energy generates extreme heat, causing severe burns where electricity enters and exits body.',
+      top: '66%',
+      right: '6%',
+      badgeStyle: 'bg-amber-950 border-2 border-yellow-400 text-yellow-200 font-extrabold shadow-[0_0_15px_rgba(245,158,11,0.6)]',
+      dotStyle: 'bg-yellow-400'
+    });
     return effects;
   };
 
@@ -143,16 +184,16 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
 
   return (
     <div className="relative flex flex-col w-full h-full min-h-[250px] bg-slate-950/90 rounded-2xl border border-white/5 backdrop-blur-xl overflow-hidden shadow-2xl">
-      {/* Top Dedicated Human Protection & PPE Status Bar (Above Human Canvas) */}
+      {/* Top Dedicated Human Protection & PPE Status Bar (High Contrast Visible Text) */}
       <div className="w-full bg-slate-900/95 border-b border-slate-800 p-2 px-3 flex flex-wrap items-center justify-between gap-2 z-20 shrink-0">
         <div className="flex items-center gap-2">
           <span className={cn(
-            "px-2.5 py-1 text-[10px] sm:text-xs font-black uppercase tracking-wider rounded-lg border shadow-md flex items-center gap-1.5 transition-all whitespace-nowrap",
+            "px-2.5 py-1 text-xs sm:text-sm font-black uppercase tracking-wider rounded-lg border-2 shadow-md flex items-center gap-1.5 transition-all whitespace-nowrap",
             isPPESafe 
-              ? "bg-emerald-950/90 border-emerald-500/80 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.35)]" 
+              ? "bg-emerald-950 border-emerald-400 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.35)]" 
               : activePPENames.length > 0 
-                ? "bg-amber-950/90 border-amber-500/80 text-amber-300 font-black"
-                : "bg-red-950 border-2 border-red-500 text-yellow-300 font-black shadow-[0_0_20px_rgba(239,68,68,0.6)] animate-pulse"
+                ? "bg-amber-950 border-amber-400 text-amber-200 font-black"
+                : "bg-red-950 border-2 border-red-500 text-white font-black shadow-[0_0_20px_rgba(239,68,68,0.7)] animate-pulse"
           )}>
             {isPPESafe ? (
               <>🛡️ CONDITION: PROTECTED WITH PPE</>
@@ -167,17 +208,17 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
         <div className="flex items-center gap-1.5 flex-wrap">
           {activePPENames.length > 0 ? (
             <div className="flex items-center gap-1 flex-wrap">
-              <span className="text-[9px] font-black text-sky-400 uppercase tracking-widest mr-1">
+              <span className="text-[10px] sm:text-xs font-black text-sky-300 uppercase tracking-widest mr-1">
                 Equipped PPE:
               </span>
               {activePPENames.map((name, i) => (
-                <span key={i} className="bg-sky-500/20 text-sky-300 border border-sky-500/50 px-1.5 py-0.5 rounded font-mono font-bold text-[9px]">
+                <span key={i} className="bg-sky-950 text-sky-200 border border-sky-400 px-2 py-0.5 rounded font-mono font-bold text-xs">
                   ✓ {name}
                 </span>
               ))}
             </div>
           ) : (
-            <span className="text-[9px] font-mono text-amber-300 font-bold italic">
+            <span className="text-xs font-mono text-amber-300 font-bold italic">
               No PPE items equipped
             </span>
           )}
@@ -193,12 +234,12 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
               <span className="text-xs sm:text-sm font-black text-yellow-300 uppercase tracking-widest leading-tight">
                 {prognosis.timeText}
               </span>
-              <span className="text-[9.5px] font-bold text-white leading-tight">
+              <span className="text-xs font-bold text-white leading-tight">
                 {prognosis.desc}
               </span>
             </div>
           </div>
-          <span className="text-[10px] text-amber-300 font-mono font-black shrink-0 self-end sm:self-center">
+          <span className="text-xs text-amber-300 font-mono font-black shrink-0 self-end sm:self-center">
             {recoverySeconds > 0 ? `TRAUMA TIMER: ${recoverySeconds}s` : 'RECOVERY PHASE COMPLETED'}
           </span>
         </div>
@@ -217,7 +258,7 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
           <div className="absolute h-full w-[1px] bg-sky-500/50"></div>
         </div>
 
-        {/* RESET HUMAN TWIN Button - Placed in Clean Empty Screen Area (Top Right) */}
+        {/* RESET HUMAN TWIN Button */}
         {persistentDamage.active && (
           <div className="absolute top-3 right-3 z-40 pointer-events-auto">
             <button
@@ -251,17 +292,14 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
               className="transition-all duration-300"
             />
 
-            {/* Internal Organs (Brain, Lungs, Heart) - Leaves Red Heart on when damaged */}
+            {/* Internal Organs (Brain, Lungs, Heart) */}
             <g className="transition-all duration-300">
-              {/* Brain */}
               <path d={brainPath} fill={!hasDamage ? "rgba(56, 189, 248, 0.35)" : organColor} stroke={!hasDamage ? "#38bdf8" : organStroke} strokeWidth="1.5" />
               <path d="M 100 18 L 100 48" stroke={!hasDamage ? "#38bdf8" : organStroke} strokeWidth="1" strokeDasharray="2,2" />
               
-              {/* Lungs */}
               <path d={leftLung} fill={!hasDamage ? "rgba(56, 189, 248, 0.3)" : organColor} stroke={!hasDamage ? "#38bdf8" : organStroke} strokeWidth="1.5" />
               <path d={rightLung} fill={!hasDamage ? "rgba(56, 189, 248, 0.3)" : organColor} stroke={!hasDamage ? "#38bdf8" : organStroke} strokeWidth="1.5" />
               
-              {/* Heart - Red Heart persistent */}
               <motion.path 
                 d={heartAnatomical}
                 fill={hasDamage && activeIntensity >= 0.1 ? "#ef4444" : (!hasDamage ? "rgba(56, 189, 248, 0.5)" : organColor)}
@@ -278,7 +316,7 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
               />
             </g>
 
-            {/* Nervous System / Vascular Tree - Nerves Burned */}
+            {/* Nervous System / Vascular Tree */}
             <g stroke={!hasDamage ? "rgba(56, 189, 248, 0.6)" : (activeIntensity > 0.4 ? "#f97316" : "#eab308")} fill="none" className="transition-all duration-300">
               <path d={centralNerve} strokeWidth={hasDamage ? "3" : "2"} />
               {nerveBranches.map((d, i) => (
@@ -384,10 +422,10 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ delay: index * 0.1 }}
-                  className={`flex items-center gap-1.5 bg-slate-950/95 border backdrop-blur-xl px-2 py-1 rounded shadow-xl ${effect.color} ${effect.border}`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg backdrop-blur-xl shadow-xl ${effect.badgeStyle}`}
                 >
-                  <div className={`w-1.5 h-1.5 rounded-full animate-ping ${effect.color.replace('text-', 'bg-')}`} />
-                  <span className="text-[9px] font-black uppercase tracking-wider whitespace-nowrap">
+                  <div className={`w-2 h-2 rounded-full animate-ping ${effect.dotStyle}`} />
+                  <span className="text-xs font-extrabold uppercase tracking-wider whitespace-nowrap">
                     {effect.label}
                   </span>
                 </motion.div>
@@ -395,7 +433,7 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
             </AnimatePresence>
           </div>
 
-          {/* Desktop Positioned Effects */}
+          {/* Desktop Positioned High-Contrast Effects Badges */}
           <div className="hidden md:block">
             <AnimatePresence>
               {activeEffects.map((effect, index) => (
@@ -405,33 +443,37 @@ export function HumanBodyTwin({ shockPath = 'none', intensity = 0, currentMA = 0
                   animate={{ opacity: 1, scale: 1, x: 0 }}
                   exit={{ opacity: 0, scale: 0.8 }}
                   transition={{ delay: index * 0.1 }}
-                  className={`absolute flex items-center gap-1.5 bg-slate-950/95 border backdrop-blur-xl px-2 py-1 rounded-lg shadow-2xl z-20 pointer-events-none ${effect.color} ${effect.border}`}
+                  className={`absolute flex items-center gap-2 backdrop-blur-xl px-3 py-1.5 rounded-xl shadow-2xl z-20 pointer-events-none ${effect.badgeStyle}`}
                   style={{
                     top: effect.top,
                     left: effect.left,
                     right: effect.right,
                   }}
                 >
-                  <div className={`w-1.5 h-1.5 rounded-full animate-ping ${effect.color.replace('text-', 'bg-')}`} />
-                  <InfoTooltip title={effect.label} description={effect.desc}><span className="text-[9.5px] font-black uppercase tracking-widest whitespace-nowrap cursor-help">{effect.label}</span></InfoTooltip>
+                  <div className={`w-2.5 h-2.5 rounded-full animate-ping ${effect.dotStyle}`} />
+                  <InfoTooltip title={effect.label} description={effect.desc}>
+                    <span className="text-xs sm:text-sm font-black uppercase tracking-wider whitespace-nowrap cursor-help leading-none">
+                      {effect.label}
+                    </span>
+                  </InfoTooltip>
                 </motion.div>
               ))}
             </AnimatePresence>
           </div>
 
-          {/* Medical UI Header */}
+          {/* Medical UI Header (High Contrast Banner) */}
           <div className="absolute top-2 right-2 flex justify-end items-start z-30 pointer-events-none">
             {hasDamage && (
               <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 className="flex flex-col items-end"
               >
-                <div className={`px-2.5 py-1 text-[9px] uppercase font-black tracking-widest rounded-lg border backdrop-blur-sm animate-pulse shadow-xl ${
-                  activeIntensity > 0.7 ? 'bg-red-950/80 border-red-500/50 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : 
-                  activeIntensity > 0.4 ? 'bg-orange-950/80 border-orange-500/50 text-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.3)]' : 
-                  'bg-yellow-950/80 border-yellow-500/50 text-yellow-400'
+                <div className={`px-3 py-1 text-xs uppercase font-black tracking-widest rounded-xl border-2 backdrop-blur-sm shadow-2xl ${
+                  activeIntensity > 0.7 ? 'bg-red-950 border-red-500 text-white shadow-[0_0_25px_rgba(239,68,68,0.8)] animate-pulse' : 
+                  activeIntensity > 0.4 ? 'bg-orange-950 border-orange-400 text-amber-200 shadow-[0_0_20px_rgba(249,115,22,0.6)]' : 
+                  'bg-yellow-950 border-yellow-400 text-yellow-200 font-extrabold'
                 }`}>
-                  {activeIntensity > 0.7 ? 'CRITICAL TISSUE DAMAGE' : activeIntensity > 0.4 ? 'SEVERE NERVE TRAUMA' : 'SENSORY WARNING'}
+                  {activeIntensity > 0.7 ? '🚨 FATAL HEART & TISSUE DAMAGE' : activeIntensity > 0.4 ? '⚠️ SEVERE MUSCLE LOCK & NERVE TRAUMA' : '⚡ SENSORY SHOCK WARNING'}
                 </div>
               </motion.div>
             )}
