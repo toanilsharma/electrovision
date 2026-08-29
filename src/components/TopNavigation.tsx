@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ShieldAlert, Zap, ShieldCheck, Battery, Activity, Shield, ActivitySquare, ChevronDown, LayoutGrid, X, Check, Home, Factory, RotateCcw } from 'lucide-react';
+import { ShieldAlert, Zap, ShieldCheck, Battery, Activity, Shield, ActivitySquare, ChevronDown, LayoutGrid, X, Check, Home, Factory, RotateCcw, HelpCircle } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { SimulationType, UserConfig } from '@/src/types';
 import { TrainerToolbar } from './TrainerToolbar';
@@ -22,10 +22,12 @@ const modules: { id: SimulationType; label: string; icon: React.ElementType; tag
   { id: 'arc_flash', label: 'Arc Flash', icon: ShieldAlert, tag: 'Thermal Hazard' },
   { id: 'loto', label: 'LOTO Procedure', icon: Shield, tag: 'Safety Protocol' },
   { id: 'first_aid', label: 'First Aid & CPR', icon: Activity, tag: 'Emergency Rescue' },
+  { id: 'mcb_simulator', label: 'IEC 60898 MCB', icon: Zap, tag: 'Breaker Physics' },
   { id: 'assessment', label: 'Assessment Mode', icon: ShieldCheck, tag: 'Test Knowledge' },
+  { id: 'safety_quiz', label: 'Safety Quiz', icon: HelpCircle, tag: 'IEC Micro-Quiz' },
 ];
 
-const RESIDENTIAL_MODULE_IDS: SimulationType[] = ['ac_shock', 'earth_fault', 'short_circuit', 'first_aid', 'assessment'];
+const RESIDENTIAL_MODULE_IDS: SimulationType[] = ['ac_shock', 'earth_fault', 'short_circuit', 'first_aid', 'mcb_simulator', 'assessment', 'safety_quiz'];
 
 export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigure, onResetSimulator }: TopNavProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -47,36 +49,38 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
 
   return (
     <div className="flex flex-col border-b bg-slate-900 border-slate-800 shrink-0 z-50 relative shadow-md">
-      {/* Top Header Row */}
-      <div className="flex items-center justify-between px-3 sm:px-4 lg:px-6 py-1.5 lg:py-2">
+      {/* Professional Compact Top Header Row */}
+      <div className="flex items-center justify-between px-3 sm:px-4 lg:px-5 py-1 min-h-[36px]">
         <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-5 h-5 lg:w-6 lg:h-6 rounded-md bg-orange-500 transform rotate-45 shrink-0 shadow-md shadow-orange-500/20">
-            <Zap className="w-3 h-3 lg:w-4 lg:h-4 text-slate-950 -rotate-45" />
+          <div className="flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 rounded bg-orange-500 transform rotate-45 shrink-0 shadow-sm shadow-orange-500/20">
+            <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-950 -rotate-45" />
           </div>
-          <div>
-            <h1 className="text-sm lg:text-base font-black tracking-tight text-white leading-none">
-              ELECTROLIVE<span className="text-orange-500 underline decoration-2 underline-offset-4 font-normal text-[8px] align-top ml-1">™</span>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xs sm:text-sm font-black tracking-tight text-white leading-none">
+              ELECTROLIVE<span className="text-orange-500 underline font-normal text-[8px] align-top ml-0.5">™</span>
             </h1>
-            <p className="text-[6.5px] tracking-widest uppercase text-slate-400 mt-0.5">Developed by DesignCalculators</p>
+            <span className="hidden md:inline text-[8px] tracking-wider uppercase text-slate-400 font-mono font-bold border-l border-slate-700 pl-2">
+              DesignCalculators
+            </span>
           </div>
         </div>
         
-        <div className="flex items-center gap-2 md:gap-3">
-          {/* Global Reset Simulator Button with Distinct Font & Vibrant Rose Theme */}
+        <div className="flex items-center gap-2 md:gap-2.5">
+          {/* Global Reset Simulator Button */}
           <button
             type="button"
             onClick={onResetSimulator}
-            className="flex items-center gap-1.5 px-3 py-1 bg-rose-950/90 hover:bg-rose-900 border-2 border-rose-500/70 hover:border-rose-400 rounded-full text-[9px] md:text-[10px] font-mono font-black text-rose-200 uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-md"
+            className="flex items-center gap-1 px-2.5 py-0.5 bg-rose-950/90 hover:bg-rose-900 border border-rose-500/70 hover:border-rose-400 rounded-full text-[9px] font-mono font-black text-rose-200 uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-sm"
             title="Reset active simulator parameters & state back to defaults"
           >
-            <RotateCcw className="w-3 h-3 text-rose-400 stroke-[3]" />
-            <span>Reset Simulator</span>
+            <RotateCcw className="w-2.5 h-2.5 text-rose-400 stroke-[3]" />
+            <span>Reset</span>
           </button>
 
           {/* Domain Filter Indicator Badge */}
           {userConfig && (
             <span className={cn(
-              "hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider border cursor-pointer transition-colors",
+              "hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border cursor-pointer transition-colors",
               userConfig.environment === 'residential' 
                 ? "bg-amber-950/80 text-amber-300 border-amber-500/50 shadow-sm" 
                 : "bg-orange-950/80 text-orange-400 border-orange-500/50 shadow-sm"
@@ -85,9 +89,9 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
             title="Click to switch Domain (Residential vs Industrial)"
             >
               {userConfig.environment === 'residential' ? (
-                <><Home className="w-3 h-3 text-amber-400" /> RESIDENTIAL (5 Simulators)</>
+                <><Home className="w-2.5 h-2.5 text-amber-400" /> RESIDENTIAL</>
               ) : (
-                <><Factory className="w-3 h-3 text-orange-400" /> INDUSTRIAL (All 9 Simulators)</>
+                <><Factory className="w-2.5 h-2.5 text-orange-400" /> INDUSTRIAL</>
               )}
             </span>
           )}

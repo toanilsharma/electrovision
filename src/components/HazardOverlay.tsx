@@ -138,34 +138,34 @@ export const HazardOverlay: React.FC<HazardOverlayProps> = ({ isActive, hazardTy
                 className="w-full pointer-events-auto"
               >
                 <div 
-                  className={`relative w-full rounded-2xl border-2 ${dangerLevel === 'critical' ? 'border-red-500 bg-slate-950/98 shadow-[0_12px_45px_rgba(220,38,38,0.8)] ring-2 ring-red-500/50' : 'border-orange-500 bg-slate-950/98 shadow-[0_12px_45px_rgba(249,115,22,0.7)] ring-2 ring-orange-500/50'} p-3 md:p-3.5 flex flex-row items-center gap-3.5 text-left overflow-hidden`}
+                  className={`relative w-full rounded-2xl border-3 ${dangerLevel === 'critical' ? 'border-red-500 bg-slate-950/98 shadow-[0_15px_50px_rgba(220,38,38,0.95)] ring-4 ring-red-500/60' : 'border-amber-500 bg-slate-950/98 shadow-[0_15px_50px_rgba(245,158,11,0.8)] ring-4 ring-amber-500/60'} p-3.5 sm:p-4 flex flex-row items-center gap-3.5 text-left overflow-visible`}
                 >
                   <motion.div animate={{ x: [0, -100, 0] }}
                     transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
-                    className="absolute inset-0 opacity-[0.06] bg-[repeating-linear-gradient(45deg,transparent,transparent_15px,#fff_15px,#fff_30px)]" 
+                    className="absolute inset-0 opacity-[0.06] bg-[repeating-linear-gradient(45deg,transparent,transparent_15px,#fff_15px,#fff_30px)] pointer-events-none" 
                   />
                   
-                  <div className="flex-shrink-0 relative z-10 p-2 rounded-xl bg-slate-900 border border-slate-700 shadow-inner">
+                  <div className="shrink-0 relative z-10 p-2 rounded-xl bg-slate-900 border border-slate-700 shadow-inner">
                     <motion.div animate={{ scale: [1, 1.2, 1] }}
                       transition={{ repeat: Infinity, duration: 0.4 }}
                     >
-                      <Icon className={`w-8 h-8 md:w-9 md:h-9 ${dangerLevel === 'critical' ? 'text-red-400' : 'text-orange-400'} drop-shadow-[0_0_18px_currentColor]`} />
+                      <Icon className={`w-7 h-7 sm:w-9 sm:h-9 ${dangerLevel === 'critical' ? 'text-red-400' : 'text-orange-400'} drop-shadow-[0_0_18px_currentColor]`} />
                     </motion.div>
                   </div>
                   
-                  <div className="flex-1 relative z-10 flex flex-col gap-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <h1 className={`text-base sm:text-lg md:text-xl font-black uppercase tracking-wider ${dangerLevel === 'critical' ? 'text-yellow-300 drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]' : 'text-orange-400'} drop-shadow-md leading-none`}>
+                  <div className="flex-1 min-w-0 relative z-10 flex flex-col gap-1">
+                    <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
+                      <h1 className={`text-base sm:text-xl md:text-2xl font-black uppercase tracking-wider ${dangerLevel === 'critical' ? 'text-yellow-300 drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]' : 'text-orange-400'} drop-shadow-md leading-none truncate`}>
                         {title}
                       </h1>
                       {magnitude && (
-                        <span className={`text-xs md:text-sm font-mono font-black px-2.5 py-1 rounded-lg bg-black/90 border border-amber-400/60 text-amber-300 shadow-sm whitespace-nowrap`}>
+                        <span className="text-xs sm:text-sm font-mono font-black px-2.5 py-1 rounded-xl bg-black/90 border-2 border-yellow-400 text-yellow-300 shadow-md whitespace-nowrap shrink-0">
                           ⚡ {magnitude}
                         </span>
                       )}
                     </div>
                     
-                    <p className="text-xs sm:text-sm text-slate-100 font-bold leading-relaxed drop-shadow-sm">
+                    <p className="text-xs sm:text-sm md:text-base text-slate-100 font-extrabold leading-snug drop-shadow-md mt-0.5">
                       {desc}
                     </p>
                   </div>

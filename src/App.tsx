@@ -12,6 +12,8 @@ import { ArcFlashSimulator } from './components/Simulators/ArcFlashSimulator';
 import { LOTOSimulator } from './components/Simulators/LOTOSimulator';
 import { FirstAidSimulator } from './components/Simulators/FirstAidSimulator';
 import { AssessmentModule } from './components/AssessmentModule';
+import { MCBLayoutShell } from './components/mcb/MCBLayoutShell';
+import { SafetyQuizPage } from './components/SafetyQuizPage';
 import { SimulationType, UserConfig } from './types';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -84,8 +86,12 @@ export default function App() {
         return <LOTOSimulator key={resetKey} config={userConfig} />;
       case 'first_aid':
         return <FirstAidSimulator key={resetKey} config={userConfig} />;
+      case 'mcb_simulator':
+        return <MCBLayoutShell key={resetKey} />;
       case 'assessment':
         return <AssessmentModule key={resetKey} config={userConfig} />;
+      case 'safety_quiz':
+        return <SafetyQuizPage key={resetKey} config={userConfig} onBackToSimulator={() => setActiveModule('ac_shock')} />;
 
       default:
         return (
@@ -122,7 +128,7 @@ export default function App() {
       
       <main className="flex-1 overflow-y-auto lg:overflow-hidden bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#0f172a_100%)] relative flex flex-col">
         <div className="max-w-[1600px] w-full p-2 lg:p-4 mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
-          <div id="alert-container" className="fixed top-16 left-1/2 -translate-x-1/2 w-full max-w-md px-3 z-[110] empty:hidden pointer-events-none"></div>
+          <div id="alert-container" className="fixed top-12 left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-3xl px-2 z-[110] empty:hidden pointer-events-none flex flex-col items-center"></div>
           <div id="mobile-action-container" className="fixed bottom-4 left-4 right-4 z-[100] lg:hidden empty:hidden pointer-events-none flex flex-col justify-end"></div>
           
           <div className="flex-1 overflow-y-auto lg:overflow-hidden">

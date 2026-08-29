@@ -10,9 +10,16 @@ import { PPEValidator } from '../PPEValidator';
 import { useAudioHaptics } from '../useAudioHaptics';
 import { motion } from 'motion/react';
 import { InfoTooltip } from '../InfoTooltip';
-import { AfterActionReportModal, IncidentReport } from '../AfterActionReportModal';
+import { UpgradedDebriefModal } from '../UpgradedDebriefModal';
 import { HazardOverlay } from '../HazardOverlay';
 import { SafetyLessonModal } from '../SafetyLessonModal';
+import { EmergencyBystanderDock } from '../EmergencyBystanderDock';
+import { SeverityHeaderBanner } from '../SeverityHeaderBanner';
+import { calculateIECImpedance } from '@/src/utils/iec60479Impedance';
+import { IECZoneChart } from '../IECZoneChart';
+import { useShockAudioEngine } from '@/src/hooks/useShockAudioEngine';
+import { useShockHaptics } from '@/src/hooks/useShockHaptics';
+import { Volume2, VolumeX, Smartphone } from 'lucide-react';
 
 // IEC 60479-1 AC Touch Voltage Reference Levels (Residential capped ≤415V AC)
 const ALL_AC_VOLTAGES = [
@@ -56,9 +63,8 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
   });
 
   const [showAAR, setShowAAR] = useState(false);
-  const [lastReport, setLastReport] = useState<IncidentReport | null>(null);
-
   const [isMuscleLocked, setIsMuscleLocked] = useState(false);
+  const [timeScale, setTimeScale] = useState<number>(1.0);
 
   const { startHum, stopHum, triggerMuscleLockVibration } = useAudioHaptics();
 
@@ -100,37 +106,18 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
     setActivePPENames([]);
   };
 
-  // Record active AC shock parameters while simulating
-  useEffect(() => {
-    if (isSimulating) {
-      const baseR = skinCondition === 'dry'
-        ? (voltage <= 50 ? 3200 : voltage <= 120 ? 2200 : voltage <= 230 ? 1300 : voltage <= 400 ? 900 : 700)
-        : (voltage <= 50 ? 1500 : voltage <= 120 ? 1100 : voltage <= 230 ? 850 : voltage <= 400 ? 700 : 600);
-      const r = config?.profile === 'child' ? baseR * 0.7 : baseR;
-      const currentMA = (voltage / r) * 1000;
-      setLastActiveShockData({
-        currentMA,
-        durationMs: duration,
-        skinCondition,
-        path,
-        voltage,
-        isPPESafe,
-        activePPENames
-      });
-    }
-  }, [isSimulating, voltage, duration, skinCondition, path, isPPESafe, activePPENames, config]);
-
+  // Scaled Duration Timer (respects TIME SCALE SLOW-MO)
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (isSimulating) {
       interval = setInterval(() => {
-        setDuration(prev => Math.min(prev + 50, 10000));
+        setDuration(prev => Math.min(prev + Math.round(50 * timeScale), 10000));
       }, 50);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isSimulating]);
+  }, [isSimulating, timeScale]);
 
   useEffect(() => {
     let vibInterval: ReturnType<typeof setInterval>;
@@ -169,33 +156,22 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
   };
 
   const getResistance = () => {
-    let r = 0;
-    if (skinCondition === 'dry') {
-       if (voltage <= 50) r = 3200;
-       else if (voltage <= 120) r = 2200;
-       else if (voltage <= 230) r = 1300;
-       else if (voltage <= 400) r = 900;
-       else r = 700; 
-    } else {
-       if (voltage <= 50) r = 1500;
-       else if (voltage <= 120) r = 1100;
-       else if (voltage <= 230) r = 850;
-       else if (voltage <= 400) r = 700;
-       else r = 600;
-    }
-    
-    const heartFactor = path === 'hand-to-foot' ? 1.0 : 0.4;
-    
-    // IEC 60479-1 / IEEE 80 Persona Resistance & Body Mass Scaling
     let profileMultiplier = 1.0;
     if (config?.profile === 'child') profileMultiplier = 0.60;
     else if (config?.profile === 'teenager') profileMultiplier = 0.75;
     else if (config?.profile === 'adult_female') profileMultiplier = 0.85;
     else if (config?.profile === 'electrician') profileMultiplier = 1.15;
 
-    r = Math.round(r * profileMultiplier);
+    const iecData = calculateIECImpedance(voltage, skinCondition, profileMultiplier);
+    const heartFactor = path === 'hand-to-foot' ? 1.0 : 0.4;
 
-    return { r, heartFactor };
+    return {
+      r: iecData.totalZ,
+      internalZ: iecData.internalZ,
+      skinZ: iecData.skinZ,
+      citation: iecData.tableCitation,
+      heartFactor
+    };
   };
 
   const getC1Threshold = (tMs: number) => {
@@ -228,16 +204,16 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
   };
 
   const calculateResults = () => {
-    const { r, heartFactor } = getResistance();
+    const { r, internalZ, skinZ, citation, heartFactor } = getResistance();
     const currentAmp = voltage / r;
     const currentMA = currentAmp * 1000;
     const effectiveHeartCurrent = currentMA * heartFactor;
     
     if (!isSimulating) { 
-       return { currentMA: 0, effectiveHeartCurrent: 0, r, level: 0 as ShockEffectLevel, severity: 'SAFE (NO CONTACT)', intensity: 0, heartFactor };
+       return { currentMA: 0, effectiveHeartCurrent: 0, r, internalZ, skinZ, citation, level: 0 as ShockEffectLevel, severity: 'SAFE (NO CONTACT)', intensity: 0, heartFactor };
     }
     if (isPPESafe) { 
-       return { currentMA: 0, effectiveHeartCurrent: 0, r, level: 0 as ShockEffectLevel, severity: 'SAFE: PPE INSULATION ACTIVE', intensity: 0, heartFactor };
+       return { currentMA: 0, effectiveHeartCurrent: 0, r, internalZ, skinZ, citation, level: 0 as ShockEffectLevel, severity: 'SAFE: PPE INSULATION ACTIVE', intensity: 0, heartFactor };
     }
     
     let level: ShockEffectLevel = 1;
@@ -261,7 +237,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
     const intensityEnergy = Math.min(i2t / 0.05, 1) * 0.5;
     const intensity = Math.min(intensityCurrent + intensityEnergy, 1.0);
     
-    return { currentMA, effectiveHeartCurrent, r, level, severity, intensity, heartFactor };
+    return { currentMA, effectiveHeartCurrent, r, internalZ, skinZ, citation, level, severity, intensity, heartFactor };
   };
 
   const results = calculateResults();
@@ -282,25 +258,11 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
     if (prevSimulating.current && !isSimulating && hasSimulated) {
       setShowSafetyLesson(true);
       if (results.level >= 6 || (!isPPESafe && results.level >= 3)) {
-        setLastReport({
-          hazardType: 'AC Electrical Shock',
-          severity: results.severity,
-          intensity: results.intensity,
-          ppeWorn: isPPESafe,
-          fatal: results.level >= 8,
-          description: results.level >= 8 ? 'Lethal Ventricular Fibrillation occurred due to extended exposure above threshold C2. Severe tissue burning at entry/exit points.' : 'Muscle tetanization and possible respiratory distress observed. Patient requires immediate medical evaluation.',
-          preventativeMeasures: [
-            'De-energize equipment before working (LOTO)',
-            'Verify isolation using a rated test instrument',
-            'Wear appropriately rated insulating gloves (ASTM D120)',
-            'Use dielectric footwear in industrial environments'
-          ]
-        });
         setShowAAR(true);
       }
     }
     prevSimulating.current = isSimulating;
-  }, [isSimulating, hasSimulated, results, isPPESafe]);
+  }, [isSimulating, hasSimulated, results.level, isPPESafe]);
 
   return (
     <motion.div 
@@ -308,14 +270,14 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
       animate={{ x: isSimulating ? [-2, 2, -3, 3, -1, 1, 0] : 0 }}
       transition={{ duration: 0.2, repeat: isSimulating ? Infinity : 0, ease: "linear" }}
     >
-      {/* Column 1: Left Controls Panel */}
-      <div className="w-full lg:w-[310px] xl:w-[330px] shrink-0 p-3 rounded-xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-lg flex flex-col h-[40vh] lg:h-full overflow-y-auto order-1 lg:order-1 justify-between">
-        <div className="space-y-3 flex-1 flex flex-col">
+      {/* Column 1: Left Controls Panel (Compact, Zero Scroll, Hold Button Always Visible) */}
+      <div className="w-full lg:w-[310px] xl:w-[330px] shrink-0 p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full justify-between order-1 lg:order-1 overflow-hidden">
+        <div className="space-y-2 flex-1 flex flex-col overflow-y-auto lg:overflow-visible">
           <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
             <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-orange-400 border-l-3 border-orange-500 pl-2">
               <Zap className="w-4 h-4 text-orange-400" /> AC Parameters
             </h3>
-            {/* Distinct Rose Reset Button */}
+            {/* Reset Button */}
             <button
               type="button"
               onClick={handleResetSimulator}
@@ -366,94 +328,101 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
             />
           </div>
 
-          {/* Shock Duration Display */}
-          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800">
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-orange-400"/> Shock Duration
-            </span>
-            <span className="text-base font-black font-mono text-orange-400">{duration} ms</span>
+          {/* Shock Duration & TIME SCALE (SLOW-MO) Control */}
+          <div className="flex flex-col gap-1.5 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-orange-400"/> Shock Duration
+              </span>
+              <span className="text-base font-black font-mono text-orange-400">{duration} ms</span>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-800/80 pt-1.5 mt-0.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TIME SCALE (SLOW-MO)</span>
+              <div className="flex items-center gap-1">
+                {[0.25, 0.5, 1.0].map((scale) => (
+                  <button
+                    key={scale}
+                    type="button"
+                    onClick={() => !isMuscleLocked && setTimeScale(scale)}
+                    className={cn(
+                      "px-2 py-0.5 text-[10px] font-mono font-bold rounded-lg border transition-all cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center",
+                      timeScale === scale
+                        ? "bg-orange-500/25 border-orange-400 text-orange-300 shadow-sm"
+                        : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                    )}
+                  >
+                    {scale}X
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Skin Condition Input */}
+          {/* Skin Condition Input (Compact 50% Height) */}
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Skin Condition</label>
+            <label className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Skin Condition</label>
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={() => !isMuscleLocked && setSkinCondition('dry')}
-                className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'dry' ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                className={cn("px-2 py-1 text-[10.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer min-h-[30px]", skinCondition === 'dry' ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
                 Dry Skin
               </button>
               <button
                 type="button"
                 onClick={() => !isMuscleLocked && setSkinCondition('wet')}
-                className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'wet' ? 'bg-blue-500/20 border-blue-500/60 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                className={cn("px-2 py-1 text-[10.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer min-h-[30px]", skinCondition === 'wet' ? 'bg-blue-500/20 border-blue-500/60 text-blue-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
                 Wet / Perspired
               </button>
             </div>
           </div>
 
-          {/* Current Path Input */}
+          {/* Current Path Input (Compact 50% Height) */}
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Current Path</label>
+            <label className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Current Path</label>
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={() => !isMuscleLocked && setPath('hand-to-hand')}
-                className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-hand' ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                className={cn("px-2 py-1 text-[10.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer min-h-[30px]", path === 'hand-to-hand' ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
                 Hand - Hand
               </button>
               <button
                 type="button"
                 onClick={() => !isMuscleLocked && setPath('hand-to-foot')}
-                className={cn("px-2.5 py-2 text-xs font-bold rounded-xl border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-foot' ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.2)]' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                className={cn("px-2 py-1 text-[10.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer min-h-[30px]", path === 'hand-to-foot' ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
               >
                 Hand - Foot
               </button>
             </div>
           </div>
 
-          {/* Bystander Emergency Power Cutoff when Muscle Locked */}
-          {isMuscleLocked && (
-            <div className="mt-2 p-3 bg-amber-950 border-2 border-amber-400 rounded-xl shadow-2xl space-y-2 animate-pulse">
-              <div className="flex items-center gap-1.5 text-xs font-black text-amber-300 uppercase tracking-widest">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Tetanization (&gt;20mA)</span>
-              </div>
-              <p className="text-[11px] font-bold text-amber-100 leading-tight">
-                Hand flexor muscles locked! You cannot release the hold button. Wait for someone to trip the breaker.
-              </p>
-              <button
-                type="button"
-                onClick={handleEmergencyCutoff}
-                className="w-full py-2.5 px-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-900 font-black text-xs uppercase tracking-widest rounded-lg shadow-lg border-2 border-amber-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
-              >
-                <Zap className="w-4 h-4 fill-current text-slate-900" />
-                <span>⚡ BYSTANDER: SWITCH OFF POWER</span>
-              </button>
-            </div>
-          )}
         </div>
 
-        {/* Desktop Large Prominent HOLD TO SHOCK Button */}
+        {/* Desktop Large Prominent HOLD TO SHOCK Button with In-Place Morph */}
         <div className="hidden lg:block pt-3 shrink-0">
-          <button
-            onPointerDown={(e) => handleStart()}
-            onPointerUp={(e) => handleStop()}
-            onPointerLeave={handleStop}
-            onPointerCancel={handleStop}
+          <motion.button
+            type="button"
+            onPointerDown={(e) => !isMuscleLocked && handleStart()}
+            onPointerUp={(e) => !isMuscleLocked && handleStop()}
+            onPointerLeave={() => !isMuscleLocked && handleStop()}
+            onPointerCancel={() => !isMuscleLocked && handleStop()}
             onContextMenu={(e) => e.preventDefault()}
+            disabled={isMuscleLocked}
+            animate={isMuscleLocked ? { x: [-3, 3, -2, 2, 0], y: [-2, 2, -1, 1, 0] } : {}}
+            transition={{ duration: 0.125, repeat: isMuscleLocked ? Infinity : 0 }}
             style={{ touchAction: 'none' }}
             className={cn(
-              "w-full py-4 px-3 text-sm md:text-base font-black tracking-widest uppercase transition-all rounded-2xl flex flex-col items-center justify-center gap-1 select-none border-2 cursor-pointer shadow-xl active:scale-95",
+              "w-full py-4 px-3 text-sm md:text-base font-black tracking-widest uppercase transition-all rounded-2xl flex flex-col items-center justify-center gap-1 select-none border-2 shadow-xl",
               isMuscleLocked
-                ? "bg-red-700 border-red-400 text-white shadow-[0_0_45px_rgba(239,68,68,1)] animate-muscle-shake"
+                ? "bg-red-950/90 border-red-500 text-red-200 shadow-[0_0_35px_rgba(239,68,68,0.7)] cursor-not-allowed opacity-95"
                 : isSimulating
-                  ? "bg-red-600 border-red-400 text-white shadow-[0_0_35px_rgba(239,68,68,0.8)] animate-pulse"
-                  : "bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 border-amber-300 text-slate-950 shadow-[0_0_25px_rgba(249,115,22,0.4)] hover:shadow-[0_0_40px_rgba(249,115,22,0.6)]"
+                  ? "bg-red-600 border-red-400 text-white shadow-[0_0_35px_rgba(239,68,68,0.8)] animate-pulse cursor-pointer active:scale-95"
+                  : "bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 border-amber-300 text-slate-950 shadow-[0_0_25px_rgba(249,115,22,0.4)] hover:shadow-[0_0_40px_rgba(249,115,22,0.6)] cursor-pointer active:scale-95"
             )}
             aria-live="polite"
           >
@@ -461,7 +430,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
               <Zap className={cn("w-5 h-5 fill-current shrink-0", (isSimulating || isMuscleLocked) && "animate-bounce")} />
               <span>
                 {isMuscleLocked
-                  ? "MUSCLE LOCK: YOU CANNOT LET GO"
+                  ? "MUSCLE LOCKED — CANNOT LET GO"
                   : isSimulating
                     ? "⚡ SHOCK ACTIVE..."
                     : "⚡ HOLD TO SHOCK"}
@@ -469,52 +438,57 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
             </div>
             <span className="text-[9px] font-bold font-mono tracking-normal opacity-90">
               {isMuscleLocked
-                ? "WAIT FOR BYSTANDER TO SWITCH OFF"
+                ? "TETANIZATION ACTIVE (>10mA) — CANNOT RELEASE"
                 : isSimulating
                   ? "RELEASE TO DISCONNECT"
                   : "PRESS & HOLD BUTTON DOWN"}
             </span>
-          </button>
+          </motion.button>
         </div>
 
-        {/* Mobile Action Button */}
+        {/* Mobile Action Button with In-Place Morph */}
         <MobileActionButton>
-          {isMuscleLocked ? (
-            <div className="flex flex-col gap-2 w-full">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-950 border-2 border-amber-400 rounded-xl animate-pulse">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                <span className="text-xs font-black text-amber-200 uppercase tracking-widest leading-tight">
-                  Muscle Lock — You cannot let go!
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleEmergencyCutoff}
-                className="w-full py-4 px-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-900 font-black text-sm uppercase tracking-widest rounded-2xl shadow-[0_0_30px_rgba(251,191,36,0.6)] border-2 border-amber-200 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
-              >
-                <Zap className="w-5 h-5 fill-current" />
-                ⚡ BYSTANDER: SWITCH OFF POWER
-              </button>
+          <motion.button
+            type="button"
+            onPointerDown={(e) => !isMuscleLocked && handleStart()}
+            onPointerUp={(e) => !isMuscleLocked && handleStop()}
+            onPointerLeave={() => !isMuscleLocked && handleStop()}
+            onPointerCancel={() => !isMuscleLocked && handleStop()}
+            onContextMenu={(e) => e.preventDefault()}
+            disabled={isMuscleLocked}
+            animate={isMuscleLocked ? { x: [-3, 3, -2, 2, 0], y: [-2, 2, -1, 1, 0] } : {}}
+            transition={{ duration: 0.125, repeat: isMuscleLocked ? Infinity : 0 }}
+            style={{ touchAction: 'none' }}
+            className={cn(
+              "w-full py-4 px-3 text-sm font-black tracking-widest uppercase transition-all rounded-2xl border-2 flex flex-col items-center justify-center gap-1 select-none shadow-2xl",
+              isMuscleLocked
+                ? "bg-red-950/95 border-red-500 text-red-200 shadow-[0_0_35px_rgba(239,68,68,0.8)] cursor-not-allowed opacity-95"
+                : "bg-gradient-to-r from-orange-500 to-amber-500 border-amber-300 text-slate-950 active:scale-95 cursor-pointer"
+            )}
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-2 text-center">
+              <Zap className="w-5 h-5 fill-current shrink-0" />
+              <span>
+                {isMuscleLocked
+                  ? "MUSCLE LOCKED — CANNOT LET GO"
+                  : isSimulating
+                    ? "⚡ SHOCK ACTIVE..."
+                    : "⚡ HOLD TO SHOCK"}
+              </span>
             </div>
-          ) : (
-            <button
-              onPointerDown={(e) => handleStart()}
-              onPointerUp={(e) => handleStop()}
-              onPointerLeave={handleStop}
-              onPointerCancel={handleStop}
-              onContextMenu={(e) => e.preventDefault()}
-              style={{ touchAction: 'none' }}
-              className="w-full py-4 text-base tracking-widest font-black uppercase transition-all rounded-2xl border-2 flex items-center justify-center gap-2 select-none shadow-[0_15px_30px_rgba(0,0,0,0.8)] bg-gradient-to-r from-orange-500 to-amber-500 border-amber-300 text-slate-950 active:scale-95"
-              aria-live="polite"
-            >
-              <Zap className="w-5 h-5 fill-current" />
-              <span>HOLD TO SHOCK</span>
-            </button>
-          )}
+            <span className="text-[9px] font-bold font-mono tracking-normal opacity-90">
+              {isMuscleLocked
+                ? "TETANIZATION ACTIVE (>10mA) — CANNOT RELEASE"
+                : isSimulating
+                  ? "RELEASE TO DISCONNECT"
+                  : "PRESS & HOLD BUTTON DOWN"}
+            </span>
+          </motion.button>
         </MobileActionButton>
       </div>
 
-      {/* Column 2: Center Panel (IEC 60479-1 Analysis & Multi-Select PPE Dropdown Component) */}
+      {/* Column 2: Center Panel (IEC 60479-1 Time/Current Zone Chart & Impedance Breakdown) */}
       <div className="flex-1 min-w-[280px] xl:min-w-[340px] p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full overflow-y-auto order-3 lg:order-2 space-y-3">
         <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
           <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-orange-400 border-l-3 border-orange-500 pl-2">
@@ -525,22 +499,36 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           </span>
         </div>
         
-        {/* 4 Metric Cards Grid */}
+        {/* 4 Metric Cards Grid with Live Impedance Breakdown */}
         <div className="grid grid-cols-2 gap-1.5 shrink-0">
-          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
-            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Impedance (Z_T)</span>
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center relative group">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex justify-between">
+              <span>Impedance (Z_T)</span>
+              <span className="text-amber-400 cursor-help font-bold" title={results.citation}>ℹ️</span>
+            </span>
             <span className="text-xs sm:text-sm font-black font-mono text-white">{results.r.toFixed(0)} Ω</span>
-          </div>
-          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
-            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Heart Factor</span>
-            <span className="text-xs sm:text-sm font-black font-mono text-white">{results.heartFactor.toFixed(1)} F</span>
-          </div>
-          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
-            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Prospective Current</span>
-            <span className={cn("text-xs sm:text-sm font-black font-mono", isSimulating ? 'text-orange-400 drop-shadow' : 'text-white')}>
-              {results.currentMA.toFixed(1)} mA
+            <span className="text-[8px] font-mono text-slate-400 mt-0.5">
+              Skin: {results.skinZ}Ω | Organs: {results.internalZ}Ω
             </span>
           </div>
+
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Heart Factor (F_H)</span>
+            <span className="text-xs sm:text-sm font-black font-mono text-white">{results.heartFactor.toFixed(1)} F</span>
+            <span className="text-[8px] font-mono text-slate-400 mt-0.5">
+              {path === 'hand-to-foot' ? 'Hand-Foot Path (1.0)' : 'Hand-Hand Path (0.4)'}
+            </span>
+          </div>
+
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Prospective Current</span>
+            <span className={cn("text-xs sm:text-sm font-black font-mono flex items-center gap-1", isSimulating ? 'text-orange-400 drop-shadow' : 'text-white')}>
+              <span>{results.currentMA.toFixed(1)} mA</span>
+              {results.currentMA >= 10 && <span className="text-[8px] px-1 bg-red-950 text-red-300 rounded border border-red-500">let-go</span>}
+              {results.currentMA >= 0.5 && results.currentMA < 10 && <span className="text-[8px] px-1 bg-yellow-950 text-yellow-300 rounded border border-yellow-500">tingle</span>}
+            </span>
+          </div>
+
           <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
             <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Shock Severity</span>
             <span className={cn("text-xs sm:text-sm font-black uppercase tracking-wider rounded-lg px-2 py-1 border shadow-sm truncate", 
@@ -553,7 +541,15 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           </div>
         </div>
 
-        {/* Multi-Select PPE Dropdown Component (Domain-Filtered for Residential vs Industrial) */}
+        {/* IEC 60479-1 Log-Log Time/Current Zone Chart */}
+        <IECZoneChart
+          currentMA={results.currentMA}
+          durationMs={duration}
+          isSimulating={isSimulating}
+          shockPath={path}
+        />
+
+        {/* PPE Validator & Emergency Response */}
         <div className="flex-1 flex flex-col min-h-0 justify-between space-y-3">
           <PPEValidator
             hazardType="shock_ac"
@@ -568,6 +564,16 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
 
       {/* Column 3: Human Section & Scopes */}
       <div className="w-full lg:w-[480px] xl:w-[540px] shrink-0 flex flex-col gap-2 h-[45vh] lg:h-full overflow-hidden order-2 lg:order-3 relative z-10 bg-slate-950/95 backdrop-blur-md pb-3 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-xl">
+        {/* Dedicated Severity Header Banner (announced via aria-live=assertive inside right panel header) */}
+        <SeverityHeaderBanner
+          isSimulating={isSimulating}
+          isPPESafe={isPPESafe}
+          level={results.level}
+          severity={results.severity}
+          currentMA={results.currentMA}
+          voltage={voltage}
+        />
+
         {/* Human Body Twin Container */}
         <div className="flex-1 min-h-0 w-full relative border border-slate-800 rounded-xl bg-slate-950 shadow-inner overflow-hidden flex flex-col">
           <HumanBodyTwin 
@@ -619,20 +625,27 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
         dangerLevel={results.level >= 6 ? 'critical' : results.level >= 3 ? 'warning' : 'safe'}
         magnitude={`${results.currentMA.toFixed(1)} mA Body Current`}
       />
-    
-      {showAAR && lastReport && <AfterActionReportModal report={lastReport} onClose={() => setShowAAR(false)} />}
 
-      <SafetyLessonModal
-        isOpen={showSafetyLesson}
-        onClose={() => setShowSafetyLesson(false)}
-        currentMA={lastActiveShockData.currentMA}
-        durationMs={lastActiveShockData.durationMs}
-        skinCondition={lastActiveShockData.skinCondition}
-        path={lastActiveShockData.path}
-        voltage={lastActiveShockData.voltage}
-        isPPESafe={lastActiveShockData.isPPESafe}
-        equippedPPENames={lastActiveShockData.activePPENames}
-        hazardType="ac"
+      {/* Fixed Emergency Bystander Dock (z-50, position: fixed, Esc/Space shortcut, 2s Power Isolated chip) */}
+      <EmergencyBystanderDock
+        isMuscleLocked={isMuscleLocked}
+        isSimulating={isSimulating}
+        onSwitchOffPower={handleEmergencyCutoff}
+      />
+    
+      {/* Upgraded Incident Debrief Modal (Zone Replay, Twin A/B PPE Comparison, Rescue Drill & 3-Question Micro-Quiz) */}
+      <UpgradedDebriefModal
+        isOpen={showSafetyLesson || showAAR}
+        onClose={() => {
+          setShowSafetyLesson(false);
+          setShowAAR(false);
+        }}
+        voltage={lastActiveShockData.voltage || voltage}
+        currentMA={lastActiveShockData.currentMA || results.currentMA}
+        durationMs={lastActiveShockData.durationMs || duration}
+        shockPath={lastActiveShockData.path || path}
+        skinCondition={lastActiveShockData.skinCondition || skinCondition}
+        isPPESafe={lastActiveShockData.isPPESafe || isPPESafe}
       />
     </motion.div>
   );

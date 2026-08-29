@@ -7,7 +7,9 @@ export type SimulationType =
   | 'arc_flash'
   | 'loto'
   | 'first_aid'
-  | 'assessment';
+  | 'mcb_simulator'
+  | 'assessment'
+  | 'safety_quiz';
 
 export type Environment = 'residential' | 'industrial';
 
