@@ -6,6 +6,7 @@ import {
   MCBSpecification,
   MCBState,
   SimulationSnapshot,
+  ThreePhaseCurrents,
   TripCause,
   WaveformParams
 } from './types';
@@ -14,10 +15,11 @@ import {
  * IEC 60898-1 Miniature Circuit Breaker (MCB) Simulator Engine
  * 
  * Coordinates:
- * - First-order thermal bimetal model with memory & ambient temperature derating
- * - Solenoid magnetic instantaneous trip with curve B, C, D tolerance zones
- * - Decaying DC offset fault waveform generation
- * - Contact unlatching, current zero crossing detection, arc extinction & let-through energy (I²t & Ip)
+ * - First-order thermal bimetal model with memory & ambient temperature derating In_eff
+ * - Solenoid magnetic instantaneous trip with curve B, C, D tolerance zones and IEC 60909 κ-peak factor
+ * - 1-Phase / 3-Phase AC fault current waveform generation and DC mode interruption
+ * - Mechanical unlatching delay <= half cycle (10ms) with magnetic pickup flash
+ * - Contact unlatching, current zero crossing detection, arc extinction & let-through energy (I²t, Ip, ½LI²)
  */
 export class MCBSimulator {
   private spec: MCBSpecification;
@@ -40,6 +42,7 @@ export class MCBSimulator {
   // Let-through metrics
   private cumulativeI2t: number = 0;
   private peakLetThroughCurrent: number = 0;
+  private dcDecayEnergyJoules: number = 0;
 
   constructor(spec?: MCBSpecification, initialAmbientTemp: number = 30) {
     this.spec = spec || BimetalThermalModel.createCalibratedSpec(16, 'C', initialAmbientTemp);
@@ -72,36 +75,42 @@ export class MCBSimulator {
     this.previousCurrent = 0;
     this.cumulativeI2t = 0;
     this.peakLetThroughCurrent = 0;
+    this.dcDecayEnergyJoules = 0;
     this.thermalModel.reset(ambientTemp);
   }
 
   /**
    * Advances the simulation by a single time step dt (seconds).
-   * 
-   * @param dt Time step in seconds
-   * @param externalCurrent Optional external current input (if waveform generator is not used)
-   * @param randomToleranceSeed Seed for tolerance band magnetic tripping (0 to 1)
    */
   public step(dt: number, externalCurrent?: number, randomToleranceSeed?: number): SimulationSnapshot {
     this.currentTime += dt;
 
-    // Determine current line current
-    let current = 0;
+    let threePhase: ThreePhaseCurrents = { ia: 0, ib: 0, ic: 0, v_ln: 0 };
+
     if (this.state === MCBState.OPEN_CLEARED) {
-      current = 0;
+      threePhase = { ia: 0, ib: 0, ic: 0, v_ln: 0 };
     } else if (externalCurrent !== undefined) {
-      current = externalCurrent;
+      threePhase = { ia: externalCurrent, ib: 0, ic: 0, v_ln: 230 * Math.SQRT2 * Math.sin(100 * Math.PI * this.currentTime) };
     } else if (this.waveformGen) {
-      current = this.waveformGen.generateTransientCurrent(this.currentTime);
-    } else {
-      current = 0;
+      threePhase = this.waveformGen.generateThreePhaseCurrents(this.currentTime);
     }
 
+    let current = threePhase.ia;
+
     // Step thermal model
-    const thermalState = this.thermalModel.step(current, dt);
+    const thermalStateBase = this.thermalModel.step(current, dt);
+    const thermalState = {
+      ...thermalStateBase,
+      In_eff: this.thermalModel.getDeratedRatedCurrent()
+    };
 
     // Step magnetic model
-    const magneticState = this.magneticModel.evaluate(current, randomToleranceSeed);
+    const magneticStateBase = this.magneticModel.evaluate(current, randomToleranceSeed);
+    const kappa = this.waveformGen ? this.waveformGen.getKappa() : (1.02 + 0.98 * Math.exp(-3 / 10));
+    const magneticState = {
+      ...magneticStateBase,
+      kappaPeakFactor: kappa
+    };
 
     // Track let-through metrics while circuit is closed or arcing
     if (this.state !== MCBState.OPEN_CLEARED) {
@@ -110,10 +119,13 @@ export class MCBSimulator {
         this.peakLetThroughCurrent = absCurrent;
       }
 
-      // Numerical trapezoidal integration of I²t: 0.5 * (i1² + i2²) * dt
+      // Trapezoidal integration of I²t
       const prevI2 = this.previousCurrent * this.previousCurrent;
       const currI2 = current * current;
       this.cumulativeI2t += 0.5 * (prevI2 + currI2) * dt;
+
+      // DC Inductive Energy ½ L I²
+      this.dcDecayEnergyJoules = FaultWaveformGenerator.calculateDcInductiveEnergy(this.peakLetThroughCurrent, 0.005);
     }
 
     // Check tripping logic if currently CLOSED
@@ -138,27 +150,24 @@ export class MCBSimulator {
         : this.spec.magneticUnlatchDelay;
 
       if (this.currentTime - this.tripTriggerTime >= unlatchDelay) {
-        // Mechanism unlatched -> contacts separate, arc drawn
         this.state = MCBState.ARCING;
         this.contactSeparationTime = this.currentTime;
       }
     }
 
     if (this.state === MCBState.ARCING) {
-      // Check for current zero crossing after contact separation
       if (!this.zeroCrossingDetected) {
-        // Zero crossing occurred if current flips sign or reaches zero
         if (this.previousCurrent * current <= 0 || Math.abs(current) < 1e-6) {
           this.zeroCrossingDetected = true;
           this.zeroCrossingTime = this.currentTime;
         }
       }
 
-      // If zero crossing detected, wait for arc duration before extinguishing
       if (this.zeroCrossingDetected) {
         if (this.currentTime - this.zeroCrossingTime >= this.spec.arcDuration) {
           this.state = MCBState.OPEN_CLEARED;
-          current = 0; // Current completely interrupted
+          current = 0;
+          threePhase = { ia: 0, ib: 0, ic: 0, v_ln: 0 };
         }
       }
     }
@@ -167,6 +176,7 @@ export class MCBSimulator {
 
     const letThrough: LetThroughMetrics = {
       i2t: this.cumulativeI2t,
+      dcDecayEnergyJoules: this.dcDecayEnergyJoules,
       peakLetThroughCurrent: this.peakLetThroughCurrent,
       clearingTime: this.state === MCBState.OPEN_CLEARED ? this.currentTime - this.tripTriggerTime : 0
     };
@@ -174,6 +184,7 @@ export class MCBSimulator {
     return {
       time: this.currentTime,
       current,
+      threePhase,
       state: this.state,
       thermal: thermalState,
       magnetic: magneticState,
@@ -184,7 +195,6 @@ export class MCBSimulator {
 
   /**
    * Convenience runner for steady-state thermal loading test (e.g., 1.13x In or 1.45x In).
-   * Runs fast thermal simulation using analytical step.
    */
   public runThermalSimulation(rmsCurrent: number, durationSeconds: number, stepSec: number = 1.0): SimulationSnapshot {
     this.reset();
@@ -201,9 +211,6 @@ export class MCBSimulator {
     return snapshot;
   }
 
-  /**
-   * Accessors
-   */
   public getState(): MCBState {
     return this.state;
   }

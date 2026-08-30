@@ -80,6 +80,7 @@ export class MagneticSolenoidModel {
 
     return {
       peakCurrent: absCurrent,
+      kappaPeakFactor: 1.02 + 0.98 * Math.exp(-3 / 5),
       multipleOfIn: multipleOfInPeak,
       isToleranceZone,
       isTripped,

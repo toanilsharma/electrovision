@@ -65,49 +65,49 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
   }, [step, environment, profile, userName]);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-6 pb-12 sm:pb-14 bg-[#020617] bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#020617_100%)] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 sm:p-6 pb-14 sm:pb-14 bg-[#020617] bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#020617_100%)] overflow-y-auto select-none">
       {/* Background Grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#64748b_1px,transparent_1px),linear-gradient(to_bottom,#64748b_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-[0.03]"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#64748b_1px,transparent_1px),linear-gradient(to_bottom,#64748b_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-[0.04] pointer-events-none"></div>
 
       <AnimatePresence mode="wait">
         {step === 1 && (
           <motion.div
             key="step1"
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, y: -20 }}
-            className="relative z-10 flex flex-col items-center w-full max-w-md lg:max-w-5xl xl:max-w-6xl p-2 sm:p-6 md:p-8"
+            className="relative z-10 flex flex-col items-center w-full max-w-xl lg:max-w-5xl xl:max-w-6xl p-3 sm:p-6 md:p-8 my-auto"
           >
-            <div className="mb-4 sm:mb-8 md:mb-12 text-center">
-              <h1 className="text-xs sm:text-sm font-black tracking-[0.2em] sm:tracking-[0.3em] uppercase text-orange-500 mb-2 sm:mb-4 flex items-center justify-center gap-2 sm:gap-3">
-                <Cpu className="w-4 h-4 sm:w-5 sm:h-5" /> Module Selection
+            <div className="mb-6 sm:mb-8 md:mb-12 text-center">
+              <h1 className="text-sm sm:text-sm font-black tracking-[0.25em] sm:tracking-[0.3em] uppercase text-orange-400 mb-2 sm:mb-4 flex items-center justify-center gap-2 sm:gap-3">
+                <Cpu className="w-5 h-5 sm:w-5 sm:h-5 text-orange-400" /> Module Selection
               </h1>
-              <h2 className="text-xl sm:text-3xl md:text-4xl font-black text-white tracking-wider sm:tracking-widest uppercase">Select Operating Environment</h2>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-wider sm:tracking-widest uppercase">Select Operating Environment</h2>
             </div>
 
-            <div className="grid w-full grid-cols-1 gap-3 sm:gap-6 md:grid-cols-2 md:gap-8">
+            <div className="grid w-full grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 md:gap-8">
               <button
                 onClick={() => handleEnvSelect('residential')}
-                className="relative flex flex-col items-center justify-center p-4 sm:p-8 md:p-12 overflow-hidden transition-all duration-300 border bg-white/5 border-white/10 rounded-xl sm:rounded-2xl hover:bg-white/10 hover:border-orange-500/50 hover:shadow-[0_0_30px_rgba(249,115,22,0.2)] group cursor-pointer"
+                className="relative flex flex-col items-center justify-center p-5 sm:p-8 md:p-12 overflow-hidden transition-all duration-300 border bg-slate-900/80 border-white/15 rounded-2xl hover:bg-white/10 hover:border-orange-500/60 hover:shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] cursor-pointer min-h-[140px]"
               >
                 <div className="absolute top-0 right-0 p-2 sm:p-4 opacity-10 group-hover:opacity-20 hidden sm:block">
                   <Home className="w-32 h-32 md:w-48 md:h-48" />
                 </div>
-                <Home className="w-8 h-8 sm:w-12 sm:h-12 md:w-16 md:h-16 mb-2 sm:mb-4 md:mb-6 text-orange-400" />
-                <h3 className="mb-1 sm:mb-2 text-lg sm:text-xl md:text-2xl font-black text-white tracking-wider sm:tracking-widest uppercase">Residential</h3>
-                <p className="text-[10px] sm:text-xs font-mono tracking-wide text-center text-slate-400">Home environments, 120V - 240V systems, domestic appliances.</p>
+                <Home className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 mb-3 sm:mb-4 md:mb-6 text-orange-400" />
+                <h3 className="mb-1.5 sm:mb-2 text-xl sm:text-xl md:text-2xl font-black text-white tracking-wider sm:tracking-widest uppercase">Residential</h3>
+                <p className="text-xs sm:text-xs font-mono tracking-wide text-center text-slate-300">Home environments, 120V - 240V systems, domestic appliances.</p>
               </button>
 
               <button
                 onClick={() => handleEnvSelect('industrial')}
-                className="relative flex flex-col items-center justify-center p-4 sm:p-8 md:p-12 overflow-hidden transition-all duration-300 border bg-white/5 border-white/10 rounded-xl sm:rounded-2xl hover:bg-white/10 hover:border-orange-500/50 hover:shadow-[0_0_30px_rgba(249,115,22,0.2)] group cursor-pointer"
+                className="relative flex flex-col items-center justify-center p-5 sm:p-8 md:p-12 overflow-hidden transition-all duration-300 border bg-slate-900/80 border-white/15 rounded-2xl hover:bg-white/10 hover:border-orange-500/60 hover:shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] cursor-pointer min-h-[140px]"
               >
                 <div className="absolute top-0 right-0 p-2 sm:p-4 opacity-10 group-hover:opacity-20 hidden sm:block">
                   <Factory className="w-32 h-32 md:w-48 md:h-48" />
                 </div>
-                <Factory className="w-8 h-8 sm:w-12 sm:h-12 md:w-16 md:h-16 mb-2 sm:mb-4 md:mb-6 text-orange-400" />
-                <h3 className="mb-1 sm:mb-2 text-lg sm:text-xl md:text-2xl font-black text-white tracking-wider sm:tracking-widest uppercase">Industrial</h3>
-                <p className="text-[10px] sm:text-xs font-mono tracking-wide text-center text-slate-400">Factories, 415V - 11kV systems, heavy machinery, switchgear.</p>
+                <Factory className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 mb-3 sm:mb-4 md:mb-6 text-orange-400" />
+                <h3 className="mb-1.5 sm:mb-2 text-xl sm:text-xl md:text-2xl font-black text-white tracking-wider sm:tracking-widest uppercase">Industrial</h3>
+                <p className="text-xs sm:text-xs font-mono tracking-wide text-center text-slate-300">Factories, 415V - 11kV systems, heavy machinery, switchgear.</p>
               </button>
             </div>
           </motion.div>
@@ -116,19 +116,19 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
         {step === 2 && (
           <motion.div
             key="step2"
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, y: -20 }}
-            className="relative z-10 flex flex-col items-center w-full max-w-md lg:max-w-5xl xl:max-w-6xl p-2 sm:p-6 md:p-8"
+            className="relative z-10 flex flex-col items-center w-full max-w-xl lg:max-w-5xl xl:max-w-6xl p-3 sm:p-6 md:p-8 my-auto"
           >
-            <div className="mb-4 sm:mb-8 md:mb-12 text-center">
-              <h1 className="text-xs sm:text-sm font-black tracking-[0.2em] sm:tracking-[0.3em] uppercase text-orange-500 mb-2 sm:mb-4 flex items-center justify-center gap-2 sm:gap-3">
-                <User className="w-4 h-4 sm:w-5 sm:h-5" /> Profile Selection
+            <div className="mb-6 sm:mb-8 md:mb-12 text-center">
+              <h1 className="text-sm sm:text-sm font-black tracking-[0.25em] sm:tracking-[0.3em] uppercase text-orange-400 mb-2 sm:mb-4 flex items-center justify-center gap-2 sm:gap-3">
+                <User className="w-5 h-5 sm:w-5 sm:h-5 text-orange-400" /> Profile Selection
               </h1>
-              <h2 className="text-xl sm:text-3xl md:text-4xl font-black text-white tracking-wider sm:tracking-widest uppercase">Select Digital Twin Persona</h2>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-wider sm:tracking-widest uppercase">Select Digital Twin Persona</h2>
             </div>
 
-            <div className="grid w-full grid-cols-2 gap-2.5 sm:gap-4 md:gap-6 md:grid-cols-4">
+            <div className="grid w-full grid-cols-2 gap-3 sm:gap-4 md:gap-6 md:grid-cols-4">
               {environment === 'residential' && (
                 <>
                   <ProfileCard icon={User} title="Adult Male" desc="High body mass" onClick={() => handleProfileSelect('adult_male')} />
@@ -150,7 +150,7 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
 
             <button
                onClick={() => setStep(1)}
-               className="mt-4 sm:mt-8 md:mt-12 text-[11px] sm:text-xs font-bold tracking-widest text-slate-400 uppercase hover:text-white transition-colors cursor-pointer"
+               className="mt-6 sm:mt-8 md:mt-12 text-xs sm:text-xs font-bold tracking-widest text-slate-300 uppercase hover:text-white transition-colors cursor-pointer py-2 px-4 rounded-lg bg-slate-900/60 border border-slate-800"
             >
               &larr; Back to Environment
             </button>
@@ -161,26 +161,26 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
           <motion.form
             key="step3"
             onSubmit={handleRegisterComplete}
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, y: -20 }}
-            className="relative z-10 flex flex-col items-center w-full max-w-md p-5 sm:p-8 bg-slate-900/60 border border-white/10 rounded-2xl backdrop-blur-md shadow-2xl"
+            className="relative z-10 flex flex-col items-center w-full max-w-lg p-6 sm:p-8 bg-slate-900/90 border border-white/15 rounded-2xl backdrop-blur-md shadow-2xl my-auto"
           >
-            <div className="mb-4 sm:mb-6 text-center">
-              <h1 className="text-xs sm:text-sm font-black tracking-[0.2em] sm:tracking-[0.3em] uppercase text-orange-500 mb-1.5 sm:mb-2 flex items-center justify-center gap-2">
-                <ShieldCheck className="w-4 h-4" /> {environment === 'industrial' ? 'Personnel Log' : 'Player Profile'}
+            <div className="mb-6 sm:mb-6 text-center">
+              <h1 className="text-sm sm:text-sm font-black tracking-[0.25em] sm:tracking-[0.3em] uppercase text-orange-400 mb-2 flex items-center justify-center gap-2">
+                <ShieldCheck className="w-5 h-5" /> {environment === 'industrial' ? 'Personnel Log' : 'Player Profile'}
               </h1>
-              <h2 className="text-lg sm:text-xl font-black text-white tracking-wider uppercase">
+              <h2 className="text-xl sm:text-xl font-black text-white tracking-wider uppercase">
                 {environment === 'industrial' ? 'Operator Registration' : 'Welcome'}
               </h2>
-              <p className="text-[9px] sm:text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-1">
+              <p className="text-xs sm:text-xs font-mono text-slate-300 uppercase tracking-wider mt-1.5">
                 {environment === 'industrial' ? 'Provide credentials for safety qualification certificate' : 'Enter your name to begin'}
               </p>
             </div>
 
-            <div className="w-full space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-black tracking-widest text-slate-400 uppercase block">
+            <div className="w-full space-y-5">
+              <div className="space-y-2">
+                <label className="text-xs font-black tracking-widest text-slate-300 uppercase block">
                   {environment === 'industrial' ? 'Full Operator Name' : 'Name'}
                 </label>
                 <input
@@ -189,13 +189,13 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
                   placeholder={environment === 'industrial' ? "e.g. ALAN TURING" : "e.g. ALEX"}
                   value={userName}
                   onChange={(e) => setUserName(e.target.value.toUpperCase())}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-white/10 rounded-lg text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 uppercase tracking-widest"
+                  className="w-full px-4 py-3 bg-slate-950 border border-white/20 rounded-xl text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 uppercase tracking-widest min-h-[48px]"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full mt-4 py-2.5 bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs tracking-widest uppercase rounded-lg transition-all shadow-[0_0_15px_rgba(249,115,22,0.3)] active:scale-95 cursor-pointer"
+                className="w-full mt-6 py-3.5 bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-sm tracking-widest uppercase rounded-xl transition-all shadow-[0_0_20px_rgba(249,115,22,0.4)] active:scale-95 cursor-pointer min-h-[48px]"
               >
                 {environment === 'industrial' ? 'Register & Calibrate \u2192' : 'Start \u2192'}
               </button>
@@ -204,7 +204,7 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
             <button
               type="button"
               onClick={() => setStep(2)}
-              className="mt-4 sm:mt-6 text-[9px] font-bold tracking-widest text-slate-500 uppercase hover:text-white transition-colors cursor-pointer"
+              className="mt-6 text-xs font-bold tracking-widest text-slate-400 uppercase hover:text-white transition-colors cursor-pointer"
             >
               &larr; Back to Persona
             </button>
@@ -216,13 +216,13 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
             key="step4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="relative z-10 flex flex-col items-center justify-center px-4"
+            className="relative z-10 flex flex-col items-center justify-center p-6 text-center my-auto"
           >
-            <Activity className="w-16 h-16 sm:w-24 sm:h-24 mb-6 sm:mb-8 text-orange-500 animate-pulse" />
-            <h2 className="text-lg sm:text-2xl font-black font-mono text-white tracking-[0.2em] uppercase text-center">
+            <Activity className="w-20 h-20 sm:w-24 sm:h-24 mb-6 sm:mb-8 text-orange-500 animate-pulse" />
+            <h2 className="text-xl sm:text-2xl font-black font-mono text-white tracking-[0.2em] uppercase text-center max-w-md">
               {loadingText}
             </h2>
-            <div className="w-48 sm:w-64 h-1 mt-6 sm:mt-8 overflow-hidden rounded-full bg-white/10">
+            <div className="w-64 sm:w-80 h-2 mt-6 sm:mt-8 overflow-hidden rounded-full bg-slate-800 border border-slate-700">
               <motion.div 
                 className="h-full bg-orange-500"
                 initial={{ width: "0%" }}
@@ -235,11 +235,11 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
       </AnimatePresence>
 
       {/* Persistent Bottom Footer Attribution */}
-      <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-2.5 bg-slate-950/90 border-t border-slate-800 text-center text-[9px] sm:text-[10px] text-white font-black uppercase tracking-widest z-20 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">
+      <div className="absolute bottom-0 left-0 right-0 p-2.5 sm:p-2.5 bg-slate-950/95 border-t border-slate-800 text-center text-[10px] sm:text-[10px] text-white font-black uppercase tracking-widest z-20 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
         <span>Concept, Visualisation & Engineering: Anil Sharma</span>
-        <span className="text-slate-600">|</span>
+        <span className="text-slate-600 hidden sm:inline">|</span>
         <a href="https://designcalculators.co.in" target="_blank" rel="noopener noreferrer" className="text-orange-400 font-bold hover:underline">designcalculators.co.in</a>
-        <span className="text-slate-600">|</span>
+        <span className="text-slate-600 hidden sm:inline">|</span>
         <a href="https://reliabilitytools.co.in" target="_blank" rel="noopener noreferrer" className="text-sky-400 font-bold hover:underline">reliabilitytools.co.in</a>
       </div>
     </div>
@@ -250,11 +250,11 @@ function ProfileCard({ icon: Icon, title, desc, onClick }: { icon: any, title: s
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center justify-center p-3.5 sm:p-6 md:p-8 transition-all duration-300 border bg-white/5 border-white/10 rounded-xl sm:rounded-2xl hover:bg-white/10 hover:border-orange-500/50 hover:shadow-[0_0_20px_rgba(249,115,22,0.2)] group cursor-pointer"
+      className="flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 transition-all duration-300 border bg-slate-900/80 border-white/15 rounded-2xl hover:bg-white/10 hover:border-orange-500/60 hover:shadow-[0_0_20px_rgba(249,115,22,0.3)] active:scale-[0.98] cursor-pointer min-h-[110px]"
     >
-      <Icon className="w-7 h-7 sm:w-10 sm:h-10 md:w-12 md:h-12 mb-2 sm:mb-3 md:mb-4 text-slate-400 group-hover:text-orange-400 transition-colors" />
-      <h3 className="mb-0.5 sm:mb-2 text-xs sm:text-sm font-black text-white tracking-wider sm:tracking-widest uppercase text-center">{title}</h3>
-      <p className="text-[9px] sm:text-[10px] font-mono tracking-wider text-slate-500 text-center uppercase">{desc}</p>
+      <Icon className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 mb-2 sm:mb-3 md:mb-4 text-slate-300 group-hover:text-orange-400 transition-colors" />
+      <h3 className="mb-1 sm:mb-2 text-sm sm:text-sm font-black text-white tracking-wider sm:tracking-widest uppercase text-center">{title}</h3>
+      <p className="text-xs sm:text-[10px] font-mono tracking-wider text-slate-300 text-center uppercase">{desc}</p>
     </button>
   );
 }

@@ -1,12 +1,16 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { WaveformSample } from '../../workers/mcbWorker';
+import { SystemType, CurrentType } from '../../mcb/types';
 import { cn } from '@/src/lib/utils';
-import { Activity, Zap } from 'lucide-react';
+import { Activity, Zap, AlertTriangle, Eye } from 'lucide-react';
 
 interface CanvasOscilloscopeProps {
   samples: WaveformSample[];
   tDetect: number;
   tClear: number;
+  systemType?: SystemType;
+  currentType?: CurrentType;
+  kappaPeakFactor?: number;
   className?: string;
 }
 
@@ -14,6 +18,9 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
   samples,
   tDetect,
   tClear,
+  systemType = '1ph_230v',
+  currentType = 'ac',
+  kappaPeakFactor = 1.45,
   className
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -21,8 +28,12 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
 
   // Interaction State
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [timeScale, setTimeScale] = useState<number>(1.0); // 0.25x, 0.5x, 1.0x
   const [zoomScale, setZoomScale] = useState<number>(1.0);
   const [panOffset, setPanOffset] = useState<number>(0);
+
+  const is3Phase = systemType === '3ph_400v';
+  const isDC = currentType === 'dc';
 
   // Multi-touch tracking for pinch-to-zoom
   const lastTouchDistRef = useRef<number | null>(null);
@@ -44,7 +55,7 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
     ctx.scale(dpr, dpr);
 
     // Clear background
-    ctx.fillStyle = '#090d16'; // Deep dark canvas background
+    ctx.fillStyle = '#090d16';
     ctx.fillRect(0, 0, width, height);
 
     // Padding margins
@@ -58,7 +69,7 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
     // Find min/max values
     let maxI = 10;
     let maxV = 350;
-    const maxT = samples[samples.length - 1].time;
+    const maxT = samples[samples.length - 1].time / timeScale;
 
     for (const s of samples) {
       if (Math.abs(s.current) > maxI) maxI = Math.abs(s.current);
@@ -87,35 +98,30 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
 
     // Time Mapping Helper
     const timeToX = (t: number) => {
-      const norm = t / maxT;
+      const norm = t / Math.max(1e-6, maxT);
       const zoomedNorm = (norm - panOffset) * zoomScale;
       return padL + zoomedNorm * plotW;
     };
 
-    const xToSampleIndex = (x: number) => {
-      const normX = (x - padL) / plotW;
-      const unzoomedNorm = normX / zoomScale + panOffset;
-      const targetTime = unzoomedNorm * maxT;
-      let closestIdx = 0;
-      let minDiff = Infinity;
-      for (let i = 0; i < samples.length; i++) {
-        const diff = Math.abs(samples[i].time - targetTime);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestIdx = i;
-        }
-      }
-      return closestIdx;
-    };
-
-    // Draw Voltage Waveform v(t) - Cyan
+    // Draw Voltage Waveform v(t) - Cyan / Arc Voltage Tail / TRV Spike
     ctx.strokeStyle = '#0284c7';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     let started = false;
     for (const s of samples) {
       const x = timeToX(s.time);
-      const y = padT + plotH / 2 - (s.voltage / maxV) * (plotH / 2);
+      let vVal = s.voltage;
+
+      // Arc voltage tail (2-3ms arc voltage tail V_arc ~ 25V)
+      if (tClear > 0 && s.time >= tClear - 0.0025 && s.time <= tClear) {
+        vVal = 35; // Arc voltage
+      }
+      // TRV Spike on voltage extinction
+      if (tClear > 0 && Math.abs(s.time - tClear) < 0.0005) {
+        vVal = isDC ? maxV * 1.4 : maxV * 1.3;
+      }
+
+      const y = padT + plotH / 2 - (vVal / maxV) * (plotH / 2);
       if (x >= padL && x <= width - padR) {
         if (!started) {
           ctx.moveTo(x, y);
@@ -127,24 +133,69 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
     }
     ctx.stroke();
 
-    // Draw Current Waveform i(t) - Emerald/Red
-    ctx.strokeStyle = maxI > 100 ? '#f43f5e' : '#10b981';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    started = false;
-    for (const s of samples) {
-      const x = timeToX(s.time);
-      const y = padT + plotH / 2 - (s.current / maxI) * (plotH / 2);
-      if (x >= padL && x <= width - padR) {
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
+    // Draw Current Waveforms
+    if (is3Phase && !isDC) {
+      // 3-Phase Current Traces: Phase A (Emerald), Phase B (Amber), Phase C (Cyan)
+      const colors = ['#10b981', '#f59e0b', '#06b6d4'];
+      const phaseShifts = [0, - (2 * Math.PI / 3), +(2 * Math.PI / 3)];
+
+      colors.forEach((color, idx) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        let pStarted = false;
+
+        for (const s of samples) {
+          const x = timeToX(s.time);
+          const phaseI = s.current * Math.cos(phaseShifts[idx]);
+          const y = padT + plotH / 2 - (phaseI / maxI) * (plotH / 2);
+          if (x >= padL && x <= width - padR) {
+            if (!pStarted) {
+              ctx.moveTo(x, y);
+              pStarted = true;
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+        }
+        ctx.stroke();
+      });
+    } else {
+      // 1-Phase Current Waveform i(t) - Emerald/Red
+      ctx.strokeStyle = maxI > 100 ? '#f43f5e' : '#10b981';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      started = false;
+      for (const s of samples) {
+        const x = timeToX(s.time);
+        const y = padT + plotH / 2 - (s.current / maxI) * (plotH / 2);
+        if (x >= padL && x <= width - padR) {
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
         }
       }
+      ctx.stroke();
     }
-    ctx.stroke();
+
+    // Draw IEC 60909 Kappa Peak Marker
+    if (maxI > 50 && !isDC) {
+      const peakVal = kappaPeakFactor * Math.SQRT2 * (maxI / 1.15);
+      const xPeak = timeToX(0.005);
+      const yPeak = padT + plotH / 2 - (peakVal / maxI) * (plotH / 2);
+
+      if (xPeak >= padL && xPeak <= width - padR) {
+        ctx.fillStyle = '#f43f5e';
+        ctx.beginPath();
+        ctx.arc(xPeak, yPeak, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = '10px monospace';
+        ctx.fillText(`κ-peak (${kappaPeakFactor.toFixed(2)}x)`, xPeak + 6, yPeak + 3);
+      }
+    }
 
     // Draw Vertical Markers: t_detect & t_clear
     if (tDetect > 0) {
@@ -177,7 +228,7 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
       }
     }
 
-    // Draw Synchronized Interactive Crosshair
+    // Synchronized Interactive Crosshair
     if (hoverIndex !== null && samples[hoverIndex]) {
       const hoverSample = samples[hoverIndex];
       const hX = timeToX(hoverSample.time);
@@ -192,7 +243,6 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Intersection point glowing circle
         const hY = padT + plotH / 2 - (hoverSample.current / maxI) * (plotH / 2);
         ctx.fillStyle = '#10b981';
         ctx.beginPath();
@@ -202,7 +252,7 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
         ctx.stroke();
       }
     }
-  }, [samples, tDetect, tClear, hoverIndex, zoomScale, panOffset]);
+  }, [samples, tDetect, tClear, hoverIndex, zoomScale, panOffset, timeScale, systemType, currentType, kappaPeakFactor, is3Phase, isDC]);
 
   useEffect(() => {
     drawCanvas();
@@ -219,7 +269,7 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
     const padR = 15;
     const plotW = rect.width - padL - padR;
 
-    const maxT = samples[samples.length - 1].time;
+    const maxT = samples[samples.length - 1].time / timeScale;
     const normX = (x - padL) / plotW;
     const unzoomedNorm = normX / zoomScale + panOffset;
     const targetTime = unzoomedNorm * maxT;
@@ -240,7 +290,6 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
     setHoverIndex(null);
   };
 
-  // Pinch-to-zoom handler
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length === 2) {
       const t1 = e.touches[0];
@@ -266,34 +315,44 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
   const activeSample = hoverIndex !== null && samples[hoverIndex] ? samples[hoverIndex] : samples[samples.length - 1];
 
   return (
-    <div ref={containerRef} className={cn('relative flex flex-col bg-slate-950 border border-slate-800 rounded-2xl p-4 shadow-xl select-none touch-none', className)}>
-      {/* Header Bar */}
+    <div ref={containerRef} className={cn('relative flex flex-col bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-xl select-none touch-none font-mono', className)}>
+      
+      {/* DC WARNING CHIP */}
+      {isDC && (
+        <div className="mb-2 px-2.5 py-1 rounded bg-amber-950/80 border border-amber-500/60 text-amber-300 text-[10px] font-bold flex items-center gap-1.5 animate-pulse">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span>DC: NO NATURAL CURRENT ZERO — LONGER ARCING TIME (L·di/dt Overvoltage)</span>
+        </div>
+      )}
+
+      {/* Header Bar & Time-Scale Controls */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-bold text-slate-200 font-mono">
-            60fps Waveform Oscilloscope [i(t), v(t)]
+          <span className="text-xs font-bold text-slate-200">
+            60fps Oscilloscope [{is3Phase ? 'ia, ib, ic' : 'i(t)'}, v(t)]
           </span>
         </div>
 
-        {/* Live HUD Chip (Updates live as crosshair moves) */}
-        {activeSample && (
-          <div className="flex items-center gap-2 text-[10px] font-mono">
-            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-              t: {(activeSample.time * 1000).toFixed(1)}ms
-            </span>
-            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-amber-400">
-              I²t: {activeSample.i2t.toFixed(1)} A²s
-            </span>
-            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-rose-400">
-              Ip: {activeSample.peakIp.toFixed(1)} A
-            </span>
-          </div>
-        )}
+        {/* Time-Scale Selectors (0.25x, 0.5x, 1.0x) */}
+        <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded border border-slate-800 text-[10px]">
+          {([0.25, 0.5, 1.0] as const).map(scale => (
+            <button
+              key={scale}
+              onClick={() => setTimeScale(scale)}
+              className={cn(
+                "px-2 py-0.5 rounded font-bold transition-all cursor-pointer min-h-[32px]",
+                timeScale === scale ? "bg-orange-500 text-slate-950 font-black" : "text-slate-400 hover:text-white"
+              )}
+            >
+              {scale}x
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* HTML5 Canvas Element */}
-      <div className="relative w-full h-[220px]">
+      <div className="relative w-full h-[200px]">
         <canvas
           ref={canvasRef}
           onPointerMove={handlePointerMove}
@@ -304,18 +363,24 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
         />
       </div>
 
-      {/* Footer Legend */}
-      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mt-2 pt-2 border-t border-slate-800">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Current i(t)
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block" /> Voltage v(t)
-          </span>
+      {/* Live Active Sample Readouts */}
+      {activeSample && (
+        <div className="flex items-center justify-between text-[10px] font-mono mt-2 pt-2 border-t border-slate-800">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+              t: {(activeSample.time * 1000).toFixed(1)}ms
+            </span>
+            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-amber-400">
+              I²t: {activeSample.i2t.toFixed(1)} A²s
+            </span>
+            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-rose-400">
+              Ip: {activeSample.peakIp.toFixed(1)} A
+            </span>
+          </div>
+
+          <span className="text-slate-500 hidden sm:inline">Pinch/Scroll to zoom • Touch crosshair</span>
         </div>
-        <span className="text-slate-500">Pinch/Scroll to zoom • Touch to inspect</span>
-      </div>
+      )}
     </div>
   );
 };

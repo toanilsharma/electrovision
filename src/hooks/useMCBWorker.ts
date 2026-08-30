@@ -53,9 +53,12 @@ export function useMCBWorker() {
       const simulator = new MCBSimulator(spec, ambientTemp);
       simulator.setFaultWaveform({
         I_rms: faultCurrent,
-        frequency: 50,
+        frequency: params.currentType === 'dc' ? 0 : 50,
         inceptionAngle: (inceptionAngleDeg * Math.PI) / 180,
-        xrRatio
+        xrRatio,
+        systemType: params.systemType || '1ph_230v',
+        currentType: params.currentType || 'ac',
+        faultType: params.faultType || 'L-N'
       });
 
       const samples = [];

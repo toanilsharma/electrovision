@@ -124,6 +124,7 @@ export class BimetalThermalModel {
       temperature: this.currentTemp,
       tempRise,
       ambientTemp: this.ambientTemp,
+      In_eff: this.getDeratedRatedCurrent(),
       thermalMemoryRatio,
       isTripped
     };

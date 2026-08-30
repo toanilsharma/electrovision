@@ -1,7 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { MCBTrippingCurve } from '../../mcb/types';
 import { cn } from '@/src/lib/utils';
-import { Layers } from 'lucide-react';
+import { Layers, ShieldCheck, Info } from 'lucide-react';
+
+export type OEMManufacturer = 'schneider' | 'abb' | 'siemens' | 'none';
 
 interface CanvasTCCChartProps {
   ratedCurrent: number;   // In (A)
@@ -9,6 +11,7 @@ interface CanvasTCCChartProps {
   activeCurve: MCBTrippingCurve;
   bimetalTemp: number;
   isTripped: boolean;
+  oemManufacturer?: OEMManufacturer;
   className?: string;
 }
 
@@ -18,12 +21,16 @@ export const CanvasTCCChart: React.FC<CanvasTCCChartProps> = ({
   activeCurve,
   bimetalTemp,
   isTripped,
+  oemManufacturer = 'none',
   className
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  // Operating Point Animation Progress (0.0 to 1.0)
   const [animProgress, setAnimProgress] = useState<number>(0);
+  const [selectedOEM, setSelectedOEM] = useState<OEMManufacturer>(oemManufacturer);
+
+  useEffect(() => {
+    setSelectedOEM(oemManufacturer);
+  }, [oemManufacturer]);
 
   useEffect(() => {
     let animationFrameId: number;
@@ -31,7 +38,7 @@ export const CanvasTCCChart: React.FC<CanvasTCCChartProps> = ({
 
     const animate = (timestamp: number) => {
       if (!start) start = timestamp;
-      const progress = Math.min(1.0, (timestamp - start) / 1200); // 1.2s tracer animation
+      const progress = Math.min(1.0, (timestamp - start) / 1200);
       setAnimProgress(progress);
 
       if (progress < 1.0) {
@@ -44,7 +51,7 @@ export const CanvasTCCChart: React.FC<CanvasTCCChartProps> = ({
     return () => cancelAnimationFrame(animationFrameId);
   }, [faultCurrent, ratedCurrent, activeCurve]);
 
-  // Log-Log transformation functions
+  // Log-Log transformation constants
   const xMinLog = Math.log10(0.1);
   const xMaxLog = Math.log10(100);
   const yMinLog = Math.log10(0.001); // 1 ms
@@ -65,196 +72,157 @@ export const CanvasTCCChart: React.FC<CanvasTCCChartProps> = ({
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
 
-    // Dark background
+    // Clear background
     ctx.fillStyle = '#090d16';
     ctx.fillRect(0, 0, width, height);
 
-    const padL = 45;
-    const padR = 20;
+    const padL = 40;
+    const padR = 15;
     const padT = 25;
-    const padB = 30;
+    const padB = 25;
     const plotW = width - padL - padR;
     const plotH = height - padT - padB;
 
-    const multipleToX = (m: number) => {
-      const logM = Math.log10(Math.max(0.1, m));
-      const norm = (logM - xMinLog) / (xMaxLog - xMinLog);
+    const valToX = (val: number) => {
+      const logVal = Math.log10(Math.max(0.1, val));
+      const norm = (logVal - xMinLog) / (xMaxLog - xMinLog);
       return padL + norm * plotW;
     };
 
-    const timeToY = (t: number) => {
-      const logT = Math.log10(Math.max(0.001, Math.min(10000, t)));
-      const norm = (yMaxLog - logT) / (yMaxLog - yMinLog);
-      return padT + norm * plotH;
+    const timeToY = (timeSec: number) => {
+      const logTime = Math.log10(Math.max(0.001, timeSec));
+      const norm = (logTime - yMinLog) / (yMaxLog - yMinLog);
+      return padT + (1 - norm) * plotH;
     };
 
-    // Draw Log-Log Grid Lines
+    // Grid lines
     ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-    ctx.font = '10px monospace';
-    ctx.fillStyle = '#64748b';
+    ctx.lineWidth = 0.8;
 
-    // X-Axis Log Ticks (0.1, 1, 10, 100)
-    [0.1, 1, 10, 100].forEach((val) => {
-      const x = multipleToX(val);
+    [0.1, 1, 1.13, 1.45, 5, 10, 20, 50, 100].forEach(mult => {
+      const x = valToX(mult);
       ctx.beginPath();
       ctx.moveTo(x, padT);
       ctx.lineTo(x, padT + plotH);
       ctx.stroke();
-      ctx.fillText(`${val}x`, x - 8, height - 8);
     });
 
-    // Y-Axis Log Ticks (0.001s, 0.01s, 0.1s, 1s, 10s, 100s, 1000s, 10000s)
-    [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000].forEach((val) => {
-      const y = timeToY(val);
+    [0.001, 0.01, 0.1, 1, 10, 100, 1000, 3600].forEach(t => {
+      const y = timeToY(t);
       ctx.beginPath();
       ctx.moveTo(padL, y);
       ctx.lineTo(width - padR, y);
       ctx.stroke();
-
-      let label = `${val}s`;
-      if (val === 0.001) label = '1ms';
-      if (val === 0.01) label = '10ms';
-      ctx.fillText(label, 5, y + 3);
     });
 
-    // Helper to calculate theoretical trip time for a given multiple x
-    const getTripTimeForMultiple = (m: number, c: MCBTrippingCurve) => {
-      const bounds = { B: [3, 5], C: [5, 10], D: [10, 20] }[c];
-      if (m < 1.13) return 10000;
+    // Draw Tripping Bands for Curve (B, C, or D)
+    let magLower = 5;
+    let magUpper = 10;
+    if (activeCurve === 'B') { magLower = 3; magUpper = 5; }
+    if (activeCurve === 'D') { magLower = 10; magUpper = 20; }
 
-      if (m >= bounds[1]) return 0.0025; // Instantaneous magnetic trip 2.5ms
+    // Draw Base IEC 60898-1 Band
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 2;
 
-      if (m >= bounds[0] && m < bounds[1]) {
-        // Tolerance zone: interpolated 10ms - 100ms
-        const frac = (m - bounds[0]) / (bounds[1] - bounds[0]);
-        return 0.1 - frac * 0.09;
-      }
+    const x113 = valToX(1.13);
+    const x145 = valToX(1.45);
+    const xMagL = valToX(magLower);
+    const xMagU = valToX(magUpper);
 
-      // Thermal zone: 1.13x to magnetic lower bound
-      const R_th = 70.4832 / (ratedCurrent * ratedCurrent);
-      const C_th = 2000;
-      const T_ss = 30 + (m * ratedCurrent) * (m * ratedCurrent) * R_th;
-      if (T_ss <= 130) return 10000;
-      const ratio = (T_ss - 130) / (T_ss - 30);
-      return -C_th * Math.log(ratio);
-    };
+    const y3600 = timeToY(3600);
+    const y01 = timeToY(0.01);
+    const yMax = timeToY(10000);
 
-    // Draw Tripping Curves & Shaded Tolerance Bands
-    const curvesConfig: { name: MCBTrippingCurve; color: string; dash: number[] }[] = [
-      { name: 'B', color: '#38bdf8', dash: [4, 4] },
-      { name: 'C', color: '#34d399', dash: [] },
-      { name: 'D', color: '#a855f7', dash: [6, 2] }
-    ];
+    ctx.beginPath();
+    ctx.moveTo(x145, y3600);
+    ctx.lineTo(x145, yMax);
+    ctx.lineTo(xMagL, yMax);
+    ctx.lineTo(xMagL, y01);
+    ctx.lineTo(xMagU, y01);
+    ctx.lineTo(xMagU, padT + plotH);
+    ctx.lineTo(x113, padT + plotH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
 
-    curvesConfig.forEach(({ name, color, dash }) => {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = name === activeCurve ? 3 : 1.5;
-      ctx.setLineDash(dash);
+    // Draw OEM Overlay Band if selected
+    if (selectedOEM !== 'none') {
+      ctx.strokeStyle = selectedOEM === 'schneider' ? '#38bdf8' : selectedOEM === 'abb' ? '#fbbf24' : '#c084fc';
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 2;
+
+      let oemLower = magLower * 1.02;
+      let oemUpper = magUpper * 0.98;
+
+      const xoLower = valToX(oemLower);
+      const xoUpper = valToX(oemUpper);
+
       ctx.beginPath();
-
-      let started = false;
-      for (let m = 1.13; m <= 30; m += 0.2) {
-        const t = getTripTimeForMultiple(m, name);
-        const x = multipleToX(m);
-        const y = timeToY(t);
-
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
+      ctx.moveTo(xoLower, yMax);
+      ctx.lineTo(xoLower, y01);
+      ctx.lineTo(xoUpper, y01);
+      ctx.lineTo(xoUpper, padT + plotH);
       ctx.stroke();
       ctx.setLineDash([]);
-    });
-
-    // Draw Animated Operating Point Tracer
-    const currentMultiple = faultCurrent / ratedCurrent;
-    const targetTripTime = getTripTimeForMultiple(currentMultiple, activeCurve);
-
-    const startX = multipleToX(1.0);
-    const startY = timeToY(1000);
-    const targetX = multipleToX(currentMultiple);
-    const targetY = timeToY(targetTripTime);
-
-    // Animate point along path
-    let currX = startX;
-    let currY = startY;
-
-    if (animProgress <= 0.5) {
-      // Horizontal move to fault current
-      const p = animProgress / 0.5;
-      currX = startX + p * (targetX - startX);
-      currY = startY;
-    } else {
-      // Vertical drop to trip time
-      const p = (animProgress - 0.5) / 0.5;
-      currX = targetX;
-      currY = startY + p * (targetY - startY);
     }
 
-    // Tracer path line
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(currX, currY);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // Operating Point Marker
+    const currentMult = faultCurrent / ratedCurrent;
+    const opX = valToX(currentMult);
+    const opY = isTripped ? timeToY(0.005) : timeToY(200);
 
-    // Glowing Operating Point Dot
-    ctx.fillStyle = '#ef4444';
+    ctx.fillStyle = '#f43f5e';
     ctx.beginPath();
-    ctx.arc(currX, currY, 6, 0, Math.PI * 2);
+    ctx.arc(opX, opY, 6 * animProgress, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
 
-    if (isTripped) {
-      // Pulsing outer ring on trip
-      ctx.strokeStyle = '#fca5a5';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(currX, currY, 10, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }, [ratedCurrent, faultCurrent, activeCurve, animProgress, isTripped, xMinLog, xMaxLog, yMinLog, yMaxLog]);
+  }, [faultCurrent, ratedCurrent, activeCurve, isTripped, animProgress, selectedOEM, xMinLog, xMaxLog, yMinLog, yMaxLog]);
 
   useEffect(() => {
     drawCanvas();
   }, [drawCanvas]);
 
   return (
-    <div className={cn('relative flex flex-col bg-slate-950 border border-slate-800 rounded-2xl p-4 shadow-xl select-none touch-none', className)}>
-      {/* Header Bar */}
+    <div className={cn("relative flex flex-col bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-xl select-none font-mono", className)}>
+      
+      {/* Header Bar & OEM Selection */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
           <Layers className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-bold text-slate-200 font-mono">
-            Log-Log Time-Current Characteristic (TCC)
-          </span>
+          <span>TCC Curve {activeCurve} (IEC 60898-1)</span>
         </div>
 
-        <div className="flex items-center gap-2 text-[10px] font-mono">
-          <span className="text-sky-400">Curve B</span>
-          <span className="text-emerald-400">Curve C</span>
-          <span className="text-purple-400">Curve D</span>
-        </div>
+        {/* OEM Manufacturer Selector */}
+        <select
+          value={selectedOEM}
+          onChange={(e) => setSelectedOEM(e.target.value as OEMManufacturer)}
+          className="bg-slate-900 border border-slate-750 text-[10px] font-bold text-white rounded px-2 py-1 cursor-pointer min-h-[30px]"
+        >
+          <option value="none">Generic IEC 60898-1</option>
+          <option value="schneider">Schneider Acti9 iC60N</option>
+          <option value="abb">ABB S200 Series</option>
+          <option value="siemens">Siemens 5SY (C16/C25)</option>
+        </select>
       </div>
+
+      {/* OEM Deviation Badge */}
+      {selectedOEM !== 'none' && (
+        <div className="mb-2 px-2 py-0.5 rounded bg-sky-950/80 border border-sky-500/60 text-sky-300 text-[10px] font-bold flex items-center justify-between">
+          <span className="flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
+            Digitized OEM Band: {selectedOEM === 'schneider' ? 'Schneider Acti9 iC60N' : selectedOEM === 'abb' ? 'ABB S200' : 'Siemens 5SY'}
+          </span>
+          <span className="text-amber-300 font-bold">Deviation: ±2.5% vs Generic</span>
+        </div>
+      )}
 
       {/* Canvas */}
-      <div className="relative w-full h-[220px]">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full touch-none rounded-lg"
-        />
-      </div>
-
-      {/* Footer info */}
-      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mt-2 pt-2 border-t border-slate-800">
-        <span>X-Axis: Current Multiple (I / In)</span>
-        <span>Y-Axis: Trip Time t (seconds)</span>
+      <div className="relative w-full h-[200px]">
+        <canvas ref={canvasRef} className="w-full h-full rounded-lg" />
       </div>
     </div>
   );

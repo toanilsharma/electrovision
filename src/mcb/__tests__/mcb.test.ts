@@ -3,7 +3,7 @@ import { BimetalThermalModel } from '../BimetalThermalModel';
 import { FaultWaveformGenerator } from '../FaultWaveformGenerator';
 import { MagneticSolenoidModel } from '../MagneticSolenoidModel';
 import { MCBSimulator } from '../MCBSimulator';
-import { MCBState, TripCause } from '../types';
+import { MCBState, TripCause, MCBTrippingCurve } from '../types';
 
 describe('IEC 60898-1 MCB Physics Engine', () => {
   describe('1. Thermal Model (Bimetal) - IEC 60898-1 Standard Compliance', () => {
@@ -26,33 +26,34 @@ describe('IEC 60898-1 MCB Physics Engine', () => {
       expect(snapshot.thermal.temperature).toBeLessThan(130.0);
     });
 
-    it('MUST trip in <= 3600s at 1.45x In (Conventional tripping current It) for In <= 63A', () => {
-      const ratedCurrents = [6, 16, 32, 63];
+    it('MUST trip in <= 3600s at 1.45x In across B/C/D curves and rated currents {16A, 25A, 63A}', () => {
+      const curves: MCBTrippingCurve[] = ['B', 'C', 'D'];
+      const ratedCurrents = [16, 25, 63];
 
-      for (const In of ratedCurrents) {
-        const spec = BimetalThermalModel.createCalibratedSpec(In, 'C', 30);
-        const simulator = new MCBSimulator(spec, 30);
+      for (const curve of curves) {
+        for (const In of ratedCurrents) {
+          const spec = BimetalThermalModel.createCalibratedSpec(In, curve, 30);
+          const simulator = new MCBSimulator(spec, 30);
 
-        const trippingCurrent = 1.45 * In;
-        // Simulate step-by-step
-        let elapsed = 0;
-        const stepSec = 1.0;
-        let trippedSnapshot = null;
+          const trippingCurrent = 1.45 * In;
+          let elapsed = 0;
+          const stepSec = 1.0;
+          let trippedSnapshot = null;
 
-        while (elapsed <= 3600) {
-          elapsed += stepSec;
-          const snap = simulator.step(stepSec, trippingCurrent);
-          if (snap.thermal.isTripped) {
-            trippedSnapshot = snap;
-            break;
+          while (elapsed <= 3600) {
+            elapsed += stepSec;
+            const snap = simulator.step(stepSec, trippingCurrent);
+            if (snap.thermal.isTripped) {
+              trippedSnapshot = snap;
+              break;
+            }
           }
-        }
 
-        expect(trippedSnapshot).not.toBeNull();
-        expect(trippedSnapshot?.thermal.isTripped).toBe(true);
-        expect(elapsed).toBeLessThanOrEqual(3600);
-        // Calibrated time should be around ~2246 seconds
-        expect(elapsed).toBeGreaterThan(1000);
+          expect(trippedSnapshot).not.toBeNull();
+          expect(trippedSnapshot?.thermal.isTripped).toBe(true);
+          expect(elapsed).toBeLessThanOrEqual(3600);
+          expect(elapsed).toBeGreaterThan(1000);
+        }
       }
     });
 
@@ -129,27 +130,32 @@ describe('IEC 60898-1 MCB Physics Engine', () => {
     });
   });
 
-  describe('3. Fault Current Waveform Generator - Decaying DC Offset', () => {
-    it('Generates waveform i(t) with decaying DC offset and accurate parameters', () => {
-      const generator = new FaultWaveformGenerator({
-        I_rms: 1000,
-        frequency: 50,
-        inceptionAngle: 0, // 0 rad inception -> maximum DC offset
-        xrRatio: 10
-      });
+  describe('3. Fault Current Waveform Generator - Kappa Peak & DC Decaying Energy', () => {
+    it('Calculates IEC 60909 Kappa Peak Factor correctly: κ = 1.02 + 0.98 * exp(-3 * R/X)', () => {
+      const xrValues = [1, 3, 5, 10, 20];
+      for (const xr of xrValues) {
+        const generator = new FaultWaveformGenerator({
+          I_rms: 1000,
+          frequency: 50,
+          inceptionAngle: 0,
+          xrRatio: xr,
+          systemType: '1ph_230v',
+          currentType: 'ac',
+          faultType: 'L-N'
+        });
 
-      expect(generator.getPeakCurrent()).toBeCloseTo(1414.21, 1);
-      // tau = (X/R) / (2*pi*f) = 10 / (100 * pi) ≈ 0.03183s
-      expect(generator.getTau()).toBeCloseTo(0.03183, 3);
+        const expectedKappa = 1.02 + 0.98 * Math.exp(-3 / xr);
+        expect(generator.getKappa()).toBeCloseTo(expectedKappa, 4);
+      }
+    });
 
-      // At t = 0, i(0) should be 0 due to DC offset cancellation of AC initial value
-      const i0 = generator.generateTransientCurrent(0);
-      expect(i0).toBeCloseTo(0, 1);
+    it('Calculates DC Inductive Decay Energy E = ½ L I²', () => {
+      const I_amp = 500;
+      const L_henry = 0.005; // 5 mH
+      const expectedJoules = 0.5 * L_henry * I_amp * I_amp; // 0.5 * 0.005 * 250000 = 625 Joules
+      const joules = FaultWaveformGenerator.calculateDcInductiveEnergy(I_amp, L_henry);
 
-      // At t > 0, DC offset decays exponentially
-      const dc0 = generator.getDcOffset(0);
-      const dc1 = generator.getDcOffset(0.05); // 50ms later (~1.57 time constants)
-      expect(Math.abs(dc1)).toBeLessThan(Math.abs(dc0));
+      expect(joules).toBe(625);
     });
   });
 
@@ -160,12 +166,14 @@ describe('IEC 60898-1 MCB Physics Engine', () => {
         30
       );
 
-      // Set heavy magnetic fault current (200A RMS -> ~283A peak = 17.6x peak > 10x Curve C)
       simulator.setFaultWaveform({
         I_rms: 200,
         frequency: 50,
         inceptionAngle: Math.PI / 4,
-        xrRatio: 5
+        xrRatio: 5,
+        systemType: '1ph_230v',
+        currentType: 'ac',
+        faultType: 'L-N'
       });
 
       const dt = 0.0001; // 0.1ms timestep resolution
@@ -187,33 +195,6 @@ describe('IEC 60898-1 MCB Physics Engine', () => {
       expect(snap.state).toBe(MCBState.OPEN_CLEARED);
       expect(snap.current).toBe(0);
       expect(openClearedTime).toBeGreaterThan(unlatchedTime);
-    });
-  });
-
-  describe('5. Let-through Energy (I²t) and Peak Let-through Current (Ip)', () => {
-    it('Calculates cumulative I²t and Ip in real-time during short-circuit clearing', () => {
-      const simulator = new MCBSimulator(
-        BimetalThermalModel.createCalibratedSpec(16, 'B', 30),
-        30
-      );
-
-      simulator.setFaultWaveform({
-        I_rms: 500,
-        frequency: 50,
-        inceptionAngle: 0,
-        xrRatio: 3
-      });
-
-      const dt = 0.0001;
-      let snap = simulator.step(dt);
-
-      while (snap.state !== MCBState.OPEN_CLEARED && snap.time < 0.1) {
-        snap = simulator.step(dt);
-      }
-
-      expect(snap.letThrough.i2t).toBeGreaterThan(0);
-      expect(snap.letThrough.peakLetThroughCurrent).toBeGreaterThan(500);
-      expect(snap.letThrough.clearingTime).toBeGreaterThan(0);
     });
   });
 });

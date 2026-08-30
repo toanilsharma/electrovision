@@ -1,6 +1,6 @@
 import { BimetalThermalModel } from '../mcb/BimetalThermalModel';
 import { MCBSimulator } from '../mcb/MCBSimulator';
-import { MCBState, MCBTrippingCurve } from '../mcb/types';
+import { MCBState, MCBTrippingCurve, SystemType, CurrentType, FaultType } from '../mcb/types';
 
 export interface WorkerInputParams {
   In: number;
@@ -9,6 +9,9 @@ export interface WorkerInputParams {
   faultCurrent: number;
   xrRatio: number;
   inceptionAngleDeg: number;
+  systemType?: SystemType;
+  currentType?: CurrentType;
+  faultType?: FaultType;
   durationSec?: number;
   dt?: number;
 }
@@ -42,6 +45,9 @@ self.onmessage = (e: MessageEvent<WorkerInputParams>) => {
     faultCurrent,
     xrRatio,
     inceptionAngleDeg,
+    systemType = '1ph_230v',
+    currentType = 'ac',
+    faultType = 'L-N',
     durationSec = 0.1,
     dt = 0.0001
   } = e.data;
@@ -50,9 +56,12 @@ self.onmessage = (e: MessageEvent<WorkerInputParams>) => {
   const simulator = new MCBSimulator(spec, ambientTemp);
   simulator.setFaultWaveform({
     I_rms: faultCurrent,
-    frequency: 50,
+    frequency: currentType === 'dc' ? 0 : 50,
     inceptionAngle: (inceptionAngleDeg * Math.PI) / 180,
-    xrRatio
+    xrRatio,
+    systemType,
+    currentType,
+    faultType
   });
 
   const samples: WaveformSample[] = [];
@@ -61,49 +70,43 @@ self.onmessage = (e: MessageEvent<WorkerInputParams>) => {
   let maxI2t = 0;
   let maxIp = 0;
 
-  const omega = 2 * Math.PI * 50;
-  const vPeak = 230 * Math.SQRT2; // 230V RMS grid voltage
+  const totalSteps = Math.ceil(durationSec / dt);
 
-  const steps = Math.min(2000, Math.ceil(durationSec / dt));
+  for (let step = 0; step < totalSteps; step++) {
+    const snap = simulator.step(dt);
 
-  for (let i = 0; i < steps; i++) {
-    const snap = simulator.step(dt, faultCurrent);
-    const time = snap.time;
-    const voltage = snap.state === MCBState.OPEN_CLEARED ? 0 : vPeak * Math.sin(omega * time + (inceptionAngleDeg * Math.PI) / 180);
-
-    const isDetectPoint = tDetect < 0 && snap.state === MCBState.UNLATCHED;
-    if (isDetectPoint) tDetect = time;
-
-    const isClearPoint = tClear < 0 && snap.state === MCBState.OPEN_CLEARED;
-    if (isClearPoint) tClear = time;
+    if (snap.state === MCBState.UNLATCHED && tDetect < 0) {
+      tDetect = snap.time;
+    }
+    if (snap.state === MCBState.OPEN_CLEARED && tClear < 0) {
+      tClear = snap.time;
+    }
 
     if (snap.letThrough.i2t > maxI2t) maxI2t = snap.letThrough.i2t;
     if (snap.letThrough.peakLetThroughCurrent > maxIp) maxIp = snap.letThrough.peakLetThroughCurrent;
 
     samples.push({
-      time,
+      time: snap.time,
       current: snap.current,
-      voltage,
+      voltage: snap.threePhase.v_ln,
       bimetalTemp: snap.thermal.temperature,
       i2t: snap.letThrough.i2t,
       peakIp: snap.letThrough.peakLetThroughCurrent,
       state: snap.state,
-      isDetectPoint,
-      isClearPoint
+      isDetectPoint: tDetect === snap.time,
+      isClearPoint: tClear === snap.time
     });
 
-    if (snap.state === MCBState.OPEN_CLEARED && i > steps * 0.5) {
+    if (snap.state === MCBState.OPEN_CLEARED && step > totalSteps * 0.3) {
       break;
     }
   }
 
-  const result: WorkerOutputData = {
+  self.postMessage({
     samples,
     tDetect,
     tClear,
     maxI2t,
     maxIp
-  };
-
-  self.postMessage(result);
+  });
 };

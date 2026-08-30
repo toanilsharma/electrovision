@@ -3,6 +3,12 @@
  */
 
 export type MCBTrippingCurve = 'B' | 'C' | 'D';
+export type SystemType = '1ph_230v' | '3ph_400v';
+export type CurrentType = 'ac' | 'dc';
+
+export type SinglePhaseFaultType = 'L-N' | 'L-G';
+export type ThreePhaseFaultType = '3ph_bolted' | 'L-L' | 'L-G';
+export type FaultType = SinglePhaseFaultType | ThreePhaseFaultType;
 
 export enum MCBState {
   CLOSED = 'CLOSED',
@@ -19,7 +25,7 @@ export enum TripCause {
 }
 
 export interface MCBSpecification {
-  /** Rated current In (Amperes), e.g., 16A, 32A, 63A */
+  /** Rated current In (Amperes), e.g., 16A, 25A, 63A */
   In: number;
 
   /** Instantaneous magnetic tripping characteristic curve */
@@ -51,10 +57,10 @@ export interface MCBSpecification {
 }
 
 export interface WaveformParams {
-  /** Fault RMS current (Amperes) */
+  /** Fault RMS or DC current (Amperes) */
   I_rms: number;
 
-  /** System frequency (Hz), default 50Hz */
+  /** System frequency (Hz), default 50Hz for AC, 0Hz for DC */
   frequency: number;
 
   /** Fault inception angle θ (radians) */
@@ -62,6 +68,18 @@ export interface WaveformParams {
 
   /** X/R ratio of system impedance */
   xrRatio: number;
+
+  /** System type */
+  systemType: SystemType;
+
+  /** Current type */
+  currentType: CurrentType;
+
+  /** Fault type */
+  faultType: FaultType;
+
+  /** System inductance for DC decay (Henries) */
+  dcInductanceH?: number;
 }
 
 export interface ThermalState {
@@ -74,6 +92,9 @@ export interface ThermalState {
   /** Ambient temperature (°C) */
   ambientTemp: number;
 
+  /** Effective In derated by ambient temperature (Amperes) */
+  In_eff: number;
+
   /** Thermal memory fraction (0.0 to 1.0, where 1.0 = fully hot at trip point) */
   thermalMemoryRatio: number;
 
@@ -84,6 +105,9 @@ export interface ThermalState {
 export interface MagneticState {
   /** Instantaneous peak current evaluated (Amperes) */
   peakCurrent: number;
+
+  /** IEC 60909 Peak factor κ = 1.02 + 0.98 * exp(-3 * R/X) */
+  kappaPeakFactor: number;
 
   /** Multiple of rated peak current (I_peak / (In * sqrt(2))) */
   multipleOfIn: number;
@@ -102,6 +126,9 @@ export interface LetThroughMetrics {
   /** Cumulative let-through energy ∫ i(t)² dt (A²s) */
   i2t: number;
 
+  /** DC Inductive stored energy ½ L I² (Joules) */
+  dcDecayEnergyJoules: number;
+
   /** Peak let-through current Ip (Amperes) */
   peakLetThroughCurrent: number;
 
@@ -109,12 +136,22 @@ export interface LetThroughMetrics {
   clearingTime: number;
 }
 
+export interface ThreePhaseCurrents {
+  ia: number;
+  ib: number;
+  ic: number;
+  v_ln: number;
+}
+
 export interface SimulationSnapshot {
   /** Simulation time t (seconds) */
   time: number;
 
-  /** Instantaneous line current i(t) (Amperes) */
+  /** Instantaneous line current i(t) (Amperes) for 1-phase */
   current: number;
+
+  /** 3-phase currents ia, ib, ic & voltage v_ln */
+  threePhase: ThreePhaseCurrents;
 
   /** MCB mechanical / electrical state */
   state: MCBState;
