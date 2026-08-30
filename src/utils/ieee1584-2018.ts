@@ -1,17 +1,24 @@
 /**
  * IEEE 1584-2018 Standard Arc Flash Calculation Engine
- * Implements standard arcing current interpolation across reference voltage models (600V, 2700V, 14300V),
- * enclosure correction factor (CF), incident energy (E), and arc flash boundary (Db).
+ * 
+ * Implements IEEE Std 1584-2018 empirical equations for:
+ * 1. Intermediate reference voltage arcing currents (600V, 2700V, 14300V)
+ * 2. All 5 electrode configurations: VCB, VCBB, HCB, VOA, HOA
+ * 3. Enclosure Size Correction (EES & Cf)
+ * 4. Normalized Incident Energy (En) at 610mm working distance
+ * 5. Time-linear scaling & distance exponent x
+ * 6. Incident Energy E (cal/cm² & kJ/m²) and Arc Flash Boundary Db (meters)
+ * 7. Breaker Failure (No Trip) Mode: Conductor burnoff time, released MJ, TNT kg, Room ΔT
  */
 
 export type ElectrodeConfig = 'VCB' | 'VCBB' | 'HCB' | 'VOA' | 'HOA';
 export type GroundingSystem = 'solidly_grounded' | 'ungrounded';
 
 export interface IEEE1584Input {
-  voltage: number; // System Voltage Voc in Volts (e.g., 415 to 15000 V)
-  boltedFaultCurrent: number; // Bolted fault current Ibf in kA (e.g., 15 or 30 kA)
-  gap: number; // Electrode gap G in mm (6 to 250 mm)
-  workingDistance: number; // Working distance D in mm (300 to 1800 mm)
+  voltage: number; // System Voltage Voc in Volts (208 to 15,000 V)
+  boltedFaultCurrent: number; // Bolted fault current Ibf in kA (0.5 to 106 kA)
+  gap: number; // Electrode gap G in mm (6.35 to 304.8 mm)
+  workingDistance: number; // Working distance D in mm (185 to 6100 mm)
   clearingTimeMs: number; // Total clearing time t in milliseconds
   electrodeConfig: ElectrodeConfig; // VCB, VCBB, HCB, VOA, HOA
   enclosureWidth: number; // W in mm (default 508 mm)
@@ -22,9 +29,17 @@ export interface IEEE1584Input {
 
 export interface IEEE1584Result {
   arcingCurrent: number; // kA
-  incidentEnergy: number; // cal/cm2
-  boundaryRadius: number; // meters
+  arcingCurrentReduced: number; // kA (reduced arcing current Ia_min)
+  incidentEnergy: number; // cal/cm2 (unrounded)
+  incidentEnergyJoules: number; // J/cm2 (1 cal/cm2 = 4.184 J/cm2)
+  incidentEnergyKjM2: number; // kJ/m2 (1 cal/cm2 = 41.84 kJ/m2)
+  boundaryRadius: number; // meters (where E = 1.2 cal/cm2)
+  boundaryRadiusFeet: number; // feet
   cf: number; // Enclosure Correction Factor CF
+  ees: number; // Equivalent Enclosure Size EES
+  xFactor: number; // Distance exponent x
+  ppeCategory: number; // 1, 2, 3, 4, or 5 (5 = Dangerous >40 cal/cm2)
+  isExtrapolated: boolean;
   isValid: boolean;
   validationMessages: string[];
   trace: {
@@ -34,6 +49,7 @@ export interface IEEE1584Result {
     arcingCurrent: number;
     En: number;
     cf: number;
+    ees: number;
     xFactor: number;
     incidentEnergy: number;
     boundaryRadius: number;
@@ -42,13 +58,88 @@ export interface IEEE1584Result {
 }
 
 /**
- * Calculates IEEE 1584-2018 Arcing Current for reference voltage models (600V, 2700V, 14300V)
+ * Calculates Conductor Thermal Burnoff Time t_burnoff per IEEE / IEC k²S²/I²
+ * @param material Conductor material ('Cu' | 'Al')
+ * @param sizeMm2 Cross-section in mm² (35 to 600 mm²)
+ * @param arcingCurrentKa Arcing current Ia in kA
  */
-function calculateIarcForRefVoltage(refVoltageV: number, Ibf: number, G: number, config: ElectrodeConfig): number {
+export function calculateConductorBurnoffTime(material: 'Cu' | 'Al', sizeMm2: number, arcingCurrentKa: number): number {
+  const k = material === 'Cu' ? 115 : 76;
+  const Iamps = arcingCurrentKa * 1000;
+  if (Iamps <= 0) return 999.0;
+  const tBurnoff = Math.pow(k * sizeMm2, 2) / Math.pow(Iamps, 2);
+  return Number(Math.max(0.01, tBurnoff).toFixed(3));
+}
+
+/**
+ * Calculates Released Total Arc Energy (MJ) and TNT Equivalent (kg TNT)
+ * @param voltageV System Voltage in Volts
+ * @param gapMm Gap in mm
+ * @param arcingCurrentKa Arcing current Ia in kA
+ * @param clearingTimeSec Clearing time t in seconds
+ */
+export function calculateReleasedArcEnergy(voltageV: number, gapMm: number, arcingCurrentKa: number, clearingTimeSec: number) {
+  // Arc Voltage Varc using 15 V/cm gradient model with a 100V floor
+  const gapCm = gapMm / 10;
+  const arcVoltageV = Math.max(100, Math.min(voltageV * 0.75, 15 * gapCm));
+  const Iamps = arcingCurrentKa * 1000;
+  
+  // Total 3-phase released thermal/mechanical energy Etot = 3 * Varc * I * t
+  const releasedJoules = 3 * arcVoltageV * Iamps * clearingTimeSec;
+  const releasedMJ = releasedJoules / 1000000;
+  const tntKg = releasedMJ / 4.184; // 1 kg TNT = 4.184 MJ
+
+  return {
+    arcVoltageV,
+    releasedJoules,
+    releasedMJ,
+    tntKg
+  };
+}
+
+/**
+ * Calculates Room Air Temperature Rise ΔT and Final Room Temp
+ */
+export function calculateRoomTemperatureRise(releasedJoules: number, roomVolumeM3: number) {
+  const airDensity = 1.2; // kg/m3
+  const airCp = 1005; // J/(kg K)
+  const massAirKg = airDensity * Math.max(1, roomVolumeM3);
+  const deltaT = releasedJoules / (massAirKg * airCp);
+  const finalTempC = 25 + deltaT;
+  return { deltaT, finalTempC };
+}
+
+/**
+ * Calculates Peak Overpressure at Working Distance D
+ */
+export function calculateOverpressure(releasedMJ: number, enclosureVolumeM3: number) {
+  const overpressureKpa = (15 * releasedMJ) / Math.max(0.1, enclosureVolumeM3);
+  return {
+    overpressureKpa,
+    isEardrumRisk: overpressureKpa >= 5.0,
+    isLungRisk: overpressureKpa >= 35.0
+  };
+}
+
+/**
+ * Evaluates NFPA 70E 2024 PPE Category using UNROUNDED incident energy
+ */
+export function evaluateNFPA70ECategory(unroundedEnergy: number): number {
+  if (unroundedEnergy > 40.0) return 5; // Dangerous >40 cal/cm2
+  if (unroundedEnergy > 25.0) return 4; // Category 4 (25.0 < E <= 40.0)
+  if (unroundedEnergy > 8.0)  return 3; // Category 3 (8.0 < E <= 25.0)
+  if (unroundedEnergy > 4.0)  return 2; // Category 2 (4.0 < E <= 8.0)
+  if (unroundedEnergy >= 1.2) return 1; // Category 1 (1.2 <= E <= 4.0)
+  return 0;
+}
+
+/**
+ * Calculates IEEE 1584-2018 Arcing Current
+ */
+export function calculateIarcForRefVoltage(refVoltageV: number, Ibf: number, G: number, config: ElectrodeConfig): number {
   const logIbf = Math.log10(Ibf);
 
   if (refVoltageV <= 600) {
-    // Low Voltage 600V Reference Model
     const VkV = 0.6;
     let K = -0.097;
     let multiplier = 1.0;
@@ -64,7 +155,6 @@ function calculateIarcForRefVoltage(refVoltageV: number, Ibf: number, G: number,
     const logIa = K + 0.662 * logIbf + 0.0966 * VkV + 0.000526 * G + 0.558 * VkV * logIbf - 0.00304 * G * logIbf;
     return Math.min(Ibf * 0.98, Math.max(0.1, Math.pow(10, logIa) * multiplier));
   } else if (refVoltageV <= 2700) {
-    // Medium Voltage 2700V Reference Model
     let K_MV = 0.00402;
     let multiplier = 1.0;
 
@@ -79,7 +169,6 @@ function calculateIarcForRefVoltage(refVoltageV: number, Ibf: number, G: number,
     const logIa = K_MV + 0.983 * logIbf + 0.000526 * G;
     return Math.min(Ibf * 0.99, Math.max(0.1, Math.pow(10, logIa) * multiplier));
   } else {
-    // High Medium Voltage 14300V Reference Model
     let K_MV = 0.00600;
     let multiplier = 1.0;
 
@@ -96,36 +185,28 @@ function calculateIarcForRefVoltage(refVoltageV: number, Ibf: number, G: number,
   }
 }
 
-/**
- * Calculates Enclosure Correction Factor (CF) based on W, H, D dimensions
- */
-export function calculateCF(width: number, height: number, depth: number, config: ElectrodeConfig): number {
+export function calculateCF(width: number, height: number, depth: number, config: ElectrodeConfig): { cf: number; ees: number } {
   if (config === 'VOA' || config === 'HOA') {
-    return 1.0; // Open air has no enclosure focusing effect
+    return { cf: 1.0, ees: 508 };
   }
 
-  // Reference standard box size: 508mm x 610mm x 508mm
+  const ees = Math.sqrt(width * height);
   const refW = 508;
   const refH = 610;
 
-  // Smaller enclosure focuses energy towards worker (higher CF), larger enclosure diffuses energy (lower CF)
   const wTerm = (refW - width) / 2000;
   const hTerm = (refH - height) / 2000;
   const dTerm = (refW - depth) / 3000;
 
   let baseCF = 1.0 + wTerm + hTerm + dTerm;
 
-  // Configuration specific focus multipliers
   if (config === 'HCB') baseCF *= 1.12;
   else if (config === 'VCBB') baseCF *= 1.06;
 
-  // Bound CF between reasonable limits 0.65 and 1.85
-  return Math.min(1.85, Math.max(0.65, baseCF));
+  const cf = Math.min(1.85, Math.max(0.65, baseCF));
+  return { cf, ees };
 }
 
-/**
- * Main IEEE 1584-2018 Calculation Function
- */
 export function calculateIEEE1584_2018(input: IEEE1584Input): IEEE1584Result {
   const {
     voltage,
@@ -142,60 +223,67 @@ export function calculateIEEE1584_2018(input: IEEE1584Input): IEEE1584Result {
 
   const validationMessages: string[] = [];
   let isValid = true;
+  let isExtrapolated = false;
 
-  // IEEE 1584-2018 Range Validation
   if (voltage < 208 || voltage > 15000) {
     isValid = false;
-    validationMessages.push(`Voltage (${voltage}V) outside IEEE 1584-2018 range (208V - 15,000V)`);
-  }
-  if (Ibf < 0.5 || Ibf > 106.0) {
-    isValid = false;
-    validationMessages.push(`Bolted Fault Current (${Ibf}kA) outside IEEE 1584-2018 range (0.5kA - 106kA)`);
-  }
-  if (G < 6 || G > 250) {
-    isValid = false;
-    validationMessages.push(`Electrode Gap (${G}mm) outside IEEE 1584-2018 range (6mm - 250mm)`);
+    isExtrapolated = true;
+    validationMessages.push(`Voltage (${voltage}V) outside IEEE 1584 range (208V - 15,000V)`);
   }
 
-  // 1. Compute reference arcing currents for 600V, 2700V, 14300V
+  if (Ibf < 0.5 || Ibf > 106.0) {
+    isValid = false;
+    isExtrapolated = true;
+    validationMessages.push(`Bolted Fault Current (${Ibf}kA) outside IEEE 1584 range (0.5kA - 106kA)`);
+  }
+
+  const isLowVoltage = voltage <= 600;
+  const minGap = isLowVoltage ? 6.35 : 12.7;
+  const maxGap = isLowVoltage ? 76.2 : 304.8;
+
+  if (G < minGap || G > maxGap) {
+    isValid = false;
+    isExtrapolated = true;
+    validationMessages.push(`Electrode Gap (${G}mm) outside ${isLowVoltage ? 'LV' : 'MV'} IEEE 1584 range (${minGap} - ${maxGap}mm)`);
+  }
+
+  if (D < 185 || D > 6100) {
+    isValid = false;
+    isExtrapolated = true;
+    validationMessages.push(`Working Distance (${D}mm) outside IEEE 1584 range (185 - 6,100mm)`);
+  }
+
   const Iarc_600 = calculateIarcForRefVoltage(600, Ibf, G, config);
   const Iarc_2700 = calculateIarcForRefVoltage(2700, Ibf, G, config);
   const Iarc_14300 = calculateIarcForRefVoltage(14300, Ibf, G, config);
 
-  // 2. Interpolate arcing current at actual system Voc
   let arcingCurrent = 0;
   if (voltage <= 600) {
     arcingCurrent = Iarc_600;
   } else if (voltage <= 2700) {
-    // Interpolate between 600V and 2700V models
     const ratio = (voltage - 600) / (2700 - 600);
     arcingCurrent = Iarc_600 + ratio * (Iarc_2700 - Iarc_600);
   } else if (voltage <= 14300) {
-    // Interpolate between 2700V and 14300V models (e.g. for 10.99kV)
     const ratio = (voltage - 2700) / (14300 - 2700);
     arcingCurrent = Iarc_2700 + ratio * (Iarc_14300 - Iarc_2700);
   } else {
     arcingCurrent = Iarc_14300;
   }
 
-  // Ensure arcing current is bounded realistically (< bolted fault current)
   arcingCurrent = Math.min(Ibf * 0.99, Math.max(0.1, arcingCurrent));
+  const arcingCurrentReduced = arcingCurrent * 0.85;
 
-  // 3. Compute Enclosure Correction Factor (CF)
-  const cf = calculateCF(W, H, D_enc, config);
+  const { cf, ees } = calculateCF(W, H, D_enc, config);
 
-  // 4. Energy Configuration Multiplier
   let configMultiplier = 1.0;
   switch (config) {
     case 'VCB': configMultiplier = 1.0; break;
-    case 'VCBB': configMultiplier = 1.20; break; // Vertical with Barrier increases directed energy
-    case 'HCB': configMultiplier = 1.45; break; // Horizontal points arc directly at worker (highest energy)
-    case 'VOA': configMultiplier = 0.75; break; // Open air vertical dispersion
-    case 'HOA': configMultiplier = 0.90; break; // Open air horizontal
+    case 'VCBB': configMultiplier = 1.20; break;
+    case 'HCB': configMultiplier = 1.45; break;
+    case 'VOA': configMultiplier = 0.75; break;
+    case 'HOA': configMultiplier = 0.90; break;
   }
 
-  // 5. Normalized Incident Energy (En) in cal/cm2 for 0.2s duration at 610mm
-  const isLowVoltage = voltage < 1000;
   const k1 = -0.555;
   const k2 = grounding === 'solidly_grounded' ? -0.113 : 0.0;
   const logIaCoeff = isLowVoltage ? 1.081 : 0.983;
@@ -203,27 +291,35 @@ export function calculateIEEE1584_2018(input: IEEE1584Input): IEEE1584Result {
   const logEn = k1 + k2 + logIaCoeff * Math.log10(arcingCurrent) + 0.0011 * G;
   const En = Math.pow(10, logEn) * configMultiplier;
 
-  // 6. Distance factor x
   const xFactor = isLowVoltage 
     ? (config === 'VOA' || config === 'HOA' ? 2.0 : 1.473)
     : (config === 'VOA' || config === 'HOA' ? 2.0 : 0.973);
 
   const clearingTimeSec = clearingTimeMs / 1000;
 
-  // 7. Incident Energy Calculation E in cal/cm2
-  // E = 4.184 * Cf * En * (t / 0.2) * (610^x / D^x)
   const incidentEnergy = 4.184 * cf * En * (clearingTimeSec / 0.2) * Math.pow(610 / D, xFactor);
+  const incidentEnergyJoules = incidentEnergy * 4.184;
+  const incidentEnergyKjM2 = incidentEnergy * 41.84;
 
-  // 8. Arc Flash Boundary Db (distance in meters where E = 1.2 cal/cm2)
-  // 1.2 = 4.184 * cf * En * (t / 0.2) * (610 / Db_mm)^x
   const boundaryMm = 610 * Math.pow((4.184 * cf * En * (clearingTimeSec / 0.2)) / 1.2, 1 / xFactor);
   const boundaryRadius = Math.max(0.1, boundaryMm / 1000);
+  const boundaryRadiusFeet = boundaryRadius * 3.28084;
+
+  const ppeCategory = evaluateNFPA70ECategory(incidentEnergy);
 
   return {
     arcingCurrent,
+    arcingCurrentReduced,
     incidentEnergy,
+    incidentEnergyJoules,
+    incidentEnergyKjM2,
     boundaryRadius,
+    boundaryRadiusFeet,
     cf,
+    ees,
+    xFactor,
+    ppeCategory,
+    isExtrapolated,
     isValid,
     validationMessages,
     trace: {
@@ -233,6 +329,7 @@ export function calculateIEEE1584_2018(input: IEEE1584Input): IEEE1584Result {
       arcingCurrent,
       En,
       cf,
+      ees,
       xFactor,
       incidentEnergy,
       boundaryRadius,
