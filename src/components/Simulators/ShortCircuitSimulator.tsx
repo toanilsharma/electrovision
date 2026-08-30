@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Zap, AlertTriangle, Clock, TrendingUp, Cpu, Sliders, Settings, 
-  Play, RotateCcw, Flame, ShieldAlert, Activity, BookOpen, ShieldCheck, Square, Info
+  Play, RotateCcw, Flame, ShieldAlert, Activity, BookOpen, ShieldCheck, Square, Info,
+  ChevronDown, ChevronUp, Layers, HelpCircle, CheckCircle2, XCircle, Gauge
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -10,11 +11,34 @@ import { EmergencyResponse } from '../EmergencyResponse';
 import { HazardOverlay } from '../HazardOverlay';
 import { PPEValidator } from '../PPEValidator';
 import { useAudioHaptics } from '../useAudioHaptics';
+import { 
+  calculateIEC60909, 
+  IEC60909Result, 
+  getKFactor 
+} from '@/src/utils/iec60909';
+import { IndustrialGridDiagram } from './IndustrialGridDiagram';
+import { EventTimelineScrubber } from './EventTimelineScrubber';
+import { CoordinationChartCard } from './CoordinationChartCard';
 
 export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
-  // Simulator Toggles
+  // Primary UI Controls (Default 3 Relay Modes & 2 Fault Types)
   const [protectionSpeed, setProtectionSpeed] = useState<'fast' | 'delayed' | 'fail'>('fast');
   const [faultType, setFaultType] = useState<'three_phase' | 'line_ground'>('three_phase');
+
+  // Engineer Details Collapsible & Advanced IEC 60909 Parameters
+  const [showEngineerDetails, setShowEngineerDetails] = useState<boolean>(false);
+  const [transformerKVA, setTransformerKVA] = useState<number>(630);
+  const [ukPercent, setUkPercent] = useState<number>(6.0);
+  const [cableLengthM, setCableLengthM] = useState<number>(0);
+  const [cableSizeMm2, setCableSizeMm2] = useState<number>(16);
+  const [z0z1Ratio, setZ0z1Ratio] = useState<number>(1.7);
+  const [isLimitingBreaker, setIsLimitingBreaker] = useState<boolean>(false);
+
+  // Time Scale Control (1X Normal, 0.5X, 0.25X Slow-Mo)
+  const [timeScale, setTimeScale] = useState<number>(1);
+
+  // Active Tooltip Target
+  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
   // Simulation Dials
   const [time, setTime] = useState<number>(0); // simulated time (0 to 100ms)
@@ -30,21 +54,29 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
   const faultIgnitionTime = 10; // fault occurs at 10ms
   const nominalLoadCurrent = 150; // nominal load current (A)
 
-  // Calculations: Fault current based on phase type and environment
-  const prospectiveFaultCurrent = useMemo(() => {
-    if (isIndustrial) {
-      return faultType === 'three_phase' ? 15000 : 8000;
-    } else {
-      return faultType === 'three_phase' ? 3500 : 1500;
-    }
-  }, [isIndustrial, faultType]);
+  // Full IEC 60909 Physics Engine Calculation
+  const iecResults: IEC60909Result = useMemo(() => {
+    return calculateIEC60909({
+      transformerKVA,
+      ukPercent,
+      voltageUn: systemVoltage,
+      voltageFactorC: 1.05,
+      cableLengthM,
+      cableSizeMm2,
+      cableMaterial: 'Cu',
+      cableInsulation: 'PVC',
+      z0z1Ratio,
+      faultType,
+      protectionSpeed,
+      isLimitingBreaker
+    });
+  }, [
+    transformerKVA, ukPercent, systemVoltage, cableLengthM, 
+    cableSizeMm2, z0z1Ratio, faultType, protectionSpeed, isLimitingBreaker
+  ]);
 
-  // Trip time in ms based on selection
-  const tripTime = useMemo(() => {
-    if (protectionSpeed === 'fast') return 14; // fast clearing speed (ms)
-    if (protectionSpeed === 'delayed') return 76; // delayed coordination (ms)
-    return Infinity; // fails to trip!
-  }, [protectionSpeed]);
+  const prospectiveFaultCurrent = iecResults.Ik; // Current selected fault Ik (A)
+  const tripTime = iecResults.tTotalMs; // Total clearing time (ms)
 
   // Evaluate instant current, tripped state, let-through energy, and wire heat
   const { faultCurrent, tripped, letThroughEnergy, heatLevel } = useMemo(() => {
@@ -58,26 +90,34 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
         current = nominalLoadCurrent;
         energy = 0;
         heat = 0;
-      } else if (time <= faultIgnitionTime + tripTime) {
+      } else if (tripTime === Infinity || time <= faultIgnitionTime + tripTime) {
         // Fault active
         const ramp = Math.min(1, (time - faultIgnitionTime) / 4);
         current = nominalLoadCurrent + (prospectiveFaultCurrent - nominalLoadCurrent) * ramp;
 
-        // Energy = I^2 * t (kA^2s)
+        // Energy = I^2 * t
         const activeSec = (time - faultIgnitionTime) / 1000;
-        energy = Math.pow(current / 1000, 2) * activeSec;
+        const uncappedEnergy = Math.pow(current / 1000, 2) * activeSec; // kA²s
         
-        // Heat level ranges 0 to 1.5. 15.0 kA^2s starts insulation damage
-        heat = Math.min(1.5, energy / 12.0);
+        if (isLimitingBreaker && tripTime !== Infinity) {
+          const capTarget = 0.6 * Math.pow(current / 15000, 2);
+          energy = Math.min(uncappedEnergy, Math.max(0.1, capTarget));
+        } else {
+          energy = uncappedEnergy;
+        }
+
+        // Heat level normalized relative to cable withstand energy (k²S² in kA²s)
+        const withstandCapacity = iecResults.withstandEnergy_kA2s;
+        heat = Math.min(1.8, energy / (withstandCapacity || 3.4));
       } else {
         // Breaker tripped
         isTripped = true;
         current = 0;
 
-        const activeSec = tripTime / 1000;
-        energy = Math.pow(prospectiveFaultCurrent / 1000, 2) * activeSec;
+        energy = iecResults.letThroughEnergy_kA2s;
+        const withstandCapacity = iecResults.withstandEnergy_kA2s;
+        const finalHeat = Math.min(1.8, energy / (withstandCapacity || 3.4));
 
-        const finalHeat = Math.min(1.5, energy / 12.0);
         const coolingDuration = time - (faultIgnitionTime + tripTime);
         heat = Math.max(0, finalHeat - coolingDuration / 50);
       }
@@ -89,7 +129,7 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
       letThroughEnergy: energy,
       heatLevel: heat
     };
-  }, [time, prospectiveFaultCurrent, tripTime]);
+  }, [time, prospectiveFaultCurrent, tripTime, isLimitingBreaker, iecResults]);
 
   // Audio blast trigger at fault ignition
   useEffect(() => {
@@ -99,10 +139,11 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
     lastTimeRef.current = time;
   }, [time, playArcBlast]);
 
-  // Auto-play interval runner
+  // Auto-play interval runner (synced with timeScale)
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isAutoPlaying) {
+      const stepMs = Math.round(40 / timeScale);
       interval = setInterval(() => {
         setTime((prev) => {
           if (prev >= 100) {
@@ -111,12 +152,12 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
           }
           return Math.min(100, prev + 2);
         });
-      }, 40); // 100ms simulated time in ~2 seconds
+      }, stepMs);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isAutoPlaying]);
+  }, [isAutoPlaying, timeScale]);
 
   useEffect(() => {
     if (time > 0) {
@@ -124,13 +165,13 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
     }
   }, [time]);
 
-  // Determine safety verdict based on Let-Through energy
+  // Determine safety verdict based on Let-Through energy vs Cable Thermal Withstand (k²S²)
   const verdict = useMemo(() => {
     if (time === 0) {
       return { 
         status: 'idle', 
         label: 'STANDBY / OK', 
-        color: 'text-slate-350 bg-slate-900 border-slate-700/60 shadow-md', 
+        color: 'text-slate-300 bg-slate-900 border-slate-700 shadow-md', 
         desc: 'Conductors armed. Nominal power flowing. Awaiting short-circuit trigger.' 
       };
     }
@@ -138,212 +179,509 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
       if (time === 100) {
         return { 
           status: 'fail', 
-          label: 'CRITICAL FAILURE: NO TRIP', 
-          color: 'text-red-400 bg-red-955/80 border-red-500/50 font-black animate-pulse shadow-md', 
-          desc: 'The relay failed to trip the breaker. Massive continuous energy has melted the copper conductors, causing structural fire.' 
+          label: 'CRITICAL FAILURE: NO TRIP (MELT)', 
+          color: 'text-red-400 bg-red-950/80 border-red-500/50 font-black animate-pulse shadow-md', 
+          desc: `The relay failed to trip. Continuous fault current of ${iecResults.Ik_kA.toFixed(2)} kA exceeded cable thermal withstand limit (${iecResults.withstandEnergy_kA2s.toFixed(1)} kA²s), causing explosive conductor meltdown!` 
         };
       }
       return { 
         status: 'faulting', 
         label: 'SHORT-CIRCUIT IN PROGRESS', 
         color: 'text-red-400 bg-red-950/80 border-red-500/30 font-bold animate-pulse shadow-md', 
-        desc: 'Insulation breakdown has occurred. Heavy fault current is loading the wires with extreme thermal stress.' 
+        desc: `Heavy ${faultType === 'three_phase' ? '3-Phase' : 'Line-to-Ground'} fault current is active. Peak making current ip = ${iecResults.ip_kA.toFixed(2)} kA.` 
       };
     }
 
-    if (letThroughEnergy < 3.5) {
+    if (iecResults.isThermalPass) {
       return { 
         status: 'safe', 
-        label: 'OPTIMAL PROTECTION', 
-        color: 'text-green-400 bg-green-950/80 border-green-500/30 shadow-md', 
-        desc: `Relay tripped breaker in ${tripTime}ms. Let-through energy was kept to ${letThroughEnergy.toFixed(1)} kA²s. Cables remain cold and safe.` 
+        label: `VERDICT: PASS (CABLE COLD & SAFE)`, 
+        color: 'text-green-400 bg-green-950/80 border-green-500/40 shadow-md', 
+        desc: `Relay cleared fault in ${tripTime}ms (${iecResults.tRelayMs}ms relay + ${iecResults.tBreakerMs}ms CB + ${iecResults.tArcMs}ms arc). Let-through energy ${letThroughEnergy.toFixed(2)} kA²s is below ${cableSizeMm2}mm² Cu PVC withstand limit (${iecResults.withstandEnergy_kA2s.toFixed(2)} kA²s). S_min = ${iecResults.Smin.toFixed(1)} mm².` 
       };
     } else {
       return { 
         status: 'danger', 
-        label: 'CATASTROPHIC CABLE DAMAGE', 
-        color: 'text-red-550 bg-red-955/90 border-red-500/50 font-extrabold shadow-md', 
-        desc: `Delayed trip (${tripTime}ms) allowed a massive ${letThroughEnergy.toFixed(1)} kA²s to pass. Cable insulation melted, producing toxic smoke and explosive sparks.` 
+        label: `VERDICT: MELT (CABLE THERMAL OVERLOAD)`, 
+        color: 'text-red-400 bg-red-950/90 border-red-500/50 font-extrabold shadow-md', 
+        desc: `Delayed trip (${tripTime}ms) allowed ${letThroughEnergy.toFixed(2)} kA²s let-through, exceeding ${cableSizeMm2}mm² Cu withstand limit (${iecResults.withstandEnergy_kA2s.toFixed(2)} kA²s). Cable insulation melted! Minimum required cable size S_min = ${iecResults.Smin.toFixed(1)} mm².` 
       };
     }
-  }, [time, tripped, letThroughEnergy, tripTime]);
+  }, [time, tripped, letThroughEnergy, tripTime, iecResults, faultType, cableSizeMm2]);
 
   return (
-    <div className="flex flex-col lg:flex-row h-full w-full gap-4 bg-transparent text-slate-100 overflow-hidden p-2 md:p-0">
+    <div className="flex flex-col lg:flex-row h-full w-full gap-4 bg-transparent text-slate-100 overflow-x-hidden p-2 md:p-0">
       
-      {/* LEFT COLUMN: Simplified Controls, Diagnostics, and Lessons */}
-      <div className="flex flex-col flex-1 h-full min-h-0 overflow-y-auto pr-0 lg:pr-2 pb-4 scrollbar-thin scrollbar-thumb-slate-800 order-2 lg:order-1 gap-3">
+      {/* LEFT COLUMN: Controls, Diagram (Mobile), Timeline Scrubber, Coordination Chart, Diagnostics */}
+      <div className="flex flex-col flex-1 h-full min-h-0 overflow-y-auto pr-0 lg:pr-2 pb-20 lg:pb-4 scrollbar-thin scrollbar-thumb-slate-800 order-2 lg:order-1 gap-3">
         
-        {/* Core Controls Panel */}
+        {/* Core Controls Panel (1. Controls Card) */}
         <div className="p-4 rounded-xl bg-slate-800 border border-slate-700 shadow-xl flex flex-col gap-3 shrink-0">
-          <h3 className="text-xs font-bold tracking-wider uppercase text-cyan-400 flex items-center gap-2 border-b border-slate-700 pb-2">
-            <Sliders className="w-4 h-4 text-cyan-400" /> Simulator Controls
-          </h3>
+          <div className="flex items-center justify-between border-b border-slate-700 pb-2">
+            <h3 className="text-xs font-bold tracking-wider uppercase text-cyan-400 flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-cyan-400" /> Simulator Controls (IEC 60909 Engine)
+            </h3>
+            <span className="text-[11px] font-mono bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-800 tabular-nums">
+              c = 1.05 | {systemVoltage}V
+            </span>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
-            {/* Protection Speed Toggle */}
+            {/* Protection Speed Toggle (3 Primary Modes) */}
             <div>
-              <span className="text-xs font-bold text-slate-350 block mb-2 uppercase tracking-wide">
-                1. Relay Protection Speed
+              <span className="text-xs font-bold text-slate-300 block mb-2 uppercase tracking-wide flex items-center justify-between">
+                <span>1. Relay Protection Speed</span>
+                <span className="text-[11px] text-cyan-400 font-mono tabular-nums">
+                  {tripTime === Infinity ? 'No Trip' : `${tripTime} ms Total`}
+                </span>
               </span>
               <div className="grid grid-cols-3 gap-1 bg-slate-900 p-1 rounded-lg border border-slate-750">
                 <button
                   onClick={() => { setTime(0); setProtectionSpeed('fast'); }}
                   className={cn(
-                    "py-2 text-[10px] font-bold rounded transition-all cursor-pointer border", 
+                    "py-2.5 text-[11px] font-bold rounded transition-all cursor-pointer border min-h-[44px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none", 
                     protectionSpeed === 'fast' 
                       ? 'bg-green-600 text-slate-950 border-green-400 font-extrabold shadow-sm' 
-                      : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white'
+                      : 'bg-slate-950/60 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
                   )}
                 >
-                  Fast Trip
+                  Fast Trip (14ms)
                 </button>
                 <button
                   onClick={() => { setTime(0); setProtectionSpeed('delayed'); }}
                   className={cn(
-                    "py-2 text-[10px] font-bold rounded transition-all cursor-pointer border", 
+                    "py-2.5 text-[11px] font-bold rounded transition-all cursor-pointer border min-h-[44px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none", 
                     protectionSpeed === 'delayed' 
-                      ? 'bg-red-500/20 text-red-400 border-red-500/30' 
-                      : 'bg-slate-955/60 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold' 
+                      : 'bg-slate-950/60 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
                   )}
                 >
-                  Delayed
+                  Delayed (76ms)
                 </button>
                 <button
                   onClick={() => { setTime(0); setProtectionSpeed('fail'); }}
                   className={cn(
-                    "py-2 text-[10px] font-bold rounded transition-all cursor-pointer border", 
+                    "py-2.5 text-[11px] font-bold rounded transition-all cursor-pointer border min-h-[44px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none", 
                     protectionSpeed === 'fail' 
                       ? 'bg-red-600 text-slate-100 border-red-400 font-extrabold shadow-sm' 
-                      : 'bg-slate-955/60 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white'
+                      : 'bg-slate-950/60 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
                   )}
                 >
-                  No Trip
+                  No Trip (∞)
                 </button>
               </div>
             </div>
 
-            {/* Short Circuit Type Toggle */}
+            {/* Short Circuit Type Toggle (2 Fault Types) */}
             <div>
-              <span className="text-xs font-bold text-slate-350 block mb-2 uppercase tracking-wide">
-                2. Fault Current Type
+              <span className="text-xs font-bold text-slate-300 block mb-2 uppercase tracking-wide flex items-center justify-between">
+                <span>2. Fault Current Type</span>
+                <span className="text-[11px] text-orange-400 font-mono font-bold tabular-nums">
+                  Ik = {iecResults.Ik_kA.toFixed(2)} kA
+                </span>
               </span>
               <div className="grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-lg border border-slate-750">
                 <button
                   onClick={() => { setTime(0); setFaultType('three_phase'); }}
                   className={cn(
-                    "py-2 text-xs font-bold rounded-md transition-all cursor-pointer border", 
+                    "py-2.5 text-xs font-bold rounded-md transition-all cursor-pointer border min-h-[44px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none", 
                     faultType === 'three_phase' 
-                      ? 'bg-red-650 text-white border-red-500 font-extrabold shadow-sm' 
-                      : 'bg-slate-955/60 text-slate-350 border-slate-800 hover:bg-slate-800 hover:text-white'
+                      ? 'bg-red-600 text-white border-red-500 font-extrabold shadow-sm' 
+                      : 'bg-slate-950/60 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
                   )}
                 >
-                  3-Phase (Bolted)
+                  3-Phase (Ik3 ≈ {iecResults.Ik3_kA.toFixed(1)}kA)
                 </button>
                 <button
                   onClick={() => { setTime(0); setFaultType('line_ground'); }}
                   className={cn(
-                    "py-2 text-xs font-bold rounded-md transition-all cursor-pointer border", 
+                    "py-2.5 text-xs font-bold rounded-md transition-all cursor-pointer border min-h-[44px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none", 
                     faultType === 'line_ground' 
-                      ? 'bg-red-650 text-white border-red-500 font-extrabold shadow-sm' 
-                      : 'bg-slate-955/60 text-slate-350 border-slate-800 hover:bg-slate-800 hover:text-white'
+                      ? 'bg-red-600 text-white border-red-500 font-extrabold shadow-sm' 
+                      : 'bg-slate-950/60 text-slate-350 border-slate-800 hover:bg-slate-800 hover:text-white'
                   )}
                 >
-                  Line-to-Ground
+                  Line-to-Ground (Ik1 ≈ {iecResults.Ik1_kA.toFixed(1)}kA)
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Trigger Play Buttons */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-            <div className="flex gap-2">
-              {isAutoPlaying ? (
-                <button 
-                  onClick={() => setIsAutoPlaying(false)}
-                  className="flex-1 py-3 font-bold text-xs uppercase tracking-widest bg-red-600 hover:bg-red-700 text-white border border-red-500 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                >
-                  <Square className="w-4 h-4 fill-white" /> STOP
-                </button>
-              ) : (
-                <button 
-                  onClick={() => {
-                    if (time >= 100) setTime(0);
-                    setIsAutoPlaying(true);
-                  }}
-                  className="flex-1 py-3 font-bold text-xs uppercase tracking-widest bg-green-600 hover:bg-green-700 text-slate-950 border border-green-500 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md font-black"
-                >
-                  <Play className="w-4 h-4 fill-slate-950 animate-pulse" /> IGNITE
-                </button>
-              )}
+          {/* Desktop IGNITE & RESET SCENARIO Action Buttons */}
+          <div className="hidden lg:flex gap-2 mt-2">
+            {isAutoPlaying ? (
+              <button 
+                onClick={() => setIsAutoPlaying(false)}
+                className="flex-1 py-3 font-bold text-xs uppercase tracking-widest bg-red-600 hover:bg-red-700 text-white border border-red-500 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md focus-visible:ring-2 focus-visible:ring-red-400 min-h-[44px]"
+              >
+                <Square className="w-4 h-4 fill-white" /> STOP FAULT SIMULATION
+              </button>
+            ) : (
               <button 
                 onClick={() => {
-                  setIsAutoPlaying(false);
-                  setTime(0);
+                  if (time >= 100) setTime(0);
+                  setIsAutoPlaying(true);
                 }}
-                className="px-4 bg-slate-950 border border-slate-800 text-slate-200 rounded-xl hover:bg-slate-900 hover:border-slate-750 flex items-center justify-center cursor-pointer shadow-sm"
+                className="flex-1 py-3 font-bold text-xs uppercase tracking-widest bg-green-600 hover:bg-green-700 text-slate-950 border border-green-500 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md font-black focus-visible:ring-2 focus-visible:ring-green-400 min-h-[44px]"
               >
-                <RotateCcw className="w-4 h-4" />
+                <Play className="w-4 h-4 fill-slate-950 animate-pulse" /> IGNITE SHORT-CIRCUIT FAULT
               </button>
-            </div>
+            )}
 
-            {/* Slider to scan manually */}
-            <div className="flex flex-col justify-center px-3 py-1 bg-slate-950 border border-slate-800 rounded-xl">
-              <div className="flex justify-between text-[10px] font-bold text-slate-300 uppercase mb-0.5">
-                <span>Manual Sweep scan</span>
-                <span className="text-orange-400 font-mono font-black">{time} ms</span>
-              </div>
-              <input
-                type="range"
-                min="0" max="100" step="2"
-                value={time}
-                onChange={(e) => {
-                  setIsAutoPlaying(false);
-                  setTime(Number(e.target.value));
-                }}
-                className="w-full accent-orange-500 cursor-pointer h-1"
-              />
-            </div>
+            <button 
+              onClick={() => {
+                setIsAutoPlaying(false);
+                setTime(0);
+              }}
+              className="px-4 py-3 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm focus-visible:ring-2 focus-visible:ring-cyan-400 min-h-[44px]"
+            >
+              <RotateCcw className="w-4 h-4 text-cyan-400" /> RESET SCENARIO
+            </button>
           </div>
         </div>
 
-        {/* Live Diagnostics Card (Big numbers, standard units) */}
-        <div className="p-4 rounded-xl bg-slate-800 border border-slate-700 shadow-xl flex flex-col gap-3">
-          <h3 className="text-xs font-bold tracking-wider uppercase text-cyan-400 flex items-center gap-2 border-b border-slate-700 pb-2">
-            <Activity className="w-4 h-4" /> Live Diagnostics
-          </h3>
+        {/* TEACHING INSTRUMENT 1: EVENT TIMELINE SCRUBBER */}
+        <EventTimelineScrubber
+          time={time}
+          setTime={setTime}
+          isAutoPlaying={isAutoPlaying}
+          setIsAutoPlaying={setIsAutoPlaying}
+          protectionSpeed={protectionSpeed}
+          tRelayMs={iecResults.tRelayMs}
+          tBreakerMs={iecResults.tBreakerMs}
+          tArcMs={iecResults.tArcMs}
+          tTotalMs={tripTime}
+          tripped={tripped}
+        />
 
-          <div className="grid grid-cols-3 gap-3 font-mono">
-            <div className="p-3 border border-slate-800 rounded-xl bg-slate-950/50 text-center">
-              <span className="text-[10px] font-bold text-slate-550 uppercase block tracking-wider mb-1">Fault Current</span>
+        {/* Live Diagnostics Card (3 cards wrap cleanly) */}
+        <div className="p-4 rounded-xl bg-slate-800 border border-slate-700 shadow-xl flex flex-col gap-3">
+          <div className="flex items-center justify-between border-b border-slate-700 pb-2">
+            <h3 className="text-xs font-bold tracking-wider uppercase text-cyan-400 flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Live Diagnostics & Formula Tooltips
+            </h3>
+            {isLimitingBreaker && (
+              <span className="bg-cyan-950 text-cyan-300 text-[11px] font-bold px-2 py-0.5 rounded border border-cyan-700 flex items-center gap-1">
+                <Gauge className="w-3.5 h-3.5 text-cyan-400" /> Current Limiting Active
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono">
+            {/* Fault Current Readout */}
+            <div className="p-3 border border-slate-800 rounded-xl bg-slate-950/50 text-center relative group">
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Fault Current (Ik)</span>
+                <button 
+                  onClick={() => setActiveTooltip(activeTooltip === 'Ik' ? null : 'Ik')}
+                  className="text-slate-400 hover:text-cyan-400 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                </button>
+              </div>
               <div className={cn(
-                "text-2xl font-black",
+                "text-xl md:text-2xl font-black tabular-nums",
                 time >= faultIgnitionTime && !tripped ? "text-red-500" : "text-slate-100"
               )}>
-                {faultCurrent.toFixed(0)} <span className="text-sm font-normal text-slate-500">A</span>
+                {(faultCurrent / 1000).toFixed(2)} <span className="text-xs font-normal text-slate-400">kA</span>
               </div>
+              <span className="text-[11px] text-slate-400 block mt-0.5">
+                {faultType === 'three_phase' ? '3-Phase (Ik3)' : 'Line-Ground (Ik1)'}
+              </span>
+
+              {/* Formula Tooltip */}
+              {activeTooltip === 'Ik' && (
+                <div className="absolute left-0 bottom-full mb-2 w-64 p-2.5 bg-slate-900 border border-cyan-500 rounded-lg text-left text-[11px] text-slate-200 z-50 shadow-2xl font-sans">
+                  <strong className="text-cyan-400 block mb-1">IEC 60909 Fault Current Equations:</strong>
+                  <p className="font-mono text-[11px] text-amber-300 tabular-nums">Ik3 = c · Un / (√3 · Z1)</p>
+                  <p className="font-mono text-[11px] text-amber-300 tabular-nums">Ik1 = √3 · c · Un / (2·Z1 + Z0)</p>
+                  <p className="mt-1 text-[11px] text-slate-300">c=1.05, Un={systemVoltage}V, Z1={(iecResults.Z1*1000).toFixed(1)}mΩ, Z0/Z1={z0z1Ratio}</p>
+                </div>
+              )}
             </div>
 
-            <div className="p-3 border border-slate-800 rounded-xl bg-slate-950/50 text-center">
-              <span className="text-[10px] font-bold text-slate-550 uppercase block tracking-wider mb-1">Clearing Delay</span>
-              <div className="text-2xl font-black text-slate-100">
-                {tripTime === Infinity ? "∞" : `${tripTime}`} <span className="text-sm font-normal text-slate-500">ms</span>
+            {/* Peak Making Current ip */}
+            <div className="p-3 border border-slate-800 rounded-xl bg-slate-950/50 text-center relative group">
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Peak Making (ip)</span>
+                <button 
+                  onClick={() => setActiveTooltip(activeTooltip === 'ip' ? null : 'ip')}
+                  className="text-slate-400 hover:text-cyan-400 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                </button>
               </div>
+              <div className="text-xl md:text-2xl font-black text-orange-400 tabular-nums">
+                {iecResults.ip_kA.toFixed(2)} <span className="text-xs font-normal text-slate-400">kA</span>
+              </div>
+              <span className="text-[11px] text-slate-400 block mt-0.5 tabular-nums">
+                κ = {iecResults.kappa.toFixed(3)}
+              </span>
+
+              {/* Formula Tooltip */}
+              {activeTooltip === 'ip' && (
+                <div className="absolute left-0 bottom-full mb-2 w-64 p-2.5 bg-slate-900 border border-orange-500 rounded-lg text-left text-[11px] text-slate-200 z-50 shadow-2xl font-sans">
+                  <strong className="text-orange-400 block mb-1">Peak Making Current Equation:</strong>
+                  <p className="font-mono text-[11px] text-amber-300 tabular-nums">ip = κ · √2 · Ik</p>
+                  <p className="font-mono text-[11px] text-amber-300 tabular-nums">κ = 1.02 + 0.98 · e^(-3R/X)</p>
+                  <p className="mt-1 text-[11px] text-slate-300">Accounts for asymmetrical DC component offset at fault inception.</p>
+                </div>
+              )}
             </div>
 
-            <div className="p-3 border border-slate-800 rounded-xl bg-slate-950/50 text-center">
-              <span className="text-[10px] font-bold text-slate-550 uppercase block tracking-wider mb-1">Let-Through (I²t)</span>
-              <div className="text-2xl font-black text-orange-400">
-                {letThroughEnergy.toFixed(1)} <span className="text-sm font-normal text-slate-500">kA²s</span>
+            {/* Let-Through Energy (I²t) */}
+            <div className="p-3 border border-slate-800 rounded-xl bg-slate-950/50 text-center relative group">
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Let-Through (I²t)</span>
+                <button 
+                  onClick={() => setActiveTooltip(activeTooltip === 'I2t' ? null : 'I2t')}
+                  className="text-slate-400 hover:text-cyan-400 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                </button>
               </div>
+              <div className="text-xl md:text-2xl font-black text-amber-400 tabular-nums">
+                {letThroughEnergy.toFixed(2)} <span className="text-xs font-normal text-slate-400">kA²s</span>
+              </div>
+              <span className="text-[11px] text-slate-400 block mt-0.5 tabular-nums">
+                {isLimitingBreaker ? 'Energy Capped' : `t = ${tripTime} ms`}
+              </span>
+
+              {/* Formula Tooltip */}
+              {activeTooltip === 'I2t' && (
+                <div className="absolute right-0 bottom-full mb-2 w-64 p-2.5 bg-slate-900 border border-amber-500 rounded-lg text-left text-[11px] text-slate-200 z-50 shadow-2xl font-sans">
+                  <strong className="text-amber-400 block mb-1">Let-Through Thermal Energy:</strong>
+                  <p className="font-mono text-[11px] text-amber-300 tabular-nums">I²t = (Ik)² · t_clearing</p>
+                  <p className="mt-1 text-[11px] text-slate-300">Total thermal stress delivered to downstream equipment during fault clearing.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Cable Withstand Capacity (k²S²) */}
+            <div className="p-3 border border-slate-800 rounded-xl bg-slate-950/50 text-center relative group">
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Withstand (k²S²)</span>
+                <button 
+                  onClick={() => setActiveTooltip(activeTooltip === 'k2s2' ? null : 'k2s2')}
+                  className="text-slate-400 hover:text-cyan-400 cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="text-xl md:text-2xl font-black text-cyan-400 tabular-nums">
+                {iecResults.withstandEnergy_kA2s.toFixed(2)} <span className="text-xs font-normal text-slate-400">kA²s</span>
+              </div>
+              <span className="text-[11px] text-slate-400 block mt-0.5 tabular-nums">
+                {cableSizeMm2}mm² (k=115)
+              </span>
+
+              {/* Formula Tooltip */}
+              {activeTooltip === 'k2s2' && (
+                <div className="absolute right-0 bottom-full mb-2 w-64 p-2.5 bg-slate-900 border border-cyan-500 rounded-lg text-left text-[11px] text-slate-200 z-50 shadow-2xl font-sans">
+                  <strong className="text-cyan-400 block mb-1">IEC 60364-4-43 Cable Thermal Capacity:</strong>
+                  <p className="font-mono text-[11px] text-amber-300 tabular-nums">k²S² = (115 · {cableSizeMm2})²</p>
+                  <p className="font-mono text-[11px] text-amber-300 tabular-nums">S_min = √(I²t) / k</p>
+                  <p className="mt-1 text-[11px] text-slate-300">Maximum permissible thermal stress before conductor insulation breakdown.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Dynamic Safety Outcome Card */}
-        <div className={cn("p-4 rounded-xl border shadow-md flex flex-col gap-2 transition-all", verdict.color)}>
-          <span className="text-xs font-black tracking-widest uppercase opacity-75">
-            Coordination Status Report
+        {/* TEACHING INSTRUMENT 2: PROTECTION COORDINATION CHART CARD */}
+        <CoordinationChartCard
+          time={time}
+          faultCurrentKA={iecResults.Ik_kA}
+          faultCurrentA={iecResults.Ik}
+          protectionSpeed={protectionSpeed}
+          tRelayMs={iecResults.tRelayMs}
+          tBreakerMs={iecResults.tBreakerMs}
+          tArcMs={iecResults.tArcMs}
+          tTotalMs={tripTime}
+          cableSizeMm2={cableSizeMm2}
+          withstandEnergyA2s={iecResults.withstandEnergy}
+          withstandEnergyKA2s={iecResults.withstandEnergy_kA2s}
+          letThroughEnergyKA2s={letThroughEnergy}
+          tripped={tripped}
+        />
+
+        {/* ENGINEER DETAILS COLLAPSIBLE SECTION */}
+        <div className="rounded-xl bg-slate-800 border border-slate-700 shadow-xl overflow-hidden shrink-0">
+          <button
+            onClick={() => setShowEngineerDetails(prev => !prev)}
+            className="w-full p-3.5 bg-slate-850 hover:bg-slate-750 transition-colors flex items-center justify-between cursor-pointer border-b border-slate-700/60 focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none min-h-[44px]"
+          >
+            <div className="flex items-center gap-2">
+              <Settings className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                Engineer Details (IEC 60909 Parameters)
+              </span>
+              <span className="text-[11px] bg-slate-900 text-slate-300 px-2 py-0.5 rounded border border-slate-750 font-mono tabular-nums">
+                {transformerKVA} kVA | {cableSizeMm2} mm² | {cableLengthM}m
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-xs text-cyan-400 font-semibold">
+              <span>{showEngineerDetails ? "Hide" : "Expand"}</span>
+              {showEngineerDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </div>
+          </button>
+
+          {showEngineerDetails && (
+            <div className="p-4 space-y-4 bg-slate-900/60 border-t border-slate-750 text-xs">
+              
+              {/* Transformer & System Source Controls */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Transformer kVA */}
+                <div className="space-y-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                  <div className="flex justify-between font-bold text-slate-300">
+                    <span>Transformer Rating</span>
+                    <span className="text-cyan-400 font-mono tabular-nums">{transformerKVA} kVA</span>
+                  </div>
+                  <select
+                    value={transformerKVA}
+                    onChange={(e) => { setTime(0); setTransformerKVA(Number(e.target.value)); }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono focus:outline-none focus:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-400 min-h-[44px]"
+                  >
+                    {[100, 250, 400, 630, 800, 1000, 1250, 1600, 2000, 2500].map(kva => (
+                      <option key={kva} value={kva}>{kva} kVA</option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] text-slate-400 block">Default: 630 kVA (c=1.05, 415V)</span>
+                </div>
+
+                {/* Transformer uk% */}
+                <div className="space-y-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                  <div className="flex justify-between font-bold text-slate-300">
+                    <span>Impedance Voltage uk%</span>
+                    <span className="text-cyan-400 font-mono tabular-nums">{ukPercent.toFixed(1)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="2.0" max="10.0" step="0.5"
+                    value={ukPercent}
+                    onChange={(e) => { setTime(0); setUkPercent(Number(e.target.value)); }}
+                    className="w-full accent-cyan-500 cursor-pointer h-2"
+                  />
+                  <span className="text-[11px] text-slate-400 block tabular-nums">ZT = {iecResults.Z_T.toFixed(4)} Ω</span>
+                </div>
+
+                {/* Cable Length (m) */}
+                <div className="space-y-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                  <div className="flex justify-between font-bold text-slate-300">
+                    <span>Cable Length</span>
+                    <span className="text-cyan-400 font-mono tabular-nums">{cableLengthM} m</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0" max="50" step="5"
+                    value={cableLengthM}
+                    onChange={(e) => { setTime(0); setCableLengthM(Number(e.target.value)); }}
+                    className="w-full accent-cyan-500 cursor-pointer h-2"
+                  />
+                  <span className="text-[11px] text-slate-400 block tabular-nums">RC = {iecResults.R_C.toFixed(4)} Ω</span>
+                </div>
+              </div>
+
+              {/* Cable Size & Z0/Z1 Ratio */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Cable Size Selector */}
+                <div className="space-y-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                  <div className="flex justify-between font-bold text-slate-300 mb-1">
+                    <span>Cable Cross Section (S)</span>
+                    <span className="text-orange-400 font-mono tabular-nums">{cableSizeMm2} mm² Cu</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {[6, 10, 16, 25, 35, 50, 70].map(sz => (
+                      <button
+                        key={sz}
+                        onClick={() => { setTime(0); setCableSizeMm2(sz); }}
+                        className={cn(
+                          "py-2 text-[11px] font-bold rounded border font-mono transition-all min-h-[44px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none",
+                          cableSizeMm2 === sz 
+                            ? 'bg-orange-500 text-slate-950 border-orange-400' 
+                            : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                        )}
+                      >
+                        {sz}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Z0 / Z1 Ratio Slider */}
+                <div className="space-y-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                  <div className="flex justify-between font-bold text-slate-300">
+                    <span>Z0/Z1 Ratio (Zero Sequence)</span>
+                    <span className="text-cyan-400 font-mono tabular-nums">{z0z1Ratio.toFixed(1)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1.0" max="4.0" step="0.1"
+                    value={z0z1Ratio}
+                    onChange={(e) => { setTime(0); setZ0z1Ratio(Number(e.target.value)); }}
+                    className="w-full accent-cyan-500 cursor-pointer h-2"
+                  />
+                  <span className="text-[11px] text-slate-400 block tabular-nums">Default 1.7 → Ik1 ≈ {(iecResults.Ik1 / iecResults.Ik3).toFixed(2)}×Ik3</span>
+                </div>
+
+                {/* Current Limiting Breaker Mode Toggle */}
+                <div className="space-y-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800 flex flex-col justify-between">
+                  <div className="flex items-center justify-between font-bold text-slate-300">
+                    <span>Current-Limiting Breaker</span>
+                    <button
+                      onClick={() => { setTime(0); setIsLimitingBreaker(prev => !prev); }}
+                      className={cn(
+                        "px-3 py-2 rounded text-[11px] font-bold border cursor-pointer transition-all min-h-[44px] focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none",
+                        isLimitingBreaker 
+                          ? "bg-cyan-600 text-slate-950 border-cyan-400" 
+                          : "bg-slate-900 text-slate-300 border-slate-750"
+                      )}
+                    >
+                      {isLimitingBreaker ? "ENABLED (Class 3)" : "DISABLED"}
+                    </button>
+                  </div>
+                  <span className="text-[11px] text-slate-400 block leading-tight">
+                    Caps let-through energy to ≤0.6 kA²s at 15 kA prospective fault.
+                  </span>
+                </div>
+              </div>
+
+              {/* Calculated Impedance Summary */}
+              <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-300 grid grid-cols-2 md:grid-cols-4 gap-2 font-mono text-[11px]">
+                <div>
+                  <span className="text-slate-400 block text-[11px] uppercase">Positive Impedance Z1</span>
+                  <span className="font-bold text-cyan-400 tabular-nums">{(iecResults.Z1 * 1000).toFixed(2)} mΩ</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px] uppercase">System X/R Ratio</span>
+                  <span className="font-bold text-cyan-400 tabular-nums">{iecResults.systemXR.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px] uppercase">Peak Factor κ</span>
+                  <span className="font-bold text-orange-400 tabular-nums">{iecResults.kappa.toFixed(3)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px] uppercase">Peak Making ip</span>
+                  <span className="font-bold text-red-400 tabular-nums">{iecResults.ip_kA.toFixed(2)} kA</span>
+                </div>
+              </div>
+
+            </div>
+          )}
+        </div>
+
+        {/* Dynamic Safety Outcome Card (COORDINATION STATUS REPORT with aria-live="polite") */}
+        <div 
+          aria-live="polite"
+          className={cn("p-4 rounded-xl border shadow-md flex flex-col gap-2 transition-all", verdict.color)}
+        >
+          <span className="text-xs font-black tracking-widest uppercase opacity-80 flex items-center justify-between">
+            <span>IEC 60909 Coordination & Thermal Report</span>
+            {tripped && (
+              <span className="font-mono tabular-nums">
+                {iecResults.isThermalPass ? 'PASS ✓' : 'FAIL ✗'}
+              </span>
+            )}
           </span>
           <div className="text-sm font-bold uppercase tracking-wider flex items-center gap-2 mt-0.5">
             <AlertTriangle className="w-5 h-5 shrink-0" />
@@ -357,27 +695,27 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
         {/* Protection relay classroom math & safety lessons */}
         <div className="p-4 rounded-xl bg-slate-800 border border-slate-700 shadow-xl flex flex-col gap-3">
           <h3 className="text-xs font-bold tracking-wider uppercase text-cyan-400 border-b border-slate-700 pb-2">
-            📖 Wires Meltdown Safety Lessons
+            📖 IEC 60909 Short-Circuit & Cable Thermal Safety Lessons
           </h3>
           <div className="space-y-3 text-sm leading-relaxed text-slate-300">
             <p>
-              <strong className="text-amber-400 block font-bold mb-1">1. What is the danger in a Short Circuit?</strong>
-              When phase lines contact directly, current jumps from a few Amps to <strong className="text-red-400 font-bold">thousands of Amps (kA)</strong>. This current generates heat at a rate proportional to the <strong className="text-orange-400">Square of Current (I²)</strong>. Wires melt instantly if the energy is not cut off.
+              <strong className="text-amber-400 block font-bold mb-1">1. 3-Phase vs Line-to-Ground Fault Currents (IEC 60909)</strong>
+              3-Phase bolted faults yield maximum symmetrical current <code className="text-cyan-300 font-mono tabular-nums">Ik3 = c·Un / (√3·Z1)</code> (~15.3 kA). Single Line-to-Ground faults involve zero-sequence impedance <code className="text-cyan-300 font-mono tabular-nums">Ik1 = √3·c·Un / (2·Z1 + Z0)</code> (~12.4 kA for Z0/Z1 = 1.7).
             </p>
             <p>
-              <strong className="text-amber-400 block font-bold mb-1">2. How do Relay Speeds control damage?</strong>
-              Safety is measured in <strong className="text-cyan-400">Let-Through Energy (I²t)</strong>. If the relay trips the breaker in 14ms (Fast), the thermal stress is tiny and wires stay cool. If it delays to 80ms (Delayed), the let-through energy increases by <strong className="text-orange-400">over 500%</strong>, causing insulation to catch fire.
+              <strong className="text-amber-400 block font-bold mb-1">2. Peak Making Current (ip) Dynamic Impact</strong>
+              The maximum peak current occurs during the first half-cycle due to asymmetrical DC offset: <code className="text-orange-300 font-mono tabular-nums">ip = κ·√2·Ik</code>. High X/R ratios increase peak factor κ up to 2.0, subjecting switchgear busbars to extreme electrodynamic mechanical forces.
             </p>
             <p>
-              <strong className="text-amber-400 block font-bold mb-1">3. The danger of desensitized protection (No Trip)</strong>
-              If the pickup current dial is set too high (e.g. Ground Fault is 1500A, but pickup is set to 2000A), the relay fails to detect the fault, the breaker <strong className="text-red-400 font-bold">remains closed (never opens)</strong>, leading to explosive copper terminal meltdown.
+              <strong className="text-amber-400 block font-bold mb-1">3. Cable Thermal Adiabatic Criterion (IEC 60364-4-43)</strong>
+              Conductor safety requires let-through energy <code className="text-amber-300 font-mono tabular-nums">I²t ≤ k²S²</code>. For a 16 mm² Cu PVC conductor (k=115), maximum withstand is <code className="text-cyan-300 font-mono tabular-nums">3.39 kA²s</code>. Fast clearing (14ms) delivers ~3.3 kA²s (PASS), while delayed clearing (76ms) delivers ~17.8 kA²s, vaporizing cable insulation!
             </p>
           </div>
         </div>
 
         {/* Safety Drill modules */}
         <div className="p-4 rounded-xl bg-slate-800 border border-slate-700 shadow-xl flex flex-col gap-2.5">
-          <h3 className="text-xs font-bold tracking-wider uppercase text-cyan-400 border-b border-slate-700 pb-2">
+          <h3 className="text-xs font-bold tracking-wider uppercase text-cyan-400 border-b border-slate-700 pb-2 flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-cyan-400" /> PPE & Arc Flash Drills
           </h3>
           <div>
@@ -394,319 +732,69 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
 
       </div>
 
-      {/* RIGHT COLUMN: Switchgear Schematic panel */}
-      {/* Sticky sidebar on desktop, top banner on mobile */}
-      <div className="w-full lg:w-[420px] xl:w-[460px] shrink-0 h-[240px] lg:h-full order-1 lg:order-2 bg-slate-900 border border-slate-750 lg:rounded-2xl overflow-hidden flex flex-col relative shadow-2xl">
-        <div className="absolute top-2.5 left-3 z-30 flex items-center gap-1.5 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded shadow">
-          <Zap className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="text-[9px] font-mono font-bold tracking-wider text-slate-200 uppercase">
-            {isIndustrial ? "415V Industrial Grid" : "230V Secondary Grid"}
-          </span>
-        </div>
-
-        {renderSubstationSchematic()}
+      {/* RIGHT COLUMN: Premium Animated Vector Single Line Diagram (55vh Mobile / Panel Desktop) */}
+      <div className="w-full lg:w-[480px] xl:w-[540px] shrink-0 h-[55vh] min-h-[480px] lg:h-full order-1 lg:order-2 flex flex-col relative shadow-2xl">
+        <IndustrialGridDiagram
+          time={time}
+          isFaultActive={time >= faultIgnitionTime && !tripped}
+          tripped={tripped}
+          faultType={faultType}
+          protectionSpeed={protectionSpeed}
+          faultCurrent={faultCurrent}
+          faultCurrentKA={iecResults.Ik_kA}
+          peakCurrentKA={iecResults.ip_kA}
+          letThroughEnergyKA2s={letThroughEnergy}
+          withstandCapacityKA2s={iecResults.withstandEnergy_kA2s}
+          cableSizeMm2={cableSizeMm2}
+          transformerKVA={transformerKVA}
+          ukPercent={ukPercent}
+          tripTime={tripTime}
+          isThermalPass={iecResults.isThermalPass}
+          timeScale={timeScale}
+          setTimeScale={setTimeScale}
+        />
       </div>
 
-      {/* Full screen flash hazard overlay */}
+      {/* STICKY BOTTOM ACTION BAR FOR MOBILE (360x740 One-Handed Control with 44px Touch Targets) */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 border-t border-slate-800 p-2.5 px-3 flex gap-2 backdrop-blur shadow-2xl">
+        {isAutoPlaying ? (
+          <button 
+            onClick={() => setIsAutoPlaying(false)}
+            className="flex-1 py-3 font-bold text-xs uppercase tracking-widest bg-red-600 hover:bg-red-700 text-white border border-red-500 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md focus-visible:ring-2 focus-visible:ring-red-400 min-h-[44px]"
+          >
+            <Square className="w-4 h-4 fill-white" /> STOP FAULT
+          </button>
+        ) : (
+          <button 
+            onClick={() => {
+              if (time >= 100) setTime(0);
+              setIsAutoPlaying(true);
+            }}
+            className="flex-1 py-3 font-bold text-xs uppercase tracking-widest bg-green-600 hover:bg-green-700 text-slate-950 border border-green-500 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md font-black focus-visible:ring-2 focus-visible:ring-green-400 min-h-[44px]"
+          >
+            <Play className="w-4 h-4 fill-slate-950 animate-pulse" /> IGNITE FAULT
+          </button>
+        )}
+
+        <button 
+          onClick={() => {
+            setIsAutoPlaying(false);
+            setTime(0);
+          }}
+          className="px-4 py-3 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm focus-visible:ring-2 focus-visible:ring-cyan-400 min-h-[44px]"
+        >
+          <RotateCcw className="w-4 h-4 text-cyan-400" /> RESET SCENARIO
+        </button>
+      </div>
+
+      {/* Full screen flash hazard overlay with Dynamic kA Fault readout */}
       <HazardOverlay 
         isActive={time >= faultIgnitionTime && !tripped}
         hazardType="short_circuit"
-        dangerLevel={letThroughEnergy > 15.0 ? "critical" : "warning"}
-        magnitude={`${(faultCurrent/1000).toFixed(1)} kA TRANSIENT FAULT`}
+        dangerLevel={letThroughEnergy > (iecResults.withstandEnergy_kA2s || 3.4) ? "critical" : "warning"}
+        magnitude={`${(faultCurrent/1000).toFixed(1)} kA TRANSIENT FAULT (${faultType === 'three_phase' ? '3-Phase' : 'Line-Ground'})`}
       />
 
     </div>
   );
-
-  // High-Fidelity switchgear schematic visualizer
-  function renderSubstationSchematic() {
-    const isFaultActive = time >= faultIgnitionTime && !tripped;
-    
-    // Relay display screen variables
-    let lcdBackground = "fill-[#14532d]"; // normal green
-    let lcdText1 = `I_f: ${faultCurrent.toFixed(0)}A`;
-    let lcdText2 = "STATUS: SAFE MONITORING";
-    let isPUPulsing = false;
-    let isTripActive = false;
-
-    if (isFaultActive) {
-      lcdBackground = "fill-[#7f1d1d] animate-pulse"; // flashing red
-      lcdText1 = `I_f: ${(faultCurrent/1000).toFixed(1)}kA FAULT`;
-      lcdText2 = "STATUS: RELAY PICKUP";
-      isPUPulsing = true;
-    } else if (tripped) {
-      lcdBackground = "fill-[#7c2d12]"; // orange/amber
-      lcdText1 = `I_t: ${tripTime}ms`;
-      lcdText2 = "STATUS: CB OPEN/SAFE";
-      isTripActive = true;
-    } else if (protectionSpeed === 'fail') {
-      lcdBackground = "fill-[#7f1d1d] animate-pulse";
-      lcdText1 = `I_f: ${(faultCurrent/1000).toFixed(1)}kA`;
-      lcdText2 = "STATUS: OVERCURRENT";
-      isPUPulsing = true;
-    }
-
-    // Breaker contact swivel angle
-    const cbAngle = tripped ? -40 : 0;
-
-    // Cable coloring based on heat Level
-    let cableStroke = '#475569'; // cool slate gray
-    let cableGlow = 'none';
-    let cableWidth = 2.5;
-
-    if (time > 0) {
-      if (time >= faultIgnitionTime) {
-        if (tripped) {
-          // Cooled down state
-          cableStroke = `rgb(${Math.round(71 + heatLevel * 100)}, ${Math.round(85 + heatLevel * 50)}, ${Math.round(105 + heatLevel * 20)})`;
-          cableWidth = 2.5 + heatLevel * 2;
-        } else {
-          // Heat active glow transitions yellow -> orange -> white
-          const r = Math.min(255, Math.round(180 + heatLevel * 100));
-          const g = Math.max(0, Math.min(255, Math.round(200 - heatLevel * 220)));
-          const b = Math.max(0, Math.min(255, Math.round(50 - heatLevel * 50)));
-          cableStroke = `rgb(${r}, ${g}, ${b})`;
-          cableWidth = 2.5 + heatLevel * 4;
-          if (heatLevel > 0.3) {
-            cableGlow = `drop-shadow(0 0 ${4 + heatLevel * 10}px ${cableStroke})`;
-          }
-        }
-      }
-    }
-
-    return (
-      <div className="flex-1 w-full relative flex items-center justify-center p-2">
-        <svg viewBox="0 0 200 250" className="w-full h-full max-h-[350px]">
-          <defs>
-            <radialGradient id="auraglow_sc" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#ef4444" stopOpacity="0.4" />
-              <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
-            </radialGradient>
-            <radialGradient id="plasma" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
-              <stop offset="25%" stopColor="#fbbf24" stopOpacity="0.9" />
-              <stop offset="60%" stopColor="#ea580c" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
-            </radialGradient>
-          </defs>
-
-          {/* BACKGROUND AURA DURING CRITICAL FAULT */}
-          {isFaultActive && (
-            <circle cx="120" cy="150" r="60" fill="url(#auraglow_sc)" />
-          )}
-
-          {/* GRID BUS CONNECTIONS AND WIRES */}
-          <line x1="100" y1="42" x2="100" y2="70" stroke="#64748b" strokeWidth="2.5" />
-          <line x1="100" y1="92" x2="100" y2="150" stroke={cableStroke} strokeWidth={cableWidth} style={{ filter: cableGlow }} />
-          <line x1="100" y1="150" x2="100" y2="195" stroke={tripped ? "#334155" : "#475569"} strokeWidth="2.5" />
-          <line x1="100" y1="150" x2="140" y2="150" stroke={cableStroke} strokeWidth={cableWidth} style={{ filter: cableGlow }} />
-
-          {/* TRANSFORMER SUBSTATION BLOCK */}
-          <g transform="translate(65, 8)">
-            <rect x="0" y="0" width="70" height="34" rx="4" fill="#0f172a" stroke="#475569" strokeWidth="1.5" />
-            {/* Cooling fins details */}
-            {[-2, 12, 26, 40, 54, 68].map((fx, idx) => (
-              <line key={idx} x1={fx} y1="-3" x2={fx} y2="0" stroke="#334155" strokeWidth="1.5" />
-            ))}
-            {/* Windings symbols */}
-            <circle cx="27" cy="17" r="9" fill="none" stroke="#94a3b8" strokeWidth="1.5" />
-            <circle cx="43" cy="17" r="9" fill="none" stroke="#94a3b8" strokeWidth="1.5" />
-            
-            {/* Text details */}
-            <text x="35" y="7" textAnchor="middle" fill="#94a3b8" fontSize="4.5" fontFamily="monospace">TRANSFORMER</text>
-            <text x="35" y="31" textAnchor="middle" fill="#cbd5e1" fontSize="5" fontWeight="bold" fontFamily="monospace">
-              {systemVoltage}V Source
-            </text>
-          </g>
-
-          {/* PROTECTION RELAY MODULE 51 */}
-          <g transform="translate(12, 60)">
-            <rect x="0" y="0" width="60" height="42" rx="3" fill="#1e293b" stroke="#38bdf8" strokeWidth="1.5" className="shadow" />
-            <text x="30" y="6" textAnchor="middle" fill="#38bdf8" fontSize="5" fontWeight="black" fontFamily="monospace">RELAY 51 (O/C)</text>
-            
-            {/* Digital Display Screen */}
-            <rect x="4" y="9" width="52" height="17" rx="1.5" fill={lcdBackground} className="transition-all duration-300" />
-            <text x="6" y="16" fill="#f8fafc" fontSize="4.5" fontFamily="monospace" fontWeight="bold">{lcdText1}</text>
-            <text x="6" y="23" fill="#cbd5e1" fontSize="3.8" fontFamily="monospace">{lcdText2}</text>
-            
-            {/* Status indicators LEDs */}
-            <circle cx="10" cy="34" r="2.2" fill="#22c55e" />
-            <text x="14" y="36" fill="#94a3b8" fontSize="3.5" fontFamily="monospace">PWR</text>
-
-            <circle 
-              cx="28" cy="34" r="2.2" 
-              fill={isPUPulsing ? "#f97316" : "#334155"} 
-              className={cn(isPUPulsing && "animate-pulse")}
-            />
-            <text x="32" y="36" fill="#94a3b8" fontSize="3.5" fontFamily="monospace">P/U</text>
-
-            <circle 
-              cx="46" cy="34" r="2.2" 
-              fill={isTripActive ? "#ef4444" : "#334155"} 
-            />
-            <text x="50" y="36" fill="#94a3b8" fontSize="3.5" fontFamily="monospace">TRIP</text>
-          </g>
-
-          {/* DASH CONTROL WIRE RELAY TO CB */}
-          <path 
-            d="M72, 80 L88, 80" 
-            stroke={isTripActive ? "#ef4444" : isPUPulsing ? "#f97316" : "#38bdf8"} 
-            strokeWidth="1.5" 
-            strokeDasharray="2 2"
-            className={cn(isPUPulsing && "animate-pulse")}
-          />
-
-          {/* VACUUM CIRCUIT BREAKER (VCB) */}
-          <g transform="translate(85, 68)">
-            <rect x="0" y="0" width="30" height="24" rx="3.5" fill="#0f172a" stroke={tripped ? "#22c55e" : "#ef4444"} strokeWidth="1.8" />
-            <text x="15" y="7" textAnchor="middle" fill="#64748b" fontSize="4.5" fontFamily="monospace">VCB-CB1</text>
-            
-            {/* Contacts points */}
-            <circle cx="15" cy="7" r="1.5" fill="#94a3b8" />
-            <circle cx="15" cy="22" r="1.5" fill="#94a3b8" />
-
-            {/* Rotating Swivel Breaker Arm */}
-            <g transform={`rotate(${cbAngle}, 15, 7)`} className="transition-transform duration-300">
-              <line x1="15" y1="7" x2="15" y2="22" stroke={tripped ? "#22c55e" : "#ef4444"} strokeWidth="3" />
-            </g>
-          </g>
-
-          {/* LOAD SYSTEM (INDUSTRIAL MOTOR) */}
-          <g transform="translate(75, 195)">
-            <rect x="0" y="0" width="50" height="38" rx="4" fill="#1e293b" stroke={tripped ? "#475569" : "#22c55e"} strokeWidth="1.5" />
-            <text x="25" y="8" textAnchor="middle" fill="#94a3b8" fontSize="4.5" fontFamily="monospace">MOTOR LOAD</text>
-            
-            {/* Rotating Fan visual indicator */}
-            <circle cx="25" cy="24" r="8" fill="#0f172a" stroke="#475569" strokeWidth="1" />
-            <motion.g 
-              cx="25" cy="24" 
-              style={{ originX: '25px', originY: '24px' }}
-              animate={{ rotate: (time === 0 || (!tripped)) ? 360 : 0 }}
-              transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
-            >
-              {/* Fan blades */}
-              <line x1="25" y1="16" x2="25" y2="32" stroke="#cbd5e1" strokeWidth="1.5" />
-              <line x1="17" y1="24" x2="33" y2="24" stroke="#cbd5e1" strokeWidth="1.5" />
-            </motion.g>
-          </g>
-
-          {/* ANIMATED NOMINAL ELECTRON POWER FLOW LINES */}
-          {(time === 0 || (!tripped)) && (
-            <>
-              {/* Dash flows down conductor */}
-              <motion.line 
-                x1="100" y1="42" x2="100" y2="195" 
-                stroke="#22c55e" strokeWidth="1.2" 
-                strokeDasharray="4 8"
-                animate={{ strokeDashoffset: [-24, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-              />
-            </>
-          )}
-
-          {/* SHORT CIRCUIT FAULT EXPLOSION INCEPTION POINT */}
-          <>
-            {/* Ground connection block */}
-            <line x1="140" y1="150" x2="140" y2="170" stroke="#cbd5e1" strokeWidth="2.5" />
-            {/* Ground Symbol */}
-            <line x1="132" y1="170" x2="148" y2="170" stroke="#cbd5e1" strokeWidth="2" />
-            <line x1="135" y1="174" x2="145" y2="174" stroke="#cbd5e1" strokeWidth="1.5" />
-            <line x1="138" y1="178" x2="142" y2="178" stroke="#cbd5e1" strokeWidth="1" />
-
-            {/* Active Short circuit explosions */}
-            {isFaultActive && (
-              <g>
-                {/* Glowing plasma halo */}
-                <motion.circle 
-                  cx="120" cy="150" 
-                  initial={{ r: 10 }}
-                  animate={{ r: [15, 24, 17] }} 
-                  transition={{ duration: 0.1, repeat: Infinity }}
-                  fill="url(#plasma)" 
-                />
-
-                {/* Jagged electric arc flicker */}
-                <AnimatePresence>
-                  {time % 4 === 0 ? (
-                    <path d="M 100 150 L 110 142 L 115 156 L 125 144 L 140 150" fill="none" stroke="#ffffff" strokeWidth="2.5" style={{ filter: 'drop-shadow(0 0 5px #fbbf24)' }} />
-                  ) : (
-                    <path d="M 100 150 L 108 158 L 120 143 L 130 155 L 140 150" fill="none" stroke="#38bdf8" strokeWidth="2.5" style={{ filter: 'drop-shadow(0 0 6px #38bdf8)' }} />
-                  )}
-                </AnimatePresence>
-
-                {/* Radiating Spark Particles */}
-                {[
-                  { dx: -20, dy: -25, del: 0 },
-                  { dx: 25, dy: -18, del: 0.05 },
-                  { dx: -5, dy: -35, del: 0.1 },
-                  { dx: 32, dy: -5, del: 0.03 },
-                  { dx: -22, dy: 10, del: 0.08 },
-                  { dx: 15, dy: -30, del: 0.12 },
-                ].map((spark, idx) => (
-                  <motion.circle
-                    key={idx}
-                    cx="120" cy="150"
-                    r="1.8"
-                    fill="#fbbf24"
-                    animate={{ 
-                      x: [0, spark.dx], 
-                      y: [0, spark.dy],
-                      opacity: [1, 0],
-                      scale: [1, 0.2]
-                    }}
-                    transition={{ 
-                      duration: 0.6, 
-                      repeat: Infinity, 
-                      delay: spark.del,
-                      ease: "easeOut"
-                    }}
-                  />
-                ))}
-
-                {/* Rising Smoke rings */}
-                {[
-                  { sx: -10, del: 0 },
-                  { sx: 8, del: 0.25 },
-                  { sx: -2, del: 0.5 },
-                ].map((smoke, idx) => (
-                  <motion.circle
-                    key={idx}
-                    cx="120" cy="150"
-                    r="4"
-                    fill="none"
-                    stroke="#475569"
-                    strokeWidth="1"
-                    animate={{
-                      y: [0, -45],
-                      x: [0, smoke.sx],
-                      opacity: [0.5, 0],
-                      scale: [0.8, 2.2]
-                    }}
-                    transition={{
-                      duration: 1.1,
-                      repeat: Infinity,
-                      delay: smoke.del,
-                      ease: "linear"
-                    }}
-                  />
-                ))}
-                
-                {/* Red short circuit warning flashing label */}
-                <text x="120" y="130" textAnchor="middle" fill="#ef4444" fontSize="6.5" fontWeight="black" fontFamily="sans-serif" className="animate-ping font-extrabold uppercase">
-                  SHORT CIRCUIT!
-                </text>
-              </g>
-            )}
-          </>
-
-          {/* SAFE TRIPPED FEEDBACK TEXT */}
-          {tripped && (
-            <text x="100" y="112" textAnchor="middle" fill="#22c55e" fontSize="5.5" fontWeight="black" fontFamily="monospace" className="animate-pulse">
-              BREAKER TRIPPED SAFELY
-            </text>
-          )}
-        </svg>
-      </div>
-    );
-  }
 }

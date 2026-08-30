@@ -38,7 +38,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
           <p className="text-xs text-slate-300 mb-4">A temporary rendering issue occurred. Click below to reload simulator state.</p>
           <button 
             onClick={() => this.setState({ hasError: false })}
-            className="px-6 py-2.5 bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs uppercase tracking-widest rounded-xl shadow-lg transition-all"
+            className="px-6 py-2.5 bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs uppercase tracking-widest rounded-xl shadow-lg transition-all focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:outline-none min-h-[44px]"
           >
             Reload Module
           </button>
@@ -125,10 +125,12 @@ export default function App() {
           }}
         />
       )}
+
+      {/* App-Level Shared Severity Banner Notification Slot (Below Tab Bar, Never Overlaps Content) */}
+      <div id="alert-container" className="w-full max-w-[1600px] mx-auto px-2 sm:px-4 pt-2 z-30 shrink-0 empty:hidden"></div>
       
       <main className="flex-1 overflow-y-auto lg:overflow-hidden bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#0f172a_100%)] relative flex flex-col">
         <div className="max-w-[1600px] w-full p-2 lg:p-4 mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
-          <div id="alert-container" className="fixed top-12 left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-3xl px-2 z-[110] empty:hidden pointer-events-none flex flex-col items-center"></div>
           <div id="mobile-action-container" className="fixed bottom-4 left-4 right-4 z-[100] lg:hidden empty:hidden pointer-events-none flex flex-col justify-end"></div>
           
           <div className="flex-1 overflow-y-auto lg:overflow-hidden">
@@ -140,7 +142,7 @@ export default function App() {
       </main>
 
       {/* Persistent Bottom App Status Bar Footer */}
-      <footer className="w-full bg-slate-950 border-t border-slate-800 p-1.5 px-4 flex flex-wrap items-center justify-center text-center mx-auto z-40 text-[9px] sm:text-[10px] shrink-0 gap-x-3 gap-y-1">
+      <footer className="w-full bg-slate-950 border-t border-slate-800 p-1.5 px-4 flex flex-wrap items-center justify-center text-center mx-auto z-40 text-[11px] shrink-0 gap-x-3 gap-y-1">
         <span className="font-black text-white uppercase tracking-widest">
           Concept, Visualisation & Engineering: Anil Sharma
         </span>
