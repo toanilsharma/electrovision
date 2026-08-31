@@ -1,48 +1,55 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { MobileActionButton } from '../MobileActionButton';
 import { HumanBodyTwin } from '../HumanBodyTwin';
 import { EmergencyResponse } from '../EmergencyResponse';
 import { DiagnosticScope } from '../DiagnosticScope';
-import { Battery, Droplets, Zap, TrendingUp, AlertTriangle, BookOpen, Clock, RotateCcw } from 'lucide-react';
+import { BatteryCharging, Droplets, Zap, Clock, UserSquare2, TrendingUp, AlertTriangle, BookOpen, RotateCcw, ShieldCheck, CheckCircle2, Lock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { ShockEffectLevel, PPEItem, UserConfig } from '@/src/types';
 import { PPEValidator } from '../PPEValidator';
 import { useAudioHaptics } from '../useAudioHaptics';
 import { motion } from 'motion/react';
-import { HazardOverlay } from '../HazardOverlay';
+import { InfoTooltip } from '../InfoTooltip';
 import { UpgradedDebriefModal } from '../UpgradedDebriefModal';
+import { DebriefTriggerCard } from '../DebriefTriggerCard';
+import { HazardOverlay } from '../HazardOverlay';
+import { SafetyLessonModal } from '../SafetyLessonModal';
 import { EmergencyBystanderDock } from '../EmergencyBystanderDock';
 import { SeverityHeaderBanner } from '../SeverityHeaderBanner';
 import { calculateIECImpedance } from '@/src/utils/iec60479Impedance';
 import { IECZoneChart } from '../IECZoneChart';
-import { useShockAudioEngine } from '@/src/hooks/useShockAudioEngine';
-import { useShockHaptics } from '@/src/hooks/useShockHaptics';
 import { Volume2, VolumeX, Smartphone } from 'lucide-react';
 
-// IEC 60479-1 Standard DC Touch Voltage Reference Levels (Residential capped ≤300V DC)
+// IEC 60479-2 DC Touch Voltage Reference Levels (Residential capped ≤415V DC)
 const ALL_DC_VOLTAGES = [
-  { value: 60, label: '60V DC (SELV Limit / Touch Voltage)' },
-  { value: 120, label: '120V DC (Low Voltage DC Nominal)' },
-  { value: 300, label: '300V DC (EV Battery / PV String)' },
-  { value: 600, label: '600V DC (Industrial Traction / Array)', industrialOnly: true },
-  { value: 1000, label: '1000V DC (Utility Solar / ESS)', industrialOnly: true },
-  { value: 1500, label: '1500V DC (IEC 60479-1 Upper Limit)', industrialOnly: true },
+  { value: 60, label: '60V (DC Safety Extra-Low Voltage SELV)' },
+  { value: 120, label: '120V (Safe DC Touch Limit - Dry)' },
+  { value: 230, label: '230V (DC Traction / Battery Bank Nominal)' },
+  { value: 415, label: '415V (Commercial Solar String / EV Fast Bus)' },
+  { value: 750, label: '750V (DC Metro Rail Third Rail)', industrialOnly: true },
+  { value: 1000, label: '1000V (Utility Solar PV Array Max)', industrialOnly: true },
 ];
 
 export function DCShockSimulator({ config }: { config?: UserConfig }) {
   const isResidential = config?.environment === 'residential';
-  const maxDcVoltageLimit = isResidential ? 300 : 1500;
+  const maxVoltageLimit = isResidential ? 415 : 1000;
 
-  const [voltage, setVoltage] = useState<number>(isResidential ? 120 : 300);
+  const [voltage, setVoltage] = useState<number>(isResidential ? 230 : 415);
   const [duration, setDuration] = useState<number>(0);
   const [skinCondition, setSkinCondition] = useState<'dry' | 'wet'>('dry');
-  const [path, setPath] = useState<'hand-to-hand' | 'hand-to-foot'>('hand-to-hand');
+  const [path, setPath] = useState<'hand-to-hand' | 'hand-to-foot'>('hand-to-foot');
   const [isSimulating, setIsSimulating] = useState(false);
   const [hasSimulated, setHasSimulated] = useState(false);
   const [isPPESafe, setIsPPESafe] = useState(false);
   const [activePPENames, setActivePPENames] = useState<string[]>([]);
-  const [isMuscleLocked, setIsMuscleLocked] = useState(false);
   const [showSafetyLesson, setShowSafetyLesson] = useState(false);
+
+  // ELCB / DC-Sensitive RCD Type B Protection State
+  const [rcdType, setRcdType] = useState<'off' | 'rcd_30ma_b' | 'rcd_10ma' | 'rcd_100ma'>('off');
+  const [rcdTripped, setRcdTripped] = useState<boolean>(false);
+  const [rcdTripTimeMs, setRcdTripTimeMs] = useState<number | null>(null);
+  const rcdTripTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [lastActiveShockData, setLastActiveShockData] = useState<{
     currentMA: number;
     durationMs: number;
@@ -51,32 +58,35 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
     voltage: number;
     isPPESafe: boolean;
     activePPENames: string[];
+    rcdTripped?: boolean;
+    rcdTripTimeMs?: number | null;
   }>({
     currentMA: 0,
     durationMs: 0,
     skinCondition: 'dry',
     path: 'hand-to-foot',
-    voltage: 300,
+    voltage: 415,
     isPPESafe: false,
     activePPENames: []
   });
 
+  const [showAAR, setShowAAR] = useState(false);
+  const [isMuscleLocked, setIsMuscleLocked] = useState(false);
   const [timeScale, setTimeScale] = useState<number>(1.0);
 
   const { startHum, stopHum, triggerMuscleLockVibration } = useAudioHaptics();
 
-  const standardDcVoltages = useMemo(() => {
+  const standardVoltages = useMemo(() => {
     return ALL_DC_VOLTAGES.filter(v => !isResidential || !v.industrialOnly);
   }, [isResidential]);
 
   useEffect(() => {
     if (isResidential) {
-      if (voltage > 300) setVoltage(300);
+      if (voltage > 415) setVoltage(415);
     }
   }, [isResidential, voltage]);
 
-  // Synchronized DC voltage dropdown state binding (IEC 60479-1 DC Analysis)
-  const isStandardVoltage = standardDcVoltages.some(item => item.value === voltage);
+  const isStandardVoltage = standardVoltages.some(item => item.value === voltage);
   const dropdownValue = isStandardVoltage ? voltage.toString() : 'custom';
 
   const handleDropdownChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -92,18 +102,35 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
   }, []);
 
   const handleResetSimulator = () => {
+    if (rcdTripTimerRef.current) {
+      clearTimeout(rcdTripTimerRef.current);
+      rcdTripTimerRef.current = null;
+    }
     setIsSimulating(false);
+    setHasSimulated(false);
     setIsMuscleLocked(false);
+    setRcdTripped(false);
+    setRcdTripTimeMs(null);
+    setShowSafetyLesson(false);
+    setShowAAR(false);
     stopHum();
-    setVoltage(isResidential ? 120 : 600);
+    setVoltage(isResidential ? 230 : 415);
     setDuration(0);
     setSkinCondition('dry');
     setPath('hand-to-foot');
     setIsPPESafe(false);
     setActivePPENames([]);
+    setLastActiveShockData({
+      currentMA: 0,
+      durationMs: 0,
+      skinCondition: 'dry',
+      path: 'hand-to-foot',
+      voltage: 415,
+      isPPESafe: false,
+      activePPENames: []
+    });
   };
 
-  // Scaled Duration Timer (respects TIME SCALE SLOW-MO)
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (isSimulating) {
@@ -129,28 +156,6 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
     };
   }, [isMuscleLocked, isSimulating, triggerMuscleLockVibration]);
 
-  const handleStart = () => {
-    setIsSimulating(true);
-    setHasSimulated(true);
-    setDuration(0);
-    startHum(30); 
-  };
-
-  const handleStop = () => {
-    if (isMuscleLocked && isSimulating) {
-      triggerMuscleLockVibration();
-      return; // Muscle tetanization locked
-    }
-    setIsSimulating(false);
-    setIsMuscleLocked(false);
-    stopHum();
-  };
-
-  const handleEmergencyCutoff = () => {
-    setIsSimulating(false);
-    setIsMuscleLocked(false);
-    stopHum();
-  };
   const getResistance = () => {
     let profileMultiplier = 1.0;
     if (config?.profile === 'child') profileMultiplier = 0.60;
@@ -158,23 +163,25 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
     else if (config?.profile === 'adult_female') profileMultiplier = 0.85;
     else if (config?.profile === 'electrician') profileMultiplier = 1.15;
 
-    const iecData = calculateIECImpedance(voltage, skinCondition, profileMultiplier);
+    // IEC 60479-2 Clause 3: DC body impedance is slightly higher than AC (skin capacitance acts as open circuit)
+    const iecData = calculateIECImpedance(voltage, skinCondition, profileMultiplier * 1.15);
     const heartFactor = path === 'hand-to-foot' ? 1.0 : 0.4;
 
     return {
       r: iecData.totalZ,
       internalZ: iecData.internalZ,
       skinZ: iecData.skinZ,
-      citation: iecData.tableCitation,
+      citation: 'IEC 60479-2:2019 Clause 3 (DC Body Impedance & Path)',
       heartFactor
     };
   };
 
   const getC1Threshold = (tMs: number) => {
+    // IEC 60479-2 Figure 10: DC Fibrillation threshold (c1 curve) ~3.75x higher than AC
     const table = [
-      [0, 800], [10, 800], [20, 600], [50, 400], [100, 280], [200, 200], [500, 160], [1000, 120], [10000, 120]
+      [0, 750], [10, 750], [20, 560], [50, 375], [100, 260], [200, 190], [500, 150], [1000, 110], [10000, 110]
     ];
-    let baseThreshold = 120;
+    let baseThreshold = 110;
     if (tMs <= table[0][0]) baseThreshold = table[0][1];
     else if (tMs >= table[table.length - 1][0]) baseThreshold = table[table.length - 1][1];
     else {
@@ -204,27 +211,31 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
     const currentMA = currentAmp * 1000;
     const effectiveHeartCurrent = currentMA * heartFactor;
     
-    if (!isSimulating) { 
+    if (!isSimulating && !rcdTripped) { 
        return { currentMA: 0, effectiveHeartCurrent: 0, r, internalZ, skinZ, citation, level: 0 as ShockEffectLevel, severity: 'SAFE (NO CONTACT)', intensity: 0, heartFactor };
     }
     if (isPPESafe) { 
        return { currentMA: 0, effectiveHeartCurrent: 0, r, internalZ, skinZ, citation, level: 0 as ShockEffectLevel, severity: 'SAFE: PPE INSULATION ACTIVE', intensity: 0, heartFactor };
     }
+    if (rcdTripped) {
+       return { currentMA: currentMA, effectiveHeartCurrent: effectiveHeartCurrent, r, internalZ, skinZ, citation, level: 1 as ShockEffectLevel, severity: `SAFE: ISOLATED IN ${rcdTripTimeMs}ms BY TYPE B RCD`, intensity: 0.05, heartFactor };
+    }
     
     let level: ShockEffectLevel = 1;
-    let severity = 'Level 1: Slight Tingling (DC Perception)';
+    let severity = 'Zone DC-1: Slight DC Perception Tingle';
     
     const c1 = getC1Threshold(duration);
     const c2 = c1 * 1.5;
     const c3 = c1 * 2.5;
     
-    if (effectiveHeartCurrent > 2) { level = 2; severity = 'Level 2: Muscle Twitching'; }
-    if (effectiveHeartCurrent > 30) { level = 3; severity = 'Level 3: Strong Muscle Reaction (20mA+ Lock)'; }
+    if (effectiveHeartCurrent > 2) { level = 2; severity = 'Zone DC-2: Slight Muscle Contractions'; }
+    if (effectiveHeartCurrent > 30) { level = 3; severity = 'Zone DC-3: Strong Muscle Reaction (30mA+ Lock)'; }
+    if (effectiveHeartCurrent > 100) { level = 4; severity = 'Zone DC-3: Severe Spasm & Respiratory Cramps'; }
     
     if (duration > 0) {
-       if (effectiveHeartCurrent > c1) { level = 7; severity = 'Level 4.1: High Danger to Heart (<5% V-Fib)'; }
-       if (effectiveHeartCurrent > c2) { level = 8; severity = 'Level 4.2: Extreme Heart Danger (<50% V-Fib)'; }
-       if (effectiveHeartCurrent > c3) { level = 9; severity = 'Level 4.3: Fatal Heart Arrest (>50% V-Fib)'; }
+       if (effectiveHeartCurrent > c1) { level = 7; severity = 'Zone DC-4.1: High Danger to Heart (<5% V-Fib)'; }
+       if (effectiveHeartCurrent > c2) { level = 8; severity = 'Zone DC-4.2: Extreme Heart Danger (<50% V-Fib)'; }
+       if (effectiveHeartCurrent > c3) { level = 9; severity = 'Zone DC-4.3: Fatal Heart Arrest (>50% V-Fib)'; }
     }
     
     const i2t = Math.pow(currentAmp, 2) * (duration / 1000);
@@ -237,100 +248,219 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
 
   const results = calculateResults();
 
-  // Instant trigger for Muscle Lock when current > 20mA
-  useEffect(() => {
-    if (isSimulating && !isPPESafe && results.currentMA > 20) {
-      if (!isMuscleLocked) {
-        setIsMuscleLocked(true);
-      }
-    } else if (isMuscleLocked && (!isSimulating || isPPESafe || results.currentMA <= 20)) {
-      setIsMuscleLocked(false);
+  const handleStart = () => {
+    if (rcdTripTimerRef.current) {
+      clearTimeout(rcdTripTimerRef.current);
+      rcdTripTimerRef.current = null;
     }
-  }, [isSimulating, isPPESafe, results.currentMA, isMuscleLocked]);
 
-  const prevSimulating = useRef(isSimulating);
-  useEffect(() => {
-    if (prevSimulating.current && !isSimulating && hasSimulated) {
-      setShowSafetyLesson(true);
+    setRcdTripped(false);
+    setRcdTripTimeMs(null);
+    setIsSimulating(true);
+    setHasSimulated(true);
+    setDuration(0);
+    startHum(0);
+
+    const { r, heartFactor } = getResistance();
+    const prospectiveCurrentMA = (voltage / r) * 1000;
+
+    // Check if DC RCD Type B protection is enabled and should trip
+    if (!isPPESafe && rcdType !== 'off') {
+      let thresholdMA = 30;
+      let tripMs = 30; // Standard IEC 62423 Type B DC trip time
+      if (rcdType === 'rcd_10ma') {
+        thresholdMA = 10;
+        tripMs = 18;
+      } else if (rcdType === 'rcd_100ma') {
+        thresholdMA = 100;
+        tripMs = 50;
+      }
+
+      if (prospectiveCurrentMA >= thresholdMA) {
+        const scaledTripTime = Math.max(15, Math.round(tripMs / timeScale));
+        rcdTripTimerRef.current = setTimeout(() => {
+          setIsSimulating(false);
+          setIsMuscleLocked(false);
+          setRcdTripped(true);
+          setRcdTripTimeMs(tripMs);
+          setDuration(tripMs);
+          stopHum();
+          setLastActiveShockData({
+            currentMA: prospectiveCurrentMA,
+            durationMs: tripMs,
+            skinCondition,
+            path,
+            voltage,
+            isPPESafe: false,
+            activePPENames,
+            rcdTripped: true,
+            rcdTripTimeMs: tripMs
+          });
+        }, scaledTripTime);
+        return;
+      }
     }
-    prevSimulating.current = isSimulating;
-  }, [isSimulating, hasSimulated]);
+
+    // DC Muscle Lock threshold is 30mA per IEC 60479-2
+    if (!isPPESafe && prospectiveCurrentMA >= 30) {
+      setIsMuscleLocked(true);
+    }
+  };
+
+  const handleStop = () => {
+    if (isMuscleLocked && isSimulating) {
+      triggerMuscleLockVibration();
+      return;
+    }
+    if (rcdTripTimerRef.current) {
+      clearTimeout(rcdTripTimerRef.current);
+      rcdTripTimerRef.current = null;
+    }
+    setIsSimulating(false);
+    setIsMuscleLocked(false);
+    stopHum();
+  };
+
+  const handleEmergencyCutoff = () => {
+    if (rcdTripTimerRef.current) {
+      clearTimeout(rcdTripTimerRef.current);
+      rcdTripTimerRef.current = null;
+    }
+    setIsSimulating(false);
+    setIsMuscleLocked(false);
+    stopHum();
+  };
 
   return (
     <motion.div 
       className="flex flex-col lg:flex-row h-full gap-2.5 overflow-y-auto lg:overflow-hidden pb-24 lg:pb-0"
-      animate={{ x: isSimulating ? [-1, 1, -2, 2, -1, 1, 0] : 0 }}
-      transition={{ duration: 0.15, repeat: isSimulating ? Infinity : 0, ease: "linear" }}
+      animate={{ x: isSimulating ? [-2, 2, -3, 3, -1, 1, 0] : 0 }}
+      transition={{ duration: 0.2, repeat: isSimulating ? Infinity : 0, ease: "linear" }}
     >
-      {/* Column 1: Left Controls Panel (Compact, Zero Scroll, Hold Button Always Visible) */}
+      {/* Column 1: Left Controls Panel (Zero Scroll) */}
       <div className="w-full lg:w-[310px] xl:w-[330px] shrink-0 p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full justify-between order-1 lg:order-1 overflow-hidden">
-        <div className="space-y-2 flex-1 flex flex-col overflow-y-auto lg:overflow-visible">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
-            <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-teal-400 border-l-3 border-teal-500 pl-2">
-              <Battery className="w-4 h-4 text-teal-400" /> DC Parameters
+        <div className="space-y-1.5 flex-1 flex flex-col justify-between overflow-hidden">
+          
+          {/* Header & Reset */}
+          <div className="flex items-center justify-between border-b border-slate-800 pb-1 shrink-0">
+            <h3 className="flex items-center gap-1.5 text-xs font-black tracking-[0.2em] uppercase text-teal-400 border-l-3 border-teal-500 pl-2">
+              <BatteryCharging className="w-4 h-4 text-teal-400" /> DC Parameters
             </h3>
-            {/* Reset Button */}
             <button
               type="button"
               onClick={handleResetSimulator}
-              className="px-2 py-1 text-[10.5px] font-mono font-black rounded-lg bg-rose-950/80 hover:bg-rose-900/90 border border-rose-500/60 hover:border-rose-400 text-rose-200 transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-md"
-              title="Reset DC simulator parameters to defaults"
+              className="py-1 px-2.5 bg-rose-950 hover:bg-rose-900 text-rose-200 border-2 border-rose-500/80 hover:border-rose-400 font-black text-xs uppercase tracking-wider rounded-lg shadow-[0_0_15px_rgba(244,63,94,0.4)] flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0"
+              title="Master Reset all inputs, outputs, and body twin diagram to baseline state"
             >
-              <RotateCcw className="w-3 h-3 text-rose-400 stroke-[3]" />
-              <span>Reset</span>
+              <RotateCcw className="w-3.5 h-3.5 text-rose-400 stroke-[3]" />
+              <span>MASTER RESET</span>
             </button>
           </div>
           
-          {/* Synchronized Voltage Section: Dropdown + Slider (IEC 60479-1 DC Reference Levels) */}
-          <div className="space-y-1.5 p-2.5 bg-slate-950 border border-teal-500/50 rounded-xl shadow-md">
-            <label className="flex justify-between items-center text-xs font-bold text-slate-200 uppercase tracking-wider">
-              <span className="flex items-center gap-1.5"><Battery className="w-3.5 h-3.5 text-teal-400" /> DC Voltage (V)</span>
-              <span className="text-teal-300 font-black font-mono px-2 py-0.5 rounded bg-teal-500/10 border border-teal-500/30">
+          {/* Voltage Selector */}
+          <div className="space-y-1 p-2 bg-slate-950 border border-teal-500/50 rounded-xl shadow-md shrink-0">
+            <label className="flex justify-between items-center text-[11px] font-bold text-slate-200 uppercase tracking-wider">
+              <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-teal-400" /> Voltage (V_dc)</span>
+              <span className="text-teal-300 font-black font-mono px-1.5 py-0.2 rounded bg-teal-500/10 border border-teal-500/30 text-xs">
                 {voltage} V DC
               </span>
             </label>
 
-            {/* Synchronized DC Voltage Dropdown Select */}
             <select
               value={dropdownValue}
               onChange={handleDropdownChange}
               disabled={isMuscleLocked}
-              className="w-full bg-slate-950 border border-teal-500/50 hover:border-teal-400 focus:border-teal-400 focus:ring-1 focus:ring-teal-500/50 text-slate-100 text-xs font-mono font-bold rounded-xl px-3 py-2 cursor-pointer disabled:opacity-50 transition-colors"
+              className="w-full bg-slate-950 border border-teal-500/60 hover:border-teal-400 focus:border-teal-400 text-slate-100 text-xs font-mono font-bold rounded-lg px-2.5 py-1.5 cursor-pointer disabled:opacity-50 transition-colors"
             >
-              {standardDcVoltages.map(v => (
-                <option key={v.value} value={v.value} className="bg-slate-950 text-slate-200">
+              {standardVoltages.map(v => (
+                <option key={v.value} value={v.value} className="bg-slate-950 text-slate-200 font-bold">
                   {v.label}
                 </option>
               ))}
               <option value="custom" className="bg-slate-950 text-teal-400 font-bold">
-                Custom DC Voltage ({voltage}V)
+                Custom Voltage ({voltage}V)
               </option>
             </select>
 
-            {/* Synchronized Slider Range Input (Capped to 300V in Residential mode) */}
             <input
               type="range"
               min="50"
-              max={maxDcVoltageLimit}
+              max={maxVoltageLimit}
               step="10"
               value={voltage}
               onChange={(e) => setVoltage(Number(e.target.value))}
               disabled={isMuscleLocked}
-              className="w-full accent-teal-500 cursor-pointer disabled:opacity-50 mt-1"
+              className="w-full accent-teal-500 cursor-pointer disabled:opacity-50 mt-0.5"
             />
           </div>
 
-          {/* Shock Duration & TIME SCALE (SLOW-MO) Control */}
-          <div className="flex flex-col gap-1.5 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+          {/* DC-Sensitive RCD Type B Control */}
+          <div className="space-y-1 p-2 bg-slate-950 border border-slate-800 rounded-xl shrink-0">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldCheck className={cn("w-3.5 h-3.5", rcdType !== 'off' ? "text-teal-400" : "text-slate-400")} />
+                <span>DC RCD (Type B) Protection</span>
+              </label>
+              <span className={cn("text-[9px] font-mono font-black px-1.5 py-0.2 rounded border", 
+                rcdType !== 'off' ? "bg-teal-950 text-teal-300 border-teal-500" : "bg-red-950 text-rose-300 border-rose-600"
+              )}>
+                {rcdType === 'off' ? 'DISABLED (NO RCD)' : rcdType === 'rcd_30ma_b' ? '30mA Type B' : rcdType === 'rcd_10ma' ? '10mA RCD' : '100mA RCD'}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              <button
+                type="button"
+                onClick={() => !isMuscleLocked && setRcdType('off')}
+                className={cn(
+                  "py-1 text-[9.5px] font-black uppercase rounded-lg border transition-all cursor-pointer truncate",
+                  rcdType === 'off'
+                    ? "bg-red-950/90 text-rose-300 border-rose-500 shadow-sm"
+                    : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+                )}
+                title="Unprotected DC circuit (Continuous Muscle Lock shock risk)"
+              >
+                OFF (No RCD)
+              </button>
+              <button
+                type="button"
+                onClick={() => !isMuscleLocked && setRcdType('rcd_30ma_b')}
+                className={cn(
+                  "py-1 text-[9.5px] font-black uppercase rounded-lg border transition-all cursor-pointer truncate",
+                  rcdType === 'rcd_30ma_b'
+                    ? "bg-teal-950 text-teal-300 border-teal-500 shadow-sm"
+                    : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+                )}
+                title="30mA Type B DC RCD (IEC 62423 - Trips in ≤30ms on DC Earth Leakage)"
+              >
+                30mA Type B
+              </button>
+              <button
+                type="button"
+                onClick={() => !isMuscleLocked && setRcdType('rcd_10ma')}
+                className={cn(
+                  "py-1 text-[9.5px] font-black uppercase rounded-lg border transition-all cursor-pointer truncate",
+                  rcdType === 'rcd_10ma'
+                    ? "bg-cyan-950 text-cyan-300 border-cyan-500 shadow-sm"
+                    : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+                )}
+                title="10mA High Sensitivity (Medical / Battery - Trips in ≤20ms)"
+              >
+                10mA Sens
+              </button>
+            </div>
+          </div>
+
+          {/* Shock Duration & TIME SCALE Control */}
+          <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-950 border border-slate-800 shrink-0">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5 text-teal-400"/> Shock Duration
               </span>
-              <span className="text-base font-black font-mono text-teal-400">{duration} ms</span>
+              <span className="text-sm font-black font-mono text-teal-400">{duration} ms</span>
             </div>
 
-            <div className="flex items-center justify-between border-t border-slate-800/80 pt-1.5 mt-0.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TIME SCALE (SLOW-MO)</span>
+            <div className="flex items-center justify-between border-t border-slate-800/80 pt-1 mt-0.5">
+              <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">TIME SCALE</span>
               <div className="flex items-center gap-1">
                 {[0.25, 0.5, 1.0].map((scale) => (
                   <button
@@ -338,7 +468,7 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
                     type="button"
                     onClick={() => !isMuscleLocked && setTimeScale(scale)}
                     className={cn(
-                      "px-2 py-0.5 text-[10px] font-mono font-bold rounded-lg border transition-all cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center",
+                      "px-2 py-0.2 text-[9.5px] font-mono font-bold rounded-md border transition-all cursor-pointer",
                       timeScale === scale
                         ? "bg-teal-500/25 border-teal-400 text-teal-300 shadow-sm"
                         : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
@@ -349,53 +479,63 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
                 ))}
               </div>
             </div>
+
+            {/* EMBEDDED DEBRIEF & LEARNINGS CARD */}
+            <DebriefTriggerCard
+              onOpen={() => setShowSafetyLesson(true)}
+              hasSimulated={hasSimulated}
+              isSimulating={isSimulating}
+              variant="embedded"
+            />
           </div>
 
-          {/* Skin Condition Input (Compact 50% Height) */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Skin Condition</label>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => !isMuscleLocked && setSkinCondition('dry')}
-                className={cn("px-2 py-1 text-[10.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer min-h-[30px]", skinCondition === 'dry' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
-              >
-                Dry Skin
-              </button>
-              <button
-                type="button"
-                onClick={() => !isMuscleLocked && setSkinCondition('wet')}
-                className={cn("px-2 py-1 text-[10.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer min-h-[30px]", skinCondition === 'wet' ? 'bg-blue-500/20 border-blue-500/60 text-blue-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
-              >
-                Wet / Perspired
-              </button>
+          {/* Skin Condition & Path Input */}
+          <div className="grid grid-cols-2 gap-1.5 shrink-0">
+            <div className="space-y-0.5">
+              <label className="text-[9px] font-black text-slate-300 uppercase tracking-wider">Skin Condition</label>
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() => !isMuscleLocked && setSkinCondition('dry')}
+                  className={cn("py-1 text-[9.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'dry' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                >
+                  Dry
+                </button>
+                <button
+                  type="button"
+                  onClick={() => !isMuscleLocked && setSkinCondition('wet')}
+                  className={cn("py-1 text-[9.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'wet' ? 'bg-blue-500/20 border-blue-500/60 text-blue-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                >
+                  Wet
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-0.5">
+              <label className="text-[9px] font-black text-slate-300 uppercase tracking-wider">Shock Path</label>
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() => !isMuscleLocked && setPath('hand-to-hand')}
+                  className={cn("py-1 text-[9.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-hand' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                >
+                  H-H
+                </button>
+                <button
+                  type="button"
+                  onClick={() => !isMuscleLocked && setPath('hand-to-foot')}
+                  className={cn("py-1 text-[9.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-foot' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                >
+                  H-F
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Current Path Input (Compact 50% Height) */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Current Path</label>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => !isMuscleLocked && setPath('hand-to-hand')}
-                className={cn("px-2 py-1 text-[10.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer min-h-[30px]", path === 'hand-to-hand' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
-              >
-                Hand - Hand
-              </button>
-              <button
-                type="button"
-                onClick={() => !isMuscleLocked && setPath('hand-to-foot')}
-                className={cn("px-2 py-1 text-[10.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer min-h-[30px]", path === 'hand-to-foot' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
-              >
-                Hand - Foot
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Desktop Large Prominent HOLD TO SHOCK Button with In-Place Morph */}
-        <div className="hidden lg:block pt-3 shrink-0">
+        <div className="hidden lg:block pt-2 shrink-0">
           <motion.button
             type="button"
             onPointerDown={(e) => !isMuscleLocked && handleStart()}
@@ -408,30 +548,30 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
             transition={{ duration: 0.125, repeat: isMuscleLocked ? Infinity : 0 }}
             style={{ touchAction: 'none' }}
             className={cn(
-              "w-full py-4 px-3 text-sm md:text-base font-black tracking-widest uppercase transition-all rounded-2xl flex flex-col items-center justify-center gap-1 select-none border-2 shadow-xl",
+              "w-full py-3.5 px-3 text-xs md:text-sm font-black tracking-widest uppercase transition-all rounded-2xl flex flex-col items-center justify-center gap-0.5 select-none border-2 shadow-xl",
               isMuscleLocked
-                ? "bg-red-950/90 border-red-500 text-red-200 shadow-[0_0_35px_rgba(239,68,68,0.7)] cursor-not-allowed opacity-95"
+                ? "bg-red-950/95 border-red-500 text-red-200 shadow-[0_0_35px_rgba(239,68,68,0.7)] cursor-not-allowed opacity-95 animate-pulse"
                 : isSimulating
                   ? "bg-red-600 border-red-400 text-white shadow-[0_0_35px_rgba(239,68,68,0.8)] animate-pulse cursor-pointer active:scale-95"
-                  : "bg-gradient-to-r from-teal-400 via-cyan-400 to-teal-400 border-teal-200 text-slate-950 shadow-[0_0_25px_rgba(20,184,166,0.4)] hover:shadow-[0_0_40px_rgba(20,184,166,0.6)] cursor-pointer active:scale-95"
+                  : "bg-gradient-to-r from-teal-500 via-emerald-500 to-teal-500 border-emerald-300 text-slate-950 shadow-[0_0_25px_rgba(20,184,166,0.4)] hover:shadow-[0_0_40px_rgba(20,184,166,0.6)] cursor-pointer active:scale-95"
             )}
             aria-live="polite"
           >
             <div className="flex items-center gap-2 text-center">
-              <Zap className={cn("w-5 h-5 fill-current shrink-0", (isSimulating || isMuscleLocked) && "animate-bounce")} />
+              <Zap className={cn("w-4 h-4 fill-current shrink-0", (isSimulating || isMuscleLocked) && "animate-bounce")} />
               <span>
                 {isMuscleLocked
-                  ? "MUSCLE LOCKED — CANNOT LET GO"
+                  ? "🔒 MUSCLES LOCKED (CANNOT LET GO)"
                   : isSimulating
-                    ? "⚡ DC SHOCK ACTIVE..."
+                    ? "⚡ SHOCK ACTIVE..."
                     : "⚡ HOLD TO SHOCK"}
               </span>
             </div>
-            <span className="text-[9px] font-bold font-mono tracking-normal opacity-90">
+            <span className="text-[8.5px] font-bold font-mono tracking-normal opacity-90">
               {isMuscleLocked
-                ? "TETANIZATION ACTIVE (>10mA) — CANNOT RELEASE"
+                ? "DC LET-GO EXCEEDED (>30mA) — USE BYSTANDER CUTOFF"
                 : isSimulating
-                  ? "RELEASE TO DISCONNECT"
+                  ? "RELEASE BUTTON TO DISCONNECT"
                   : "PRESS & HOLD BUTTON DOWN"}
             </span>
           </motion.button>
@@ -453,8 +593,8 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
             className={cn(
               "w-full py-4 px-3 text-sm font-black tracking-widest uppercase transition-all rounded-2xl border-2 flex flex-col items-center justify-center gap-1 select-none shadow-2xl",
               isMuscleLocked
-                ? "bg-red-950/95 border-red-500 text-red-200 shadow-[0_0_35px_rgba(239,68,68,0.8)] cursor-not-allowed opacity-95"
-                : "bg-gradient-to-r from-teal-400 to-cyan-500 border-cyan-200 text-slate-950 active:scale-95 cursor-pointer"
+                ? "bg-red-950/95 border-red-500 text-red-200 shadow-[0_0_35px_rgba(239,68,68,0.8)] cursor-not-allowed opacity-95 animate-pulse"
+                : "bg-gradient-to-r from-teal-500 to-emerald-500 border-teal-300 text-slate-950 active:scale-95 cursor-pointer"
             )}
             aria-live="polite"
           >
@@ -462,15 +602,15 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
               <Zap className="w-5 h-5 fill-current shrink-0" />
               <span>
                 {isMuscleLocked
-                  ? "MUSCLE LOCKED — CANNOT LET GO"
+                  ? "🔒 MUSCLES LOCKED (CANNOT LET GO)"
                   : isSimulating
-                    ? "⚡ DC SHOCK ACTIVE..."
+                    ? "⚡ SHOCK ACTIVE..."
                     : "⚡ HOLD TO SHOCK"}
               </span>
             </div>
             <span className="text-[9px] font-bold font-mono tracking-normal opacity-90">
               {isMuscleLocked
-                ? "TETANIZATION ACTIVE (>10mA) — CANNOT RELEASE"
+                ? "DC LET-GO EXCEEDED (>30mA) — USE BYSTANDER CUTOFF"
                 : isSimulating
                   ? "RELEASE TO DISCONNECT"
                   : "PRESS & HOLD BUTTON DOWN"}
@@ -479,21 +619,50 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
         </MobileActionButton>
       </div>
 
-      {/* Column 2: Analysis & PPE */}
-      <div className="flex-1 min-w-[280px] xl:min-w-[340px] p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full overflow-y-auto order-3 lg:order-2 space-y-2">
+      {/* Column 2: Center Panel (IEC 60479-2 DC Zone Chart & Impedance Breakdown) */}
+      <div className="flex-1 min-w-[280px] xl:min-w-[340px] p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full overflow-y-auto order-3 lg:order-2 space-y-3">
+        
+        {/* RCD Tripped Hero Banner (if tripped) */}
+        {rcdTripped && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3 bg-emerald-950/95 border-2 border-emerald-400 rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.6)] flex items-center justify-between gap-3 text-left"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0 animate-bounce" />
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-black uppercase text-emerald-300 tracking-wider">
+                  🛡️ LIFE SAVED BY {rcdType === 'rcd_30ma_b' ? '30mA TYPE B DC RCD' : rcdType === 'rcd_10ma' ? '10mA RCD' : '100mA RCD'}!
+                </span>
+                <span className="text-[11px] font-mono text-emerald-100 font-bold leading-tight mt-0.5">
+                  Device detected {results.currentMA.toFixed(1)}mA DC earth leakage and tripped open in {rcdTripTimeMs}ms! Fault cleared before fatal cardiac fibrillation!
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSafetyLesson(true)}
+              className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black uppercase tracking-wider rounded-lg shrink-0 cursor-pointer shadow-md active:scale-95"
+            >
+              Debrief
+            </button>
+          </motion.div>
+        )}
+
         <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
           <h3 className="flex items-center gap-2 text-xs font-black tracking-[0.2em] uppercase text-teal-400 border-l-3 border-teal-500 pl-2">
-            <TrendingUp className="w-4 h-4 text-teal-400" /> IEC 60479-1 DC Analysis
+            <TrendingUp className="w-4 h-4 text-teal-400" /> IEC 60479-2 DC Analysis
           </h3>
-          <span className="text-[9.5px] font-mono font-black text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/40">
+          <span className="text-[9.5px] font-mono font-black text-teal-300 bg-teal-950/80 px-2 py-0.5 rounded border border-teal-500/40">
             Eq. Heart: {results.effectiveHeartCurrent.toFixed(1)} mA
           </span>
         </div>
         
         {/* 4 Metric Cards Grid with Live Impedance Breakdown */}
         <div className="grid grid-cols-2 gap-1.5 shrink-0">
-          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center relative group">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex justify-between">
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center relative group">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex justify-between">
               <span>Impedance (Z_T)</span>
               <span className="text-teal-400 cursor-help font-bold" title={results.citation}>ℹ️</span>
             </span>
@@ -503,25 +672,28 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
             </span>
           </div>
 
-          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Heart Factor (F_H)</span>
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Heart Factor (F_H)</span>
             <span className="text-xs sm:text-sm font-black font-mono text-white">{results.heartFactor.toFixed(1)} F</span>
             <span className="text-[8px] font-mono text-slate-400 mt-0.5">
               {path === 'hand-to-foot' ? 'Hand-Foot Path (1.0)' : 'Hand-Hand Path (0.4)'}
             </span>
           </div>
 
-          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Prospective Current</span>
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Prospective Current</span>
             <span className={cn("text-xs sm:text-sm font-black font-mono flex items-center gap-1", isSimulating ? 'text-teal-400 drop-shadow' : 'text-white')}>
               <span>{results.currentMA.toFixed(1)} mA</span>
-              {results.currentMA >= 10 && <span className="text-[8px] px-1 bg-red-950 text-red-300 rounded border border-red-500">let-go</span>}
-              {results.currentMA >= 0.5 && results.currentMA < 10 && <span className="text-[8px] px-1 bg-yellow-950 text-yellow-300 rounded border border-yellow-500">tingle</span>}
+              {results.currentMA >= 300 && <span className="text-[8px] px-1 bg-red-950 text-red-300 rounded border border-red-500 font-bold uppercase animate-pulse">dc v-fib risk</span>}
+              {results.currentMA >= 100 && results.currentMA < 300 && <span className="text-[8px] px-1 bg-amber-950 text-amber-300 rounded border border-amber-500 font-bold uppercase">respiratory cramp</span>}
+              {results.currentMA >= 30 && results.currentMA < 100 && <span className="text-[8px] px-1 bg-orange-950 text-orange-300 rounded border border-orange-500 font-bold uppercase">dc muscle lock</span>}
+              {results.currentMA >= 2 && results.currentMA < 30 && <span className="text-[8px] px-1 bg-yellow-950 text-yellow-300 rounded border border-yellow-500 font-bold uppercase">dc tingle</span>}
+              {results.currentMA < 2 && <span className="text-[8px] px-1 bg-emerald-950 text-emerald-300 rounded border border-emerald-500 font-bold uppercase">dc safe</span>}
             </span>
           </div>
 
-          <div className="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-center">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Shock Severity</span>
+          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 flex flex-col justify-center">
+            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Shock Severity</span>
             <span className={cn("text-xs sm:text-sm font-black uppercase tracking-wider rounded-lg px-2 py-1 border shadow-sm truncate", 
               results.level === 0 ? 'bg-emerald-950 text-emerald-300 border-emerald-500/60' :
               results.level >= 7 ? 'bg-red-950 text-white border-2 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.7)] animate-pulse' : 
@@ -532,7 +704,7 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
           </div>
         </div>
 
-        {/* IEC 60479-1 Log-Log Time/Current Zone Chart */}
+        {/* IEC 60479-2 Log-Log Time/Current Zone Chart */}
         <IECZoneChart
           currentMA={results.currentMA}
           durationMs={duration}
@@ -541,30 +713,21 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
         />
 
         {/* PPE Validator & Emergency Response */}
-        <div className="flex-1 flex flex-col min-h-0 justify-between space-y-2">
+        <div className="flex-1 flex flex-col min-h-0 justify-between space-y-3">
           <PPEValidator
             hazardType="shock_dc"
             hazardMagnitude={voltage}
             environment={config?.environment}
             onSafetyChange={handleSafetyChange}
           />
+
           <EmergencyResponse isSimulating={isSimulating && !isPPESafe} hasSimulated={hasSimulated} type="shock" />
         </div>
       </div>
 
-      {/* Column 3: Human Section & Always-Visible Scopes Area */}
-      <div className="w-full lg:w-[480px] xl:w-[540px] shrink-0 flex flex-col gap-2 h-[45vh] lg:h-full overflow-hidden order-2 lg:order-3 relative z-10 bg-slate-950/95 backdrop-blur-md pb-3 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-xl">
-        {/* Dedicated Severity Header Banner (announced via aria-live=assertive inside right panel header) */}
-        <SeverityHeaderBanner
-          isSimulating={isSimulating}
-          isPPESafe={isPPESafe}
-          level={results.level}
-          severity={results.severity}
-          currentMA={results.currentMA}
-          voltage={voltage}
-        />
-
-        {/* Human Body Twin Container */}
+      {/* Column 3: Human Section & Scopes (Full-Body Maximized) */}
+      <div className="w-full lg:w-[480px] xl:w-[540px] shrink-0 flex flex-col gap-1.5 h-auto lg:h-full overflow-hidden order-2 lg:order-3 relative z-10 bg-slate-950/95 backdrop-blur-md pb-1 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-xl">
+        {/* Human Body Twin Container (100% Full Body Head-to-Toes Visible) */}
         <div className="flex-1 min-h-0 w-full relative border border-slate-800 rounded-xl bg-slate-950 shadow-inner overflow-hidden flex flex-col">
           <HumanBodyTwin 
             shockPath={path} 
@@ -575,15 +738,16 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
             profile={config?.profile}
             isPPESafe={isPPESafe}
             activePPENames={activePPENames}
+            onMasterReset={handleResetSimulator}
           />
         </div>
         
-        {/* Side-by-Side Diagnostic Scopes Grid */}
-        <div className="grid grid-cols-2 gap-2 h-24 lg:h-26 shrink-0 w-full">
-          <div className="h-full w-full border border-slate-800 rounded-xl p-2 bg-slate-950 flex flex-col shadow-inner overflow-hidden">
-             <span className="text-[10px] font-black tracking-wider text-teal-400 uppercase mb-0.5 flex justify-between items-center shrink-0">
+        {/* Side-by-Side Diagnostic Scopes Grid (Compact High-Density 64px) */}
+        <div className="grid grid-cols-2 gap-1.5 h-16 lg:h-18 shrink-0 w-full">
+          <div className="h-full w-full border border-slate-800 rounded-xl p-1.5 bg-slate-950 flex flex-col shadow-inner overflow-hidden">
+             <span className="text-[9.5px] font-black tracking-wider text-teal-400 uppercase mb-0.5 flex justify-between items-center shrink-0">
                <span>ECG Diagnostics</span>
-               {isSimulating && <span className="text-emerald-400 animate-pulse font-mono text-[9px]">LIVE ECG</span>}
+               {isSimulating && <span className="text-emerald-400 animate-pulse font-mono text-[8.5px]">LIVE ECG</span>}
              </span>
              <div className="flex-1 overflow-hidden rounded-lg">
                <DiagnosticScope
@@ -597,10 +761,10 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
              </div>
           </div>
 
-          <div className="h-full w-full border border-slate-800 rounded-xl p-2 bg-slate-950 flex flex-col shadow-inner overflow-hidden">
-             <span className="text-[10px] font-black tracking-wider text-teal-400 uppercase mb-0.5 flex justify-between items-center shrink-0">
-               <span>DC Waveform</span>
-               {isSimulating && <span className="text-teal-400 animate-pulse font-mono text-[9px]">{voltage}V DC</span>}
+          <div className="h-full w-full border border-slate-800 rounded-xl p-1.5 bg-slate-950 flex flex-col shadow-inner overflow-hidden">
+             <span className="text-[9.5px] font-black tracking-wider text-teal-400 uppercase mb-0.5 flex justify-between items-center shrink-0">
+               <span>DC Potential Scope</span>
+               {isSimulating && <span className="text-teal-400 animate-pulse font-mono text-[8.5px]">{voltage}V DC</span>}
              </span>
              <div className="flex-1 overflow-hidden rounded-lg">
                <DiagnosticScope type="dc" isActive={isSimulating} intensity={results.intensity} voltage={voltage} />
@@ -613,26 +777,34 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
         isActive={isSimulating && !isPPESafe}
         hazardType="dc_shock"
         dangerLevel={results.level >= 6 ? 'critical' : results.level >= 3 ? 'warning' : 'safe'}
-        magnitude={`${results.currentMA.toFixed(1)} mA Body Current`}
+        magnitude={`${results.currentMA.toFixed(1)} mA DC Current`}
       />
 
-      {/* Fixed Emergency Bystander Dock (z-50, position: fixed, Esc/Space shortcut, 2s Power Isolated chip) */}
+      {/* Fixed Emergency Bystander Dock */}
       <EmergencyBystanderDock
         isMuscleLocked={isMuscleLocked}
         isSimulating={isSimulating}
         onSwitchOffPower={handleEmergencyCutoff}
+        currentMA={results.currentMA}
+        voltage={voltage}
       />
-
-      {/* Upgraded Incident Debrief Modal (Zone Replay, Twin A/B PPE Comparison, Rescue Drill & 3-Question Micro-Quiz) */}
+    
+      {/* Upgraded Incident Debrief Modal */}
       <UpgradedDebriefModal
-        isOpen={showSafetyLesson}
-        onClose={() => setShowSafetyLesson(false)}
+        isOpen={showSafetyLesson || showAAR}
+        onClose={() => {
+          setShowSafetyLesson(false);
+          setShowAAR(false);
+        }}
         voltage={lastActiveShockData.voltage || voltage}
         currentMA={lastActiveShockData.currentMA || results.currentMA}
         durationMs={lastActiveShockData.durationMs || duration}
         shockPath={lastActiveShockData.path || path}
         skinCondition={lastActiveShockData.skinCondition || skinCondition}
         isPPESafe={lastActiveShockData.isPPESafe || isPPESafe}
+        rcdTripped={rcdTripped || lastActiveShockData.rcdTripped}
+        rcdType={rcdType}
+        rcdTripTimeMs={rcdTripTimeMs || lastActiveShockData.rcdTripTimeMs}
       />
     </motion.div>
   );

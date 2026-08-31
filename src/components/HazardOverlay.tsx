@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Skull, AlertTriangle, Flame, HeartPulse, Zap } from 'lucide-react';
 
@@ -14,31 +13,25 @@ interface HazardOverlayProps {
 }
 
 export const HazardOverlay: React.FC<HazardOverlayProps> = ({ isActive, hazardType, dangerLevel, magnitude, intensity = 1.0 }) => {
-  const [alertContainer, setAlertContainer] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    setAlertContainer(document.getElementById('alert-container'));
-  }, []);
-
   const getHazardDetails = () => {
     switch (hazardType) {
       case 'ac_shock':
-        if (dangerLevel === 'critical') return { icon: HeartPulse, title: "Deadly Shock", desc: "This amount of electricity can stop your heart and cause permanent damage." };
-        return { icon: Zap, title: "Painful Shock", desc: "Your muscles will lock up. You might not be able to let go of the wire, making it hard to breathe." };
+        if (dangerLevel === 'critical') return { icon: HeartPulse, title: "Deadly Shock", desc: "This strong electricity can stop your heart in seconds!" };
+        return { icon: Zap, title: "Painful Shock", desc: "Your hand muscles lock tight and you cannot let go of the wire!" };
       case 'dc_shock': 
-        if (dangerLevel === 'critical') return { icon: HeartPulse, title: "Deadly Shock", desc: "This massive shock can instantly stop your heart and cause deep burns inside your body." };
-        return { icon: Zap, title: "Severe Burns", desc: "This will cause sudden, violent muscle jerks and severe burns." };
+        if (dangerLevel === 'critical') return { icon: HeartPulse, title: "Deadly DC Shock", desc: "This huge shock can stop your heart and cause deep heat burns inside your body!" };
+        return { icon: Zap, title: "Severe DC Shock", desc: "Causes violent muscle spasms and painful burns!" };
       case 'arc_flash': 
-        if (dangerLevel === 'critical') return { icon: Skull, title: "Deadly Explosion", desc: "A huge fireball hotter than the sun. It can cause fatal burns and melt things instantly." };
-        return { icon: Flame, title: "Severe Burns", desc: "An intense flash of heat that can easily set clothes on fire and cause deep burns." };
+        if (dangerLevel === 'critical') return { icon: Skull, title: "Deadly Fireball", desc: "A blinding explosion hotter than the sun! It melts things instantly!" };
+        return { icon: Flame, title: "Severe Heat Flash", desc: "Intense heat that can set clothes on fire and burn skin!" };
       case 'short_circuit': 
-        return { icon: Flame, title: "Fire Danger", desc: "Too much electricity is flowing where it shouldn't, which can melt wires and start fires." };
+        return { icon: Flame, title: "Fire Hazard", desc: "Too much electricity is shorting, which can melt wires and start a fire!" };
       case 'earth_fault': 
-        return { icon: AlertTriangle, title: "Deadly Touch", desc: "The outside of this machine has dangerous electricity on it. Touching it could be deadly." };
+        return { icon: AlertTriangle, title: "Dangerous Machine Touch", desc: "The metal body of this machine is live with electricity! Touching it is dangerous!" };
       case 'touch': 
-        return { icon: HeartPulse, title: "Deadly Touch Shock", desc: "Touching this while electricity is flowing into the ground can send a deadly shock through your heart." };
+        return { icon: HeartPulse, title: "Deadly Touch Shock", desc: "Touching this live metal can send electricity right through your heart!" };
       case 'step': 
-        return { icon: AlertTriangle, title: "Ground Shock", desc: "Electricity is spreading through the ground. Standing here can send a dangerous shock up your legs." };
+        return { icon: AlertTriangle, title: "Ground Electricity", desc: "Electricity is flowing through the ground. Stepping here sends shock up your legs!" };
     }
   };
 
@@ -60,7 +53,7 @@ export const HazardOverlay: React.FC<HazardOverlayProps> = ({ isActive, hazardTy
         
         let high = true;
         interval = setInterval(() => {
-          const baseVol = 0.05 + (0.2 * intensity);
+          const baseVol = 0.04 + (0.15 * intensity);
           if (high) {
             osc.frequency.setValueAtTime(800 + (200 * intensity), audioCtx.currentTime);
             gain.gain.setValueAtTime(baseVol, audioCtx.currentTime);
@@ -89,7 +82,7 @@ export const HazardOverlay: React.FC<HazardOverlayProps> = ({ isActive, hazardTy
 
   return (
     <>
-      {/* Full screen innovative electric shock / arc flash visual environment */}
+      {/* Full screen electric shock / arc flash edge visual effects */}
       <AnimatePresence>
         {showOverlay && (
           <motion.div key="hazard-fullscreen" initial={{ opacity: 0 }}
@@ -98,84 +91,31 @@ export const HazardOverlay: React.FC<HazardOverlayProps> = ({ isActive, hazardTy
             className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center overflow-hidden"
           >
             {/* Flashing Hazard Vignette background */}
-            <div className={`absolute inset-0 transition-opacity duration-200 ${dangerLevel === 'critical' ? 'bg-red-950/30' : 'bg-orange-950/20'}`} />
+            <div className={`absolute inset-0 transition-opacity duration-200 ${dangerLevel === 'critical' ? 'bg-red-950/20' : 'bg-orange-950/15'}`} />
             
             {/* Pulsing Electric Arc Flash Edge Glow */}
             <motion.div animate={{ 
-                opacity: [0.2, 0.7, 0.2],
+                opacity: [0.2, 0.6, 0.2],
                 scale: [1, 1.01, 1] 
               }}
               transition={{ repeat: Infinity, duration: 0.3, ease: "linear" }}
-              className={`absolute inset-0 shadow-[inset_0_0_120px_rgba(${dangerLevel === 'critical' ? '239,68,68' : '249,115,22'},0.6)]`} 
+              className={`absolute inset-0 shadow-[inset_0_0_90px_rgba(${dangerLevel === 'critical' ? '239,68,68' : '249,115,22'},0.5)]`} 
             />
 
             {/* Top & Bottom Electric Strobe Warning Bars */}
             <motion.div 
               animate={{ opacity: [0.3, 0.9, 0.3] }}
               transition={{ repeat: Infinity, duration: 0.25 }}
-              className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-500 via-amber-400 to-red-500 shadow-[0_0_20px_#ef4444]"
+              className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-amber-400 to-red-500 shadow-[0_0_15px_#ef4444]"
             />
             <motion.div 
               animate={{ opacity: [0.3, 0.9, 0.3] }}
               transition={{ repeat: Infinity, duration: 0.25 }}
-              className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-500 via-amber-400 to-red-500 shadow-[0_0_20px_#ef4444]"
+              className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-amber-400 to-red-500 shadow-[0_0_15px_#ef4444]"
             />
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Rock-Solid High-Contrast Stationary Alert Banner */}
-      {alertContainer && createPortal(
-        <AnimatePresence>
-          {showOverlay && (() => {
-            const { icon: Icon, title, desc } = getHazardDetails();
-            return (
-              <motion.div key="hazard-overlay-panel"
-                initial={{ opacity: 0, y: -15, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -15, scale: 0.95, transition: { duration: 0.2 } }}
-                transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                className="w-full pointer-events-auto"
-              >
-                <div 
-                  className={`relative w-full rounded-2xl border-3 ${dangerLevel === 'critical' ? 'border-red-500 bg-slate-950/98 shadow-[0_15px_50px_rgba(220,38,38,0.95)] ring-4 ring-red-500/60' : 'border-amber-500 bg-slate-950/98 shadow-[0_15px_50px_rgba(245,158,11,0.8)] ring-4 ring-amber-500/60'} p-3.5 sm:p-4 flex flex-row items-center gap-3.5 text-left overflow-visible`}
-                >
-                  <motion.div animate={{ x: [0, -100, 0] }}
-                    transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
-                    className="absolute inset-0 opacity-[0.06] bg-[repeating-linear-gradient(45deg,transparent,transparent_15px,#fff_15px,#fff_30px)] pointer-events-none" 
-                  />
-                  
-                  <div className="shrink-0 relative z-10 p-2 rounded-xl bg-slate-900 border border-slate-700 shadow-inner">
-                    <motion.div animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ repeat: Infinity, duration: 0.4 }}
-                    >
-                      <Icon className={`w-7 h-7 sm:w-9 sm:h-9 ${dangerLevel === 'critical' ? 'text-red-400' : 'text-orange-400'} drop-shadow-[0_0_18px_currentColor]`} />
-                    </motion.div>
-                  </div>
-                  
-                  <div className="flex-1 min-w-0 relative z-10 flex flex-col gap-1">
-                    <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
-                      <h1 className={`text-base sm:text-xl md:text-2xl font-black uppercase tracking-wider ${dangerLevel === 'critical' ? 'text-yellow-300 drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]' : 'text-orange-400'} drop-shadow-md leading-none truncate`}>
-                        {title}
-                      </h1>
-                      {magnitude && (
-                        <span className="text-xs sm:text-sm font-mono font-black px-2.5 py-1 rounded-xl bg-black/90 border-2 border-yellow-400 text-yellow-300 shadow-md whitespace-nowrap shrink-0">
-                          ⚡ {magnitude}
-                        </span>
-                      )}
-                    </div>
-                    
-                    <p className="text-xs sm:text-sm md:text-base text-slate-100 font-extrabold leading-snug drop-shadow-md mt-0.5">
-                      {desc}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })()}
-        </AnimatePresence>,
-        alertContainer
-      )}
     </>
   );
 };

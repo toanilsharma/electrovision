@@ -9,6 +9,7 @@ import { UserConfig } from '@/src/types';
 import { HazardOverlay } from '../HazardOverlay';
 import { HumanBodyTwin } from '../HumanBodyTwin';
 import { SafetyLessonModal } from '../SafetyLessonModal';
+import { DebriefTriggerCard } from '../DebriefTriggerCard';
 
 // IEC 60479-1 Earth Fault System Voltage Reference Levels
 const ALL_EARTH_VOLTAGES = [
@@ -32,6 +33,7 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
   const [breakerTripped, setBreakerTripped] = useState<boolean>(false);
   const [durationMs, setDurationMs] = useState<number>(0);
   const [showSafetyLesson, setShowSafetyLesson] = useState<boolean>(false);
+  const [hasSimulated, setHasSimulated] = useState<boolean>(false);
 
   const [lastActiveFaultData, setLastActiveFaultData] = useState<{
     currentMA: number;
@@ -101,6 +103,8 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
 
   const handleResetSimulator = () => {
     setFaultActive(false);
+    setHasSimulated(false);
+    setShowSafetyLesson(false);
     setBreakerTripped(false);
     setScenario('solid');
     setPpeEnabled(false);
@@ -156,6 +160,7 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
   // Track active fault parameters for SafetyLessonModal analysis
   useEffect(() => {
     if (faultActive && !breakerTripped) {
+      setHasSimulated(true);
       setLastActiveFaultData({
         currentMA: physics.bodyCurrent,
         durationMs: durationMs,
@@ -166,12 +171,8 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
     }
   }, [faultActive, breakerTripped, physics.bodyCurrent, durationMs, voltage, physics.isPPESafe, ppeEnabled]);
 
-  // Open SafetyLessonModal when fault completes or is cleared
   const prevFaultActive = useRef(faultActive);
   useEffect(() => {
-    if (prevFaultActive.current && !faultActive) {
-      setShowSafetyLesson(true);
-    }
     prevFaultActive.current = faultActive;
   }, [faultActive]);
 
@@ -401,6 +402,14 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
               <span>{faultActive ? "CLEAR FAULT / RESET" : "⚡ TRIGGER INSULATION FAULT"}</span>
             </button>
           </div>
+
+          {/* EMBEDDED DEBRIEF & LEARNINGS CARD */}
+          <DebriefTriggerCard
+            onOpen={() => setShowSafetyLesson(true)}
+            hasSimulated={hasSimulated}
+            isSimulating={faultActive}
+            variant="embedded"
+          />
         </div>
 
         {/* Live Diagnostics Telemetry Cards */}

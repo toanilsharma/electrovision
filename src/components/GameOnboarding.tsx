@@ -12,7 +12,6 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState<number>(1);
   const [environment, setEnvironment] = useState<Environment | null>(null);
   const [profile, setProfile] = useState<DigitalTwinProfile | null>(null);
-  const [userName, setUserName] = useState('');
   const [loadingText, setLoadingText] = useState('INITIALIZING BIO-METRICS...');
 
   const onCompleteRef = useRef(onComplete);
@@ -27,16 +26,11 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
 
   const handleProfileSelect = (prof: DigitalTwinProfile) => {
     setProfile(prof);
-    setStep(3); // Go to registration step
-  };
-
-  const handleRegisterComplete = (e: React.FormEvent) => {
-    e.preventDefault();
-    setStep(4); // Go to loading step
+    setStep(3);
   };
 
   useEffect(() => {
-    if (step === 4) {
+    if (step === 3) {
       // Simulate booting up process
       const texts = [
         'ESTABLISHING NEURAL LINK...',
@@ -55,14 +49,13 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
           const finalProfile: DigitalTwinProfile = profile || (finalEnv === 'industrial' ? 'electrician' : 'adult_male');
           onCompleteRef.current({ 
             environment: finalEnv, 
-            profile: finalProfile, 
-            name: userName.trim() || undefined
+            profile: finalProfile
           });
         }
       }, 300);
       return () => clearInterval(interval);
     }
-  }, [step, environment, profile, userName]);
+  }, [step, environment, profile]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 sm:p-6 pb-14 sm:pb-14 bg-[#020617] bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#020617_100%)] overflow-y-auto select-none">
@@ -158,62 +151,8 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
         )}
 
         {step === 3 && (
-          <motion.form
-            key="step3"
-            onSubmit={handleRegisterComplete}
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="relative z-10 flex flex-col items-center w-full max-w-lg p-6 sm:p-8 bg-slate-900/90 border border-white/15 rounded-2xl backdrop-blur-md shadow-2xl my-auto"
-          >
-            <div className="mb-6 sm:mb-6 text-center">
-              <h1 className="text-sm sm:text-sm font-black tracking-[0.25em] sm:tracking-[0.3em] uppercase text-orange-400 mb-2 flex items-center justify-center gap-2">
-                <ShieldCheck className="w-5 h-5" /> {environment === 'industrial' ? 'Personnel Log' : 'Player Profile'}
-              </h1>
-              <h2 className="text-xl sm:text-xl font-black text-white tracking-wider uppercase">
-                {environment === 'industrial' ? 'Operator Registration' : 'Welcome'}
-              </h2>
-              <p className="text-xs sm:text-xs font-mono text-slate-300 uppercase tracking-wider mt-1.5">
-                {environment === 'industrial' ? 'Provide credentials for safety qualification certificate' : 'Enter your name to begin'}
-              </p>
-            </div>
-
-            <div className="w-full space-y-5">
-              <div className="space-y-2">
-                <label className="text-xs font-black tracking-widest text-slate-300 uppercase block">
-                  {environment === 'industrial' ? 'Full Operator Name' : 'Name'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder={environment === 'industrial' ? "e.g. ALAN TURING" : "e.g. ALEX"}
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value.toUpperCase())}
-                  className="w-full px-4 py-3 bg-slate-950 border border-white/20 rounded-xl text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 uppercase tracking-widest min-h-[48px]"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full mt-6 py-3.5 bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-sm tracking-widest uppercase rounded-xl transition-all shadow-[0_0_20px_rgba(249,115,22,0.4)] active:scale-95 cursor-pointer min-h-[48px]"
-              >
-                {environment === 'industrial' ? 'Register & Calibrate \u2192' : 'Start \u2192'}
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="mt-6 text-xs font-bold tracking-widest text-slate-400 uppercase hover:text-white transition-colors cursor-pointer"
-            >
-              &larr; Back to Persona
-            </button>
-          </motion.form>
-        )}
-
-        {step === 4 && (
           <motion.div
-            key="step4"
+            key="step3"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="relative z-10 flex flex-col items-center justify-center p-6 text-center my-auto"

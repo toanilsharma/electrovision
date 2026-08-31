@@ -32,6 +32,12 @@ export interface UserConfig {
 export type UserMode = 'residential' | 'industrial';
 export type ShockEffectLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
+export type ShockPath = 'hand-to-hand' | 'hand-to-foot';
+
+export interface UserProfile {
+  skinCondition?: 'dry' | 'wet';
+}
+
 export interface PPEItem {
   id: string;
   name: string;
