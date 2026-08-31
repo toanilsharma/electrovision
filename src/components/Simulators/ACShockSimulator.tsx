@@ -332,14 +332,53 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
     stopHum();
   };
 
+  const [mobileTab, setMobileTab] = useState<'controls' | 'twin' | 'charts'>('controls');
+
   return (
     <motion.div 
       className="flex flex-col lg:flex-row h-full gap-2.5 overflow-y-auto lg:overflow-hidden pb-24 lg:pb-0"
       animate={{ x: isSimulating ? [-2, 2, -3, 3, -1, 1, 0] : 0 }}
       transition={{ duration: 0.2, repeat: isSimulating ? Infinity : 0, ease: "linear" }}
     >
+      {/* Mobile Viewport Tab Switcher (Hidden on Desktop lg:) */}
+      <div className="flex lg:hidden items-center justify-between p-1 bg-slate-950/95 border border-slate-800 rounded-xl mb-1 shrink-0 z-20">
+        <button
+          type="button"
+          onClick={() => setMobileTab('controls')}
+          className={cn(
+            "flex-1 py-1.5 px-2 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all text-center cursor-pointer",
+            mobileTab === 'controls' ? "bg-orange-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white"
+          )}
+        >
+          ⚙️ Controls
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('twin')}
+          className={cn(
+            "flex-1 py-1.5 px-2 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all text-center cursor-pointer",
+            mobileTab === 'twin' ? "bg-orange-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white"
+          )}
+        >
+          👤 Human Twin
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('charts')}
+          className={cn(
+            "flex-1 py-1.5 px-2 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all text-center cursor-pointer",
+            mobileTab === 'charts' ? "bg-orange-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white"
+          )}
+        >
+          📊 Charts
+        </button>
+      </div>
+
       {/* Column 1: Left Controls Panel (Compact High-Density, Zero Scroll) */}
-      <div className="w-full lg:w-[310px] xl:w-[330px] shrink-0 p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full justify-between order-1 lg:order-1 overflow-hidden">
+      <div className={cn(
+        "w-full lg:w-[310px] xl:w-[330px] shrink-0 p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full justify-between order-1 lg:order-1 overflow-hidden",
+        mobileTab !== 'controls' && "hidden lg:flex"
+      )}>
         <div className="space-y-1.5 flex-1 flex flex-col justify-between overflow-hidden">
           
           {/* Header & Reset */}
@@ -533,6 +572,26 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
             </div>
           </div>
 
+          {/* PPE Protection Toggle */}
+          <div className="flex items-center justify-between p-1.5 bg-slate-950 border border-slate-800 rounded-xl shrink-0">
+            <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+              <ShieldCheck className={cn("w-3.5 h-3.5", isPPESafe ? "text-emerald-400" : "text-slate-400")} />
+              <span>PPE Rubber Gloves</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => handleSafetyChange(!isPPESafe, !isPPESafe ? ['Class 0 Rubber Gloves (10kV Rated)'] : [])}
+              className={cn(
+                "px-2 py-0.5 text-[9.5px] font-black uppercase rounded-lg border transition-all cursor-pointer",
+                isPPESafe
+                  ? "bg-emerald-950 text-emerald-300 border-emerald-500 shadow-sm"
+                  : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+              )}
+            >
+              {isPPESafe ? '🛡️ ON (SAFE)' : 'OFF (NO PPE)'}
+            </button>
+          </div>
+
         </div>
 
         {/* Desktop Large Prominent HOLD TO SHOCK Button with In-Place Morph */}
@@ -621,7 +680,10 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
       </div>
 
       {/* Column 2: Center Panel (IEC 60479-1 Time/Current Zone Chart & Impedance Breakdown) */}
-      <div className="flex-1 min-w-[280px] xl:min-w-[340px] p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full overflow-y-auto order-3 lg:order-2 space-y-3">
+      <div className={cn(
+        "flex-1 min-w-[280px] xl:min-w-[340px] p-2.5 sm:p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full overflow-hidden order-3 lg:order-2 space-y-2",
+        mobileTab !== 'charts' && "hidden lg:flex"
+      )}>
         
         {/* RCD Tripped Hero Banner (if tripped) */}
         {rcdTripped && (
@@ -712,22 +774,10 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           isSimulating={isSimulating}
           shockPath={path}
         />
-
-        {/* PPE Validator & Emergency Response */}
-        <div className="flex-1 flex flex-col min-h-0 justify-between space-y-3">
-          <PPEValidator
-            hazardType="shock_ac"
-            hazardMagnitude={voltage}
-            environment={config?.environment}
-            onSafetyChange={handleSafetyChange}
-          />
-
-          <EmergencyResponse isSimulating={isSimulating && !isPPESafe} hasSimulated={hasSimulated} type="shock" />
-        </div>
       </div>
 
       {/* Column 3: Human Section & Scopes (Full-Body Maximized) */}
-      <div className="w-full lg:w-[480px] xl:w-[540px] shrink-0 flex flex-col gap-1.5 h-auto lg:h-full overflow-hidden order-2 lg:order-3 relative z-10 bg-slate-950/95 backdrop-blur-md pb-1 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-xl">
+      <div className={cn("w-full lg:w-[480px] xl:w-[540px] shrink-0 flex flex-col gap-1.5 h-auto lg:h-full overflow-hidden order-2 lg:order-3 relative z-10 bg-slate-950/95 backdrop-blur-md pb-1 lg:pb-0 border-b border-slate-800 lg:border-b-0 shadow-xl", mobileTab !== 'twin' && "hidden lg:flex")}>
         {/* Human Body Twin Container (100% Full Body Head-to-Toes Visible) */}
         <div className="flex-1 min-h-0 w-full relative border border-slate-800 rounded-xl bg-slate-950 shadow-inner overflow-hidden flex flex-col">
           <HumanBodyTwin 

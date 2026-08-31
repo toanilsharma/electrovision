@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Home, Factory, User, Users, HardHat, ShieldCheck, Activity, Cpu } from 'lucide-react';
 import { Environment, DigitalTwinProfile, UserConfig } from '../types';
-import { cn } from '../lib/utils';
 
 interface OnboardingProps {
   onComplete: (config: UserConfig) => void;
@@ -31,7 +30,6 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
 
   useEffect(() => {
     if (step === 3) {
-      // Simulate booting up process
       const texts = [
         'ESTABLISHING NEURAL LINK...',
         'RENDERING DIGITAL TWIN...',
@@ -58,7 +56,7 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
   }, [step, environment, profile]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 sm:p-6 pb-14 sm:pb-14 bg-[#020617] bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#020617_100%)] overflow-y-auto select-none">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-between p-3 sm:p-6 pb-14 bg-[#020617] bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#020617_100%)] overflow-y-auto select-none">
       {/* Background Grid */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#64748b_1px,transparent_1px),linear-gradient(to_bottom,#64748b_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-[0.04] pointer-events-none"></div>
 
@@ -66,41 +64,43 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
         {step === 1 && (
           <motion.div
             key="step1"
-            initial={{ opacity: 0, scale: 0.96 }}
+            initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, y: -20 }}
-            className="relative z-10 flex flex-col items-center w-full max-w-xl lg:max-w-5xl xl:max-w-6xl p-3 sm:p-6 md:p-8 my-auto"
+            className="relative z-10 flex flex-col items-center w-full max-w-full sm:max-w-xl lg:max-w-5xl xl:max-w-6xl p-2 sm:p-6 md:p-8 my-auto"
           >
-            <div className="mb-6 sm:mb-8 md:mb-12 text-center">
-              <h1 className="text-sm sm:text-sm font-black tracking-[0.25em] sm:tracking-[0.3em] uppercase text-orange-400 mb-2 sm:mb-4 flex items-center justify-center gap-2 sm:gap-3">
-                <Cpu className="w-5 h-5 sm:w-5 sm:h-5 text-orange-400" /> Module Selection
+            <div className="mb-4 sm:mb-8 md:mb-12 text-center">
+              <h1 className="text-xs sm:text-sm font-black tracking-[0.2em] uppercase text-orange-400 mb-2 flex items-center justify-center gap-2">
+                <Cpu className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" /> Module Selection
               </h1>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-wider sm:tracking-widest uppercase">Select Operating Environment</h2>
+              <h2 className="text-xl sm:text-3xl md:text-4xl font-black text-white tracking-wider uppercase">Select Operating Environment</h2>
             </div>
 
             <div className="grid w-full grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 md:gap-8">
               <button
+                type="button"
                 onClick={() => handleEnvSelect('residential')}
-                className="relative flex flex-col items-center justify-center p-5 sm:p-8 md:p-12 overflow-hidden transition-all duration-300 border bg-slate-900/80 border-white/15 rounded-2xl hover:bg-white/10 hover:border-orange-500/60 hover:shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] cursor-pointer min-h-[140px]"
+                className="relative flex flex-col items-center justify-center p-6 sm:p-8 md:p-12 overflow-hidden transition-all duration-300 border bg-slate-900/90 border-white/20 rounded-2xl hover:bg-white/10 hover:border-orange-500/80 hover:shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] cursor-pointer min-h-[140px] w-full"
               >
-                <div className="absolute top-0 right-0 p-2 sm:p-4 opacity-10 group-hover:opacity-20 hidden sm:block">
+                <div className="absolute top-0 right-0 p-4 opacity-10 hidden sm:block">
                   <Home className="w-32 h-32 md:w-48 md:h-48" />
                 </div>
-                <Home className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 mb-3 sm:mb-4 md:mb-6 text-orange-400" />
-                <h3 className="mb-1.5 sm:mb-2 text-xl sm:text-xl md:text-2xl font-black text-white tracking-wider sm:tracking-widest uppercase">Residential</h3>
-                <p className="text-xs sm:text-xs font-mono tracking-wide text-center text-slate-300">Home environments, 120V - 240V systems, domestic appliances.</p>
+                <Home className="w-12 h-12 sm:w-16 sm:h-16 mb-3 text-orange-400" />
+                <h3 className="mb-1 text-xl sm:text-2xl font-black text-white tracking-wider uppercase">Residential</h3>
+                <p className="text-xs sm:text-sm font-mono tracking-wide text-center text-slate-300">Home environments, 120V - 240V systems, domestic appliances.</p>
               </button>
 
               <button
+                type="button"
                 onClick={() => handleEnvSelect('industrial')}
-                className="relative flex flex-col items-center justify-center p-5 sm:p-8 md:p-12 overflow-hidden transition-all duration-300 border bg-slate-900/80 border-white/15 rounded-2xl hover:bg-white/10 hover:border-orange-500/60 hover:shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] cursor-pointer min-h-[140px]"
+                className="relative flex flex-col items-center justify-center p-6 sm:p-8 md:p-12 overflow-hidden transition-all duration-300 border bg-slate-900/90 border-white/20 rounded-2xl hover:bg-white/10 hover:border-orange-500/80 hover:shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] cursor-pointer min-h-[140px] w-full"
               >
-                <div className="absolute top-0 right-0 p-2 sm:p-4 opacity-10 group-hover:opacity-20 hidden sm:block">
+                <div className="absolute top-0 right-0 p-4 opacity-10 hidden sm:block">
                   <Factory className="w-32 h-32 md:w-48 md:h-48" />
                 </div>
-                <Factory className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 mb-3 sm:mb-4 md:mb-6 text-orange-400" />
-                <h3 className="mb-1.5 sm:mb-2 text-xl sm:text-xl md:text-2xl font-black text-white tracking-wider sm:tracking-widest uppercase">Industrial</h3>
-                <p className="text-xs sm:text-xs font-mono tracking-wide text-center text-slate-300">Factories, 415V - 11kV systems, heavy machinery, switchgear.</p>
+                <Factory className="w-12 h-12 sm:w-16 sm:h-16 mb-3 text-orange-400" />
+                <h3 className="mb-1 text-xl sm:text-2xl font-black text-white tracking-wider uppercase">Industrial</h3>
+                <p className="text-xs sm:text-sm font-mono tracking-wide text-center text-slate-300">Factories, 415V - 11kV systems, heavy machinery, switchgear.</p>
               </button>
             </div>
           </motion.div>
@@ -109,16 +109,16 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
         {step === 2 && (
           <motion.div
             key="step2"
-            initial={{ opacity: 0, scale: 0.96 }}
+            initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, y: -20 }}
-            className="relative z-10 flex flex-col items-center w-full max-w-xl lg:max-w-5xl xl:max-w-6xl p-3 sm:p-6 md:p-8 my-auto"
+            className="relative z-10 flex flex-col items-center w-full max-w-full sm:max-w-xl lg:max-w-5xl xl:max-w-6xl p-2 sm:p-6 md:p-8 my-auto"
           >
-            <div className="mb-6 sm:mb-8 md:mb-12 text-center">
-              <h1 className="text-sm sm:text-sm font-black tracking-[0.25em] sm:tracking-[0.3em] uppercase text-orange-400 mb-2 sm:mb-4 flex items-center justify-center gap-2 sm:gap-3">
-                <User className="w-5 h-5 sm:w-5 sm:h-5 text-orange-400" /> Profile Selection
+            <div className="mb-4 sm:mb-8 md:mb-12 text-center">
+              <h1 className="text-xs sm:text-sm font-black tracking-[0.2em] uppercase text-orange-400 mb-2 flex items-center justify-center gap-2">
+                <User className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" /> Profile Selection
               </h1>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-wider sm:tracking-widest uppercase">Select Digital Twin Persona</h2>
+              <h2 className="text-xl sm:text-3xl md:text-4xl font-black text-white tracking-wider uppercase">Select Digital Twin Persona</h2>
             </div>
 
             <div className="grid w-full grid-cols-2 gap-3 sm:gap-4 md:gap-6 md:grid-cols-4">
@@ -142,8 +142,9 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
             </div>
 
             <button
+               type="button"
                onClick={() => setStep(1)}
-               className="mt-6 sm:mt-8 md:mt-12 text-xs sm:text-xs font-bold tracking-widest text-slate-300 uppercase hover:text-white transition-colors cursor-pointer py-2 px-4 rounded-lg bg-slate-900/60 border border-slate-800"
+               className="mt-6 sm:mt-8 text-xs sm:text-sm font-bold tracking-widest text-slate-200 uppercase hover:text-white transition-colors cursor-pointer py-2.5 px-5 rounded-xl bg-slate-900 border border-slate-700"
             >
               &larr; Back to Environment
             </button>
@@ -157,11 +158,11 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
             animate={{ opacity: 1 }}
             className="relative z-10 flex flex-col items-center justify-center p-6 text-center my-auto"
           >
-            <Activity className="w-20 h-20 sm:w-24 sm:h-24 mb-6 sm:mb-8 text-orange-500 animate-pulse" />
-            <h2 className="text-xl sm:text-2xl font-black font-mono text-white tracking-[0.2em] uppercase text-center max-w-md">
+            <Activity className="w-20 h-20 sm:w-24 sm:h-24 mb-6 text-orange-500 animate-pulse" />
+            <h2 className="text-lg sm:text-2xl font-black font-mono text-white tracking-[0.2em] uppercase text-center max-w-md">
               {loadingText}
             </h2>
-            <div className="w-64 sm:w-80 h-2 mt-6 sm:mt-8 overflow-hidden rounded-full bg-slate-800 border border-slate-700">
+            <div className="w-64 sm:w-80 h-2.5 mt-6 overflow-hidden rounded-full bg-slate-800 border border-slate-700">
               <motion.div 
                 className="h-full bg-orange-500"
                 initial={{ width: "0%" }}
@@ -174,7 +175,7 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
       </AnimatePresence>
 
       {/* Persistent Bottom Footer Attribution */}
-      <div className="absolute bottom-0 left-0 right-0 p-2.5 sm:p-2.5 bg-slate-950/95 border-t border-slate-800 text-center text-[10px] sm:text-[10px] text-white font-black uppercase tracking-widest z-20 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+      <div className="fixed bottom-0 left-0 right-0 p-2 bg-slate-950/98 border-t border-slate-800 text-center text-[10px] sm:text-[10px] text-white font-black uppercase tracking-widest z-50 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 pointer-events-auto">
         <span>Concept, Visualisation & Engineering: Anil Sharma</span>
         <span className="text-slate-600 hidden sm:inline">|</span>
         <a href="https://designcalculators.co.in" target="_blank" rel="noopener noreferrer" className="text-orange-400 font-bold hover:underline">designcalculators.co.in</a>
@@ -188,12 +189,13 @@ export function GameOnboarding({ onComplete }: OnboardingProps) {
 function ProfileCard({ icon: Icon, title, desc, onClick }: { icon: any, title: string, desc: string, onClick: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 transition-all duration-300 border bg-slate-900/80 border-white/15 rounded-2xl hover:bg-white/10 hover:border-orange-500/60 hover:shadow-[0_0_20px_rgba(249,115,22,0.3)] active:scale-[0.98] cursor-pointer min-h-[110px]"
+      className="flex flex-col items-center justify-center p-4 sm:p-6 transition-all duration-300 border bg-slate-900/90 border-white/20 rounded-2xl hover:bg-white/10 hover:border-orange-500/80 hover:shadow-[0_0_20px_rgba(249,115,22,0.3)] active:scale-[0.98] cursor-pointer min-h-[120px] w-full"
     >
-      <Icon className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 mb-2 sm:mb-3 md:mb-4 text-slate-300 group-hover:text-orange-400 transition-colors" />
-      <h3 className="mb-1 sm:mb-2 text-sm sm:text-sm font-black text-white tracking-wider sm:tracking-widest uppercase text-center">{title}</h3>
-      <p className="text-xs sm:text-[10px] font-mono tracking-wider text-slate-300 text-center uppercase">{desc}</p>
+      <Icon className="w-9 h-9 sm:w-11 sm:h-11 mb-2 text-slate-200 group-hover:text-orange-400 transition-colors" />
+      <h3 className="mb-1 text-sm sm:text-base font-black text-white tracking-wider uppercase text-center">{title}</h3>
+      <p className="text-[11px] sm:text-xs font-mono tracking-wider text-slate-300 text-center uppercase">{desc}</p>
     </button>
   );
 }
