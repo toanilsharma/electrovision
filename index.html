@@ -11,7 +11,7 @@
       gtag('config', 'G-ZRMQTSMN1G');
     </script>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
     
     <!-- Primary SEO Meta Tags -->
     <title>ElectroLive™ | High-Fidelity Electrical Hazard, Arc Flash & Shock Physics Simulator</title>
@@ -66,6 +66,12 @@
     }
     </script>
 
+    <!-- PWA Web App Manifest & Mobile Theme Color -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#020617" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
     <!-- Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -97,8 +103,9 @@
     </header>
 
     <article id="seo-knowledge-base" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;" aria-label="Electrical Safety Standards and Physics Documentation">
+      <div class="fluid-container" style="max-width: 100%; padding: 16px; overflow-x: hidden;">
       
-      <section>
+      <section id="section-1">
         <h2>1. Alternating Current (AC) Shock Physics & Human Bio-Impedance (IEC 60479-1)</h2>
         <p>
           Alternating current at commercial power frequencies (50 Hz and 60 Hz) presents severe physiological hazards to human tissue due to cyclic cellular depolarization. Under international standard IEC 60479-1 ("Effects of current on human beings and livestock"), the total electrical impedance of the human body (ZT) is a non-linear network composed of internal body resistance (Zi ~ 500 to 750 Ohms) combined with voltage-dependent skin impedance. On dry, intact skin at low touch voltages (25V to 50V), skin resistance dominates with values exceeding 8,000 Ohms. However, when skin is wet with sweat or conductive moisture, or when touch voltages exceed the 50V safety threshold, dielectric breakdown of the stratum corneum collapses the skin resistance, reducing total impedance to approximately 1,328 Ohms at 230V AC.
@@ -109,14 +116,14 @@
         </p>
       </section>
 
-      <section>
+      <section id="section-2">
         <h2>2. Direct Current (DC) Shock & Electrolytic Tissue Dissociation (IEC 60479-2)</h2>
         <p>
           Direct current (DC) electrical hazards in photovoltaic (PV) solar installations, high-voltage electric vehicle (EV) battery packs, and industrial DC traction networks follow physical principles governed by IEC 60479-2. Unlike AC, DC has no alternating zero-crossings. Constant unidirectional electron flow causes rapid electrolytic dissociation of body fluids, cellular membrane breakdown, and deep internal Joule thermal coagulation. The DC perception threshold is approximately 2 mA, and the DC let-go threshold is roughly 30 mA. Although direct current has a slightly lower ventricular fibrillation probability than 50/60 Hz AC at equivalent continuous milliampere levels, sudden interruption of DC circuits triggers intense inductive inductive spikes and violent single-muscle twitches capable of throwing workers off ladders or structures.
         </p>
       </section>
 
-      <section>
+      <section id="section-3">
         <h2>3. Arc Flash Incident Energy & Blast Boundary Physics (IEEE 1584-2018 / NFPA 70E)</h2>
         <p>
           An arc flash is an explosive electrical discharge through ionized plasma created when insulation breakdown or physical bridging occurs across high-energy energized conductors. Plasma core temperatures reach up to 35,000°F (19,400°C)—four times hotter than the surface of the sun. The IEEE 1584-2018 calculation model determines the arcing current (Iarc), incident energy exposure (E in cal/cm²), and the Arc Flash Boundary (AFB, defined as the distance at which incident energy drops to 1.2 cal/cm², the onset of second-degree curable epidermal burns).
@@ -126,7 +133,7 @@
         </p>
       </section>
 
-      <section>
+      <section id="section-4">
         <h2>4. Substation Ground Potential Rise & Step/Touch Potential (IEEE 80-2013)</h2>
         <p>
           During a single phase-to-ground fault in an electrical substation or industrial distribution facility, thousands of amperes of fault current (If) enter the earth through grounding grid electrodes. This current discharge elevates the local ground potential relative to remote earth, creating Ground Potential Rise (GPR = If × Rg). Because soil resistivity (rho) produces a hemispherical voltage gradient, significant potential differences develop across the surface of the ground.
@@ -137,14 +144,14 @@
         </p>
       </section>
 
-      <section>
+      <section id="section-5">
         <h2>5. Short Circuit Dynamics & Electromagnetic Lorentz Forces (IEC 60909)</h2>
         <p>
           Bolted short-circuit faults in electrical power networks produce severe transient currents governed by IEC 60909. The initial symmetrical short-circuit current (Ik'') and the peak making current (Ip = kappa × sqrt(2) × Ik'') are determined by the network subtransient reactance and R/X ratio. The initial asymmetrical DC offset creates peak electromagnetic Lorentz forces (F = mu_0 / (2*pi) × (i1 × i2 / d)) between parallel busbars, exerting tons of dynamic mechanical deflection force capable of ripping switchgear supports from their mounts. Furthermore, the thermal equivalent current (Ith) and Joule heating integral (I²t) must not exceed cable and busbar thermal withstand limits to prevent catastrophic conductor vaporization.
         </p>
       </section>
 
-      <section>
+      <section id="section-6">
         <h2>6. Miniature Circuit Breaker (MCB) Trip Curves & Arc Chute De-Ionization (IEC 60898)</h2>
         <p>
           Low-voltage miniature circuit breakers (MCBs) engineered under IEC 60898 provide dual-action overcurrent protection:
@@ -160,14 +167,14 @@
         </p>
       </section>
 
-      <section>
+      <section id="section-7">
         <h2>7. Lockout / Tagout (LOTO) & Zero-Energy State Protocols (OSHA 29 CFR 1910.147)</h2>
         <p>
           OSHA 1910.147 dictates the control of hazardous energy during servicing of electrical equipment. True isolation requires establishing a verified zero-energy state through the mandatory six-step protocol: Preparation, Notification, Shutdown, Equipment Isolation, Application of Lockout/Tagout Devices (padlocks and safety hasps), and Dissipation of Stored Residual Energy (discharging power factor capacitors, high-voltage DC bus capacitors, and inductive motor windings). Finally, the "Live-Dead-Live" test using a calibrated high-voltage multimeter or non-contact proximity detector must be performed to confirm absence of voltage before any worker makes physical contact.
         </p>
       </section>
 
-      <section>
+      <section id="section-8">
         <h2>8. Electrical Shock Emergency Response, CPR & Clinical Protocols</h2>
         <p>
           When an electrical shock incident occurs, the first responder must never touch the victim directly with bare hands while the circuit remains energized. Immediate emergency steps require shutting down the upstream circuit breaker or using an insulated non-conductive rescue hook (rated for system voltage) to mechanically loop and pull the victim free.
@@ -176,6 +183,7 @@
           If the victim is pulseless and non-responsive due to Ventricular Fibrillation (VF), cardiopulmonary resuscitation (CPR) with chest compressions at 100 to 120 beats per minute (BPM) at a depth of 2 inches (5 cm) must begin immediately to maintain vital coronary and cerebral blood perfusion. An Automated External Defibrillator (AED) should be deployed immediately to deliver a biphasic shock. Due to the high incidence of delayed lethal arrhythmias, internal thermal muscle necrosis, and rhabdomyolysis releasing toxic myoglobin into the renal system, mandatory 24-hour continuous ECG cardiac monitoring and urinalysis are legally and medically required for all electrical shock casualties.
         </p>
       </section>
+      </div>
 
     </article>
 

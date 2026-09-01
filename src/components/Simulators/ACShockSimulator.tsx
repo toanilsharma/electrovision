@@ -468,34 +468,34 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
         </button>
       </div>
 
-      {/* Column 1: Left Controls Panel (Compact High-Density, Zero-Scroll with Overflow Safety) */}
+      {/* Column 1: Left Controls Panel (Compact High-Density, Zero-Scroll Fit to Screen) */}
       <div className={cn(
-        "w-full lg:w-[310px] xl:w-[330px] shrink-0 p-2 sm:p-2.5 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full justify-between order-1 lg:order-1 overflow-hidden",
+        "w-full lg:w-[310px] xl:w-[330px] shrink-0 p-1.5 sm:p-2 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-slate-800 shadow-xl flex flex-col h-auto lg:h-full justify-between order-1 lg:order-1 overflow-hidden",
         mobileTab !== 'controls' && "hidden lg:flex"
       )}>
-        <div className="space-y-1.5 flex-1 flex flex-col justify-between overflow-y-auto pr-0.5 custom-scrollbar min-h-0">
+        <div className="space-y-1 flex-1 flex flex-col justify-between overflow-hidden min-h-0">
           
           {/* Header & Single Unified Master Reset */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-1 shrink-0">
-            <h3 className="flex items-center gap-1.5 text-xs font-black tracking-[0.15em] uppercase text-orange-400 border-l-3 border-orange-500 pl-2">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-0.5 shrink-0">
+            <h3 className="flex items-center gap-1.5 text-[11px] font-black tracking-[0.15em] uppercase text-orange-400 border-l-3 border-orange-500 pl-1.5">
               <Zap className="w-3.5 h-3.5 text-orange-400" /> AC Parameters
             </h3>
             <button
               type="button"
               onClick={handleResetSimulator}
-              className="py-0.5 px-2.5 bg-rose-950 hover:bg-rose-900 text-rose-200 border-2 border-rose-500/80 hover:border-rose-400 font-black text-[10.5px] uppercase tracking-wider rounded-lg shadow-[0_0_12px_rgba(244,63,94,0.35)] flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0"
+              className="py-0.5 px-2 bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-500/80 hover:border-rose-400 font-black text-[9.5px] uppercase tracking-wider rounded shadow-[0_0_10px_rgba(244,63,94,0.3)] flex items-center gap-1 cursor-pointer transition-all active:scale-95 shrink-0"
               title="Master Reset all inputs, outputs, and body twin diagram to baseline state"
             >
-              <RotateCcw className="w-3 h-3 text-rose-400 stroke-[3]" />
+              <RotateCcw className="w-2.5 h-2.5 text-rose-400 stroke-[3]" />
               <span>MASTER RESET</span>
             </button>
           </div>
           
           {/* Voltage Selector */}
-          <div className="space-y-0.5 p-1.5 bg-slate-950 border border-orange-500/50 rounded-xl shadow-sm shrink-0">
-            <label className="flex justify-between items-center text-[10.5px] font-bold text-slate-200 uppercase tracking-wider">
+          <div className="space-y-0.5 p-1 bg-slate-950 border border-orange-500/50 rounded-lg shadow-sm shrink-0">
+            <label className="flex justify-between items-center text-[10px] font-bold text-slate-200 uppercase tracking-wider">
               <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-orange-400" /> Voltage (V_t)</span>
-              <span className="text-orange-300 font-black font-mono px-1.5 py-0.2 rounded bg-orange-500/10 border border-orange-500/30 text-xs">
+              <span className="text-orange-300 font-black font-mono px-1 py-0.2 rounded bg-orange-500/10 border border-orange-500/30 text-[11px] leading-none">
                 {voltage} V AC
               </span>
             </label>
@@ -504,7 +504,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
               value={dropdownValue}
               onChange={handleDropdownChange}
               disabled={isMuscleLocked}
-              className="w-full bg-slate-950 border border-orange-500/60 hover:border-orange-400 focus:border-orange-400 text-slate-100 text-xs font-mono font-bold rounded-lg px-2 py-1 cursor-pointer disabled:opacity-50 transition-colors"
+              className="w-full bg-slate-950 border border-orange-500/60 hover:border-orange-400 focus:border-orange-400 text-slate-100 text-[11px] font-mono font-bold rounded px-1.5 py-0.5 cursor-pointer disabled:opacity-50 transition-colors"
             >
               {standardVoltages.map(v => (
                 <option key={v.value} value={v.value} className="bg-slate-950 text-slate-200 font-bold">
@@ -524,23 +524,23 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
               value={voltage}
               onChange={(e) => setVoltage(Number(e.target.value))}
               disabled={isMuscleLocked}
-              className="w-full accent-orange-500 cursor-pointer disabled:opacity-50 mt-0.5 h-1.5"
+              className="w-full accent-orange-500 cursor-pointer disabled:opacity-50 mt-0.5 h-1"
             />
           </div>
 
           {/* Shock Path & Skin Condition */}
-          <div className="grid grid-cols-2 gap-1 p-1.5 bg-slate-950 border border-slate-800 rounded-xl shrink-0">
+          <div className="grid grid-cols-2 gap-1 p-1 bg-slate-950 border border-slate-800 rounded-lg shrink-0">
             <div className="space-y-0.5">
-              <label className="text-[9.5px] font-black text-slate-300 uppercase tracking-wider flex items-center justify-between">
+              <label className="text-[9px] font-black text-slate-300 uppercase tracking-wider flex items-center justify-between">
                 <span>Shock Path</span>
-                <span className="text-[8.5px] font-mono text-orange-400">({path === 'hand-to-hand' ? 'F_h 0.4' : 'F_h 1.0'})</span>
+                <span className="text-[8px] font-mono text-orange-400">({path === 'hand-to-hand' ? 'F_h 0.4' : 'F_h 1.0'})</span>
               </label>
-              <div className="grid grid-cols-2 gap-1">
+              <div className="grid grid-cols-2 gap-0.5">
                 <button
                   type="button"
                   onClick={() => !isMuscleLocked && setPath('hand-to-hand')}
                   className={cn(
-                    "py-1 text-[10px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer select-none text-center",
+                    "py-0.5 text-[9.5px] font-black rounded border uppercase tracking-wider transition-all cursor-pointer select-none text-center",
                     path === 'hand-to-hand'
                       ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-sm font-black'
                       : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'
@@ -553,7 +553,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
                   type="button"
                   onClick={() => !isMuscleLocked && setPath('hand-to-foot')}
                   className={cn(
-                    "py-1 text-[10px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer select-none text-center",
+                    "py-0.5 text-[9.5px] font-black rounded border uppercase tracking-wider transition-all cursor-pointer select-none text-center",
                     path === 'hand-to-foot'
                       ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-sm font-black'
                       : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'
@@ -566,16 +566,16 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
             </div>
 
             <div className="space-y-0.5">
-              <label className="text-[9.5px] font-black text-slate-300 uppercase tracking-wider flex items-center justify-between">
+              <label className="text-[9px] font-black text-slate-300 uppercase tracking-wider flex items-center justify-between">
                 <span>Skin State</span>
-                <span className="text-[8.5px] font-mono text-cyan-400">({skinCondition === 'dry' ? '8280Ω' : '1328Ω'})</span>
+                <span className="text-[8px] font-mono text-cyan-400">({skinCondition === 'dry' ? '8280Ω' : '1328Ω'})</span>
               </label>
-              <div className="grid grid-cols-2 gap-1">
+              <div className="grid grid-cols-2 gap-0.5">
                 <button
                   type="button"
                   onClick={() => !isMuscleLocked && setSkinCondition('dry')}
                   className={cn(
-                    "py-1 text-[10px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer select-none text-center",
+                    "py-0.5 text-[9.5px] font-black rounded border uppercase tracking-wider transition-all cursor-pointer select-none text-center",
                     skinCondition === 'dry'
                       ? 'bg-orange-500/25 border-orange-400 text-orange-200 shadow-sm'
                       : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'
@@ -588,7 +588,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
                   type="button"
                   onClick={() => !isMuscleLocked && setSkinCondition('wet')}
                   className={cn(
-                    "py-1 text-[10px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer select-none text-center",
+                    "py-0.5 text-[9.5px] font-black rounded border uppercase tracking-wider transition-all cursor-pointer select-none text-center",
                     skinCondition === 'wet'
                       ? 'bg-blue-500/30 border-blue-400 text-blue-200 shadow-sm'
                       : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'
@@ -611,13 +611,13 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           />
 
           {/* ELCB / RCBO (Residual Current Protection) Control */}
-          <div className="space-y-0.5 p-1.5 bg-slate-950 border border-slate-800 rounded-xl shrink-0">
+          <div className="space-y-0.5 p-1 bg-slate-950 border border-slate-800 rounded-lg shrink-0">
             <div className="flex items-center justify-between">
-              <label className="text-[9.5px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+              <label className="text-[9px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
                 <ShieldCheck className={cn("w-3 h-3", rcdType !== 'off' ? "text-emerald-400" : "text-slate-400")} />
                 <span>RCD Protection</span>
               </label>
-              <span className={cn("text-[8.5px] font-mono font-black px-1.5 py-0.2 rounded border", 
+              <span className={cn("text-[8px] font-mono font-black px-1.5 py-0.2 rounded border leading-none", 
                 rcdType !== 'off' ? "bg-emerald-950 text-emerald-300 border-emerald-500" : "bg-red-950 text-rose-300 border-rose-600"
               )}>
                 {rcdType === 'off' ? 'NO RCD' : rcdType === 'rcbo_30ma' ? '30mA RCBO' : rcdType === 'rcd_10ma' ? '10mA RCD' : '100mA'}
@@ -628,7 +628,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
                 type="button"
                 onClick={() => !isMuscleLocked && setRcdType('off')}
                 className={cn(
-                  "py-0.5 text-[9px] font-black uppercase rounded-lg border transition-all cursor-pointer truncate",
+                  "py-0.5 text-[9px] font-black uppercase rounded border transition-all cursor-pointer truncate text-center select-none",
                   rcdType === 'off'
                     ? "bg-red-950/90 text-rose-300 border-rose-500 shadow-sm"
                     : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
@@ -641,7 +641,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
                 type="button"
                 onClick={() => !isMuscleLocked && setRcdType('rcbo_30ma')}
                 className={cn(
-                  "py-0.5 text-[9px] font-black uppercase rounded-lg border transition-all cursor-pointer truncate",
+                  "py-0.5 text-[9px] font-black uppercase rounded border transition-all cursor-pointer truncate text-center select-none",
                   rcdType === 'rcbo_30ma'
                     ? "bg-emerald-950 text-emerald-300 border-emerald-500 shadow-sm"
                     : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
@@ -654,7 +654,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
                 type="button"
                 onClick={() => !isMuscleLocked && setRcdType('rcd_10ma')}
                 className={cn(
-                  "py-0.5 text-[9px] font-black uppercase rounded-lg border transition-all cursor-pointer truncate",
+                  "py-0.5 text-[9px] font-black uppercase rounded border transition-all cursor-pointer truncate text-center select-none",
                   rcdType === 'rcd_10ma'
                     ? "bg-cyan-950 text-cyan-300 border-cyan-500 shadow-sm"
                     : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
@@ -667,9 +667,9 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           </div>
 
           {/* IEC 60479-1 Impedance Parameters: Percentile & Contact Area */}
-          <div className="grid grid-cols-2 gap-1 p-1 bg-slate-950/60 border border-slate-850 rounded-xl shrink-0">
+          <div className="grid grid-cols-2 gap-1 p-0.5 bg-slate-950/60 border border-slate-850 rounded-lg shrink-0">
             <div className="space-y-0.5">
-              <label className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Population %ile</label>
+              <label className="text-[7.5px] font-black text-slate-400 uppercase tracking-wider">Population %ile</label>
               <div className="grid grid-cols-3 gap-0.5">
                 {[5, 50, 95].map((p) => (
                   <button
@@ -677,7 +677,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
                     type="button"
                     onClick={() => !isMuscleLocked && setPercentile(p as 5 | 50 | 95)}
                     className={cn(
-                      "py-0.5 text-[9px] font-black rounded border uppercase tracking-wider transition-all cursor-pointer select-none",
+                      "py-0.2 text-[8.5px] font-black rounded border uppercase tracking-wider transition-all cursor-pointer select-none",
                       percentile === p
                         ? "bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-sm"
                         : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
@@ -690,7 +690,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
             </div>
 
             <div className="space-y-0.5">
-              <label className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Contact Area</label>
+              <label className="text-[7.5px] font-black text-slate-400 uppercase tracking-wider">Contact Area</label>
               <div className="grid grid-cols-3 gap-0.5">
                 {(['large', 'medium', 'small'] as const).map((area) => (
                   <button
@@ -698,7 +698,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
                     type="button"
                     onClick={() => !isMuscleLocked && setContactArea(area)}
                     className={cn(
-                      "py-0.5 text-[8.5px] font-black rounded border uppercase tracking-wider transition-all cursor-pointer select-none",
+                      "py-0.2 text-[8px] font-black rounded border uppercase tracking-wider transition-all cursor-pointer select-none",
                       contactArea === area
                         ? "bg-orange-500/20 border-orange-500/60 text-orange-300 shadow-sm"
                         : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
@@ -712,8 +712,8 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           </div>
         </div>
 
-        {/* Desktop Large Prominent HOLD TO SHOCK Button */}
-        <div className="hidden lg:block pt-1.5 shrink-0">
+        {/* Desktop Prominent HOLD TO SHOCK Button */}
+        <div className="hidden lg:block pt-1 shrink-0">
           <motion.button
             type="button"
             onPointerDown={(e) => {
@@ -748,7 +748,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
               WebkitTapHighlightColor: 'transparent',
             }}
             className={cn(
-              "w-full py-3.5 px-3 text-xs md:text-sm font-black tracking-widest uppercase transition-all rounded-2xl flex flex-col items-center justify-center gap-0.5 select-none border-2 shadow-xl",
+              "w-full py-2 px-2 text-xs font-black tracking-widest uppercase transition-all rounded-xl flex flex-col items-center justify-center gap-0.5 select-none border-2 shadow-xl",
               isMuscleLocked
                 ? "bg-red-950/95 border-red-500 text-red-200 shadow-[0_0_35px_rgba(239,68,68,0.8)] cursor-not-allowed opacity-95 animate-pulse"
                 : isSimulating
@@ -757,8 +757,8 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
             )}
             aria-live="polite"
           >
-            <div className="flex items-center gap-2 text-center">
-              <Zap className={cn("w-4 h-4 fill-current shrink-0", (isSimulating || isMuscleLocked) && "animate-bounce")} />
+            <div className="flex items-center gap-1.5 text-center">
+              <Zap className={cn("w-3.5 h-3.5 fill-current shrink-0", (isSimulating || isMuscleLocked) && "animate-bounce")} />
               <span>
                 {isMuscleLocked
                   ? "🔒 MUSCLES LOCKED (CANNOT LET GO)"
@@ -767,12 +767,8 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
                     : "⚡ HOLD TO SHOCK"}
               </span>
             </div>
-            <span className="text-[8.5px] font-bold font-mono tracking-normal opacity-90">
-              {isMuscleLocked
-                ? "LET-GO EXCEEDED (>10mA) — PERSON LOST CONTROL"
-                : isSimulating
-                  ? "RELEASE BUTTON TO DISCONNECT"
-                  : "PRESS & HOLD BUTTON DOWN"}
+            <span className="text-[8px] font-bold font-mono tracking-normal opacity-90 leading-none">
+              {isMuscleLocked ? "STANDBY MUST DE-ENERGISE CIRCUIT" : "PRESS & HOLD BUTTON DOWN"}
             </span>
           </motion.button>
         </div>

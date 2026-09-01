@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DisclaimerModal } from './components/DisclaimerModal';
 import { GameOnboarding } from './components/GameOnboarding';
 import { TopNavigation } from './components/TopNavigation';
+import { MobileSectionNav } from './components/MobileSectionNav';
 import { ConfigModal } from './components/ConfigModal';
 import { ACShockSimulator } from './components/Simulators/ACShockSimulator';
 import { DCShockSimulator } from './components/Simulators/DCShockSimulator';
@@ -132,6 +133,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-[100dvh] overflow-hidden bg-[#0f172a] text-slate-100">
+      <MobileSectionNav />
       <TopNavigation 
         activeModule={activeModule} 
         onSelect={setActiveModule} 
