@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import { Activity, Zap, ShieldCheck, Lock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { computeECGSample, resolvePhysiologicalState } from '../utils/ecgGenerator';
 
 export interface MiniVitalsHUDProps {
   isSimulating: boolean;
@@ -23,39 +24,41 @@ export const MiniVitalsHUD: React.FC<MiniVitalsHUDProps> = ({
   isMuscleLocked,
   className
 }) => {
-  // Determine physiological risk color and label
-  const isVFib = isSimulating && !isPPESafe && currentMA >= 50;
+  // Resolve state
+  const { rhythm, targetParams } = resolvePhysiologicalState(
+    currentMA,
+    isSimulating,
+    isPPESafe,
+    0
+  );
+
+  const isVFib = rhythm === 'vfib';
   const isLetGo = isSimulating && !isPPESafe && currentMA >= 10;
   const isPerception = isSimulating && !isPPESafe && currentMA >= 0.5;
 
-  const statusColor = isVFib 
-    ? '#ef4444' 
-    : isLetGo 
-    ? '#f97316' 
-    : isPerception 
-    ? '#eab308' 
-    : '#10b981';
+  const statusColor = targetParams.statusColor;
 
-  // 1-second looping SVG ECG Waveform Path
+  // 1-second looping SVG ECG Waveform Path generated via McSharry model
   const ecgPath = useMemo(() => {
-    if (!isSimulating || isPPESafe) {
-      // Normal Sinus Rhythm (P - Q - R - S - T)
-      return "M 0 15 L 15 15 L 20 12 L 25 15 L 32 15 L 35 2 L 39 26 L 43 15 L 50 15 L 58 10 L 66 15 L 90 15 L 95 12 L 100 15 L 107 15 L 110 2 L 114 26 L 118 15 L 125 15 L 133 10 L 140 15 L 160 15";
-    }
+    const points: string[] = [];
+    const width = 160;
+    const timeSpan = 1.0; // 1 second span
 
-    if (isVFib) {
-      // Chaotic Ventricular Fibrillation (High-Frequency Coarse V-Fib)
-      return "M 0 15 Q 10 2 20 25 T 40 4 T 60 27 T 80 3 T 100 26 T 120 5 T 140 28 T 160 15";
+    for (let x = 0; x <= width; x += 2) {
+      const t = (x / width) * timeSpan;
+      // Evaluate McSharry sample for current rhythm params
+      const sample = computeECGSample(t, targetParams, 0);
+      // Center at Y=15, scale amplitude to fit 30px height box
+      const y = 15 - sample * 0.35;
+      const clampedY = Math.max(2, Math.min(28, y));
+      if (x === 0) {
+        points.push(`M ${x} ${clampedY.toFixed(1)}`);
+      } else {
+        points.push(`L ${x} ${clampedY.toFixed(1)}`);
+      }
     }
-
-    if (isLetGo) {
-      // Severe Tetanic Arrhythmia & Muscle Tremor
-      return "M 0 15 L 10 15 L 13 4 L 16 26 L 19 15 L 25 15 L 32 6 L 36 24 L 40 15 L 55 15 L 58 3 L 62 27 L 66 15 L 80 15 L 83 5 L 87 25 L 91 15 L 110 15 L 113 4 L 117 26 L 121 15 L 135 15 L 138 6 L 142 24 L 146 15 L 160 15";
-    }
-
-    // Mild Tachycardia
-    return "M 0 15 L 10 15 L 14 13 L 18 15 L 23 15 L 25 4 L 28 24 L 31 15 L 38 15 L 44 11 L 50 15 L 60 15 L 64 13 L 68 15 L 73 15 L 75 4 L 78 24 L 81 15 L 88 15 L 94 11 L 100 15 L 110 15 L 114 13 L 118 15 L 123 15 L 125 4 L 128 24 L 131 15 L 138 15 L 144 11 L 150 15 L 160 15";
-  }, [isSimulating, isPPESafe, isVFib, isLetGo]);
+    return points.join(' ');
+  }, [targetParams]);
 
   return (
     <div 

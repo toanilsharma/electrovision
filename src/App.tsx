@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DisclaimerModal } from './components/DisclaimerModal';
 import { GameOnboarding } from './components/GameOnboarding';
 import { TopNavigation } from './components/TopNavigation';
@@ -15,6 +15,7 @@ import { AssessmentModule } from './components/AssessmentModule';
 import { MCBLayoutShell } from './components/mcb/MCBLayoutShell';
 import { SafetyQuizPage } from './components/SafetyQuizPage';
 import { SimulationType, UserConfig } from './types';
+import { applyRouteSEO, resolveModuleFromPath, SEO_ROUTES } from './utils/seoData';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {
@@ -53,8 +54,32 @@ export default function App() {
   const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [userConfig, setUserConfig] = useState<UserConfig | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [activeModule, setActiveModule] = useState<SimulationType>('ac_shock');
+  const [activeModule, setActiveModule] = useState<SimulationType>(() => {
+    return typeof window !== 'undefined' ? resolveModuleFromPath(window.location.pathname) : 'ac_shock';
+  });
   const [resetKey, setResetKey] = useState<number>(0);
+
+  // Sync Dynamic SEO Metadata, OpenGraph & JSON-LD when activeModule changes
+  useEffect(() => {
+    applyRouteSEO(activeModule);
+
+    // Update browser URL sub-route history
+    const routeInfo = SEO_ROUTES[activeModule];
+    if (routeInfo && typeof window !== 'undefined' && window.location.pathname !== routeInfo.path) {
+      window.history.pushState({ module: activeModule }, '', routeInfo.path);
+    }
+  }, [activeModule]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const moduleFromUrl = resolveModuleFromPath(window.location.pathname);
+      setActiveModule(moduleFromUrl);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   if (showDisclaimer) {
     return <DisclaimerModal onAccept={() => setShowDisclaimer(false)} />;
@@ -160,3 +185,4 @@ export default function App() {
     </div>
   );
 }
+
