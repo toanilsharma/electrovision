@@ -89,17 +89,17 @@ export const IECZoneChart: React.FC<IECZoneChartProps> = ({
 
   const handleMouseLeave = () => setHoverPos(null);
 
-  // Heart current factor (F_H)
-  const heartFactor = shockPath === 'hand-to-foot' ? 1.0 : shockPath === 'hand-to-hand' ? 0.4 : 0;
-  const effectiveHeartCurrent = currentMA * heartFactor;
-
+  // Heart current factor (F_H): Hand-to-Hand = 0.4, Left-Hand-to-Feet = 1.0
+  const currentPathKey = shockPath === 'hand-to-hand' ? 'hand-to-hand' : shockPath === 'none' ? 'none' : 'hand-to-foot';
   const durationSec = Math.max(0.01, durationMs / 1000);
-  const currentZone = classifyIECZone(effectiveHeartCurrent, durationSec);
+  const currentZone = classifyIECZone(currentMA, durationSec, currentPathKey);
+  const effectiveHeartCurrent = currentZone.effectiveHeartCurrent;
+  const heartFactor = currentZone.heartCurrentFactor;
 
   // Hover zone classification
-  const hoverZone = hoverPos ? classifyIECZone(hoverPos.iMA, hoverPos.tSec) : null;
+  const hoverZone = hoverPos ? classifyIECZone(hoverPos.iMA, hoverPos.tSec, currentPathKey) : null;
 
-  // Generate c3 curve path points
+  // Generate c3 curve path points (I = 116 / sqrt(t))
   const c1Y = getY(0.5);
   const c2Y = getY(10);
 
@@ -361,6 +361,34 @@ export const IECZoneChart: React.FC<IECZoneChartProps> = ({
         </svg>
       </div>
 
+      {/* 6-Zone Status Strip with Live Active Highlight */}
+      <div className="grid grid-cols-6 gap-1 shrink-0 pt-0.5">
+        {(['AC-1', 'AC-2', 'AC-3', 'AC-4.1', 'AC-4.2', 'AC-4.3'] as const).map((z) => {
+          const isActive = (hoverZone ? hoverZone.zone : currentZone.zone) === z;
+          return (
+            <div
+              key={z}
+              className={cn(
+                "py-1 px-0.5 rounded-lg border text-center transition-all flex flex-col items-center justify-center select-none",
+                isActive
+                  ? "bg-slate-900 border-2 border-white shadow-lg ring-1 ring-white/50 scale-105 z-10"
+                  : "bg-slate-950/60 border-slate-800 opacity-60"
+              )}
+            >
+              <span className={cn(
+                "text-[9.5px] font-mono font-black",
+                isActive ? "text-white" : "text-slate-400"
+              )}>
+                {z}
+              </span>
+              <span className="text-[7.5px] font-sans font-bold text-slate-400 leading-none mt-0.5">
+                {z === 'AC-1' ? '<0.5mA' : z === 'AC-2' ? '≤10mA' : z === 'AC-3' ? 'Let-Go' : z === 'AC-4.1' ? '<5% VF' : z === 'AC-4.2' ? '<50% VF' : '>50% VF'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
       {/* Explanatory Banner Below Chart with Standards-Accurate Short Impact */}
       <div className={cn("p-2 rounded-lg border text-left flex items-center justify-between gap-2 transition-all shadow-md", hoverZone ? hoverZone.badgeStyle : currentZone.badgeStyle)}>
         <div className="flex flex-col min-w-0">
@@ -371,9 +399,14 @@ export const IECZoneChart: React.FC<IECZoneChartProps> = ({
             ⚡ {hoverZone ? hoverZone.shortImpact : currentZone.shortImpact}
           </span>
         </div>
-        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-black/60 text-white shrink-0 shadow">
-          {hoverPos ? `Hover: ${hoverPos.iMA.toFixed(1)} mA` : `I_heart: ${effectiveHeartCurrent.toFixed(1)} mA`}
-        </span>
+        <div className="flex flex-col items-end shrink-0">
+          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-black/60 text-white shadow">
+            {hoverPos ? `Hover: ${hoverPos.iMA.toFixed(1)} mA` : `I_heart: ${effectiveHeartCurrent.toFixed(1)} mA`}
+          </span>
+          <span className="text-[9px] font-mono text-slate-400 mt-0.5">
+            {`F_H=${heartFactor.toFixed(1)} (I_body=${currentMA.toFixed(1)}mA)`}
+          </span>
+        </div>
       </div>
     </div>
   );

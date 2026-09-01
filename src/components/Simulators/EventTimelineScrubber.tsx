@@ -107,9 +107,9 @@ export function EventTimelineScrubber({
           {isAutoPlaying ? (
             <button
               onClick={() => setIsAutoPlaying(false)}
-              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer border border-red-500 shadow"
+              className="min-h-[44px] px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer border border-red-500 shadow active:scale-95 transition-all select-none"
             >
-              <Square className="w-3.5 h-3.5 fill-white" /> PAUSE
+              <Square className="w-4 h-4 fill-white" /> PAUSE
             </button>
           ) : (
             <button
@@ -117,9 +117,9 @@ export function EventTimelineScrubber({
                 if (time >= 100) setTime(0);
                 setIsAutoPlaying(true);
               }}
-              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-slate-950 font-black text-xs rounded-lg flex items-center gap-1 cursor-pointer border border-green-500 shadow"
+              className="min-h-[44px] px-3.5 py-2 bg-green-600 hover:bg-green-700 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer border border-green-500 shadow active:scale-95 transition-all select-none"
             >
-              <Play className="w-3.5 h-3.5 fill-slate-950" /> IGNITE / RUN
+              <Play className="w-4 h-4 fill-slate-950" /> IGNITE / RUN
             </button>
           )}
 
@@ -128,13 +128,13 @@ export function EventTimelineScrubber({
               setIsAutoPlaying(false);
               setTime(0);
             }}
-            className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-750 rounded-lg cursor-pointer"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-750 rounded-xl cursor-pointer active:scale-95 transition-all select-none"
             title="Reset Timeline to 0ms"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-4 h-4" />
           </button>
 
-          <div className="bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-xs font-mono font-bold text-orange-400">
+          <div className="min-h-[44px] flex items-center bg-slate-950 px-3 py-1 rounded-xl border border-slate-800 text-xs font-mono font-bold text-orange-400">
             {time} ms
           </div>
         </div>
@@ -159,7 +159,7 @@ export function EventTimelineScrubber({
           )}
         </div>
 
-        {/* Interactive Native Range Input overlay for smooth drag */}
+        {/* Interactive Native Range Input overlay for smooth drag with 44px touch height */}
         <input
           type="range"
           min="0"
@@ -170,7 +170,7 @@ export function EventTimelineScrubber({
             setIsAutoPlaying(false);
             setTime(Number(e.target.value));
           }}
-          className="absolute left-0 top-6 w-full h-3 opacity-0 cursor-pointer z-30"
+          className="absolute left-0 top-1 w-full h-11 opacity-0 cursor-pointer z-30 touch-none"
         />
 
         {/* Animated Playhead Thumb */}
@@ -184,7 +184,7 @@ export function EventTimelineScrubber({
           <div className="w-3 h-5 bg-orange-400 border-2 border-white rounded-full shadow-lg" />
         </div>
 
-        {/* Event Markers along Timeline */}
+        {/* Event Markers along Timeline with touch target pads */}
         {markers.map((m) => {
           if (m.ms > 100) return null;
           const leftPercent = Math.min(95, Math.max(5, m.ms));
@@ -192,7 +192,7 @@ export function EventTimelineScrubber({
           return (
             <div
               key={m.id}
-              className="absolute top-0 -translate-x-1/2 flex flex-col items-center group cursor-pointer z-10"
+              className="absolute top-0 -translate-x-1/2 min-h-[44px] min-w-[44px] flex flex-col items-center justify-start group cursor-pointer z-10 p-0.5 select-none"
               style={{ left: `${leftPercent}%` }}
               onMouseEnter={() => setHoveredMarker(m.id)}
               onMouseLeave={() => setHoveredMarker(null)}

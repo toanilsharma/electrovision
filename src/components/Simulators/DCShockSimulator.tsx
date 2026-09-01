@@ -17,6 +17,7 @@ import { SafetyLessonModal } from '../SafetyLessonModal';
 import { EmergencyBystanderDock } from '../EmergencyBystanderDock';
 import { SeverityHeaderBanner } from '../SeverityHeaderBanner';
 import { calculateIECImpedance } from '@/src/utils/iec60479Impedance';
+import { calculateRCDTripTime } from '@/src/utils/iec61008RCD';
 import { IECZoneChart } from '../IECZoneChart';
 import { Volume2, VolumeX, Smartphone } from 'lucide-react';
 
@@ -264,19 +265,12 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
     const { r, heartFactor } = getResistance();
     const prospectiveCurrentMA = (voltage / r) * 1000;
 
-    // Check if DC RCD Type B protection is enabled and should trip
+    // Check if DC RCD Type B protection is enabled and should trip (IEC 62423 / IEC 61008-1)
     if (!isPPESafe && rcdType !== 'off') {
-      let thresholdMA = 30;
-      let tripMs = 30; // Standard IEC 62423 Type B DC trip time
-      if (rcdType === 'rcd_10ma') {
-        thresholdMA = 10;
-        tripMs = 18;
-      } else if (rcdType === 'rcd_100ma') {
-        thresholdMA = 100;
-        tripMs = 50;
-      }
+      const rcdResult = calculateRCDTripTime(prospectiveCurrentMA, rcdType);
 
-      if (prospectiveCurrentMA >= thresholdMA) {
+      if (rcdResult.shouldTrip) {
+        const tripMs = rcdResult.tripTimeMs;
         const scaledTripTime = Math.max(15, Math.round(tripMs / timeScale));
         rcdTripTimerRef.current = setTimeout(() => {
           setIsSimulating(false);
@@ -507,7 +501,7 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
                     type="button"
                     onClick={() => !isMuscleLocked && setTimeScale(scale)}
                     className={cn(
-                      "px-2 py-0.2 text-[9.5px] font-mono font-bold rounded-md border transition-all cursor-pointer",
+                      "min-w-[44px] min-h-[44px] inline-flex items-center justify-center px-2 py-1 text-[10px] font-mono font-black rounded-lg border transition-all cursor-pointer select-none",
                       timeScale === scale
                         ? "bg-teal-500/25 border-teal-400 text-teal-300 shadow-sm"
                         : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
@@ -536,14 +530,14 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
                 <button
                   type="button"
                   onClick={() => !isMuscleLocked && setSkinCondition('dry')}
-                  className={cn("py-1 text-[9.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'dry' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                  className={cn("min-h-[44px] flex items-center justify-center py-2 text-xs font-black rounded-xl border uppercase tracking-wider transition-all cursor-pointer select-none", skinCondition === 'dry' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
                 >
                   Dry
                 </button>
                 <button
                   type="button"
                   onClick={() => !isMuscleLocked && setSkinCondition('wet')}
-                  className={cn("py-1 text-[9.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer", skinCondition === 'wet' ? 'bg-blue-500/20 border-blue-500/60 text-blue-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                  className={cn("min-h-[44px] flex items-center justify-center py-2 text-xs font-black rounded-xl border uppercase tracking-wider transition-all cursor-pointer select-none", skinCondition === 'wet' ? 'bg-blue-500/20 border-blue-500/60 text-blue-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
                 >
                   Wet
                 </button>
@@ -556,14 +550,14 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
                 <button
                   type="button"
                   onClick={() => !isMuscleLocked && setPath('hand-to-hand')}
-                  className={cn("py-1 text-[9.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-hand' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                  className={cn("min-h-[44px] flex items-center justify-center py-2 text-xs font-black rounded-xl border uppercase tracking-wider transition-all cursor-pointer select-none", path === 'hand-to-hand' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
                 >
                   H-H
                 </button>
                 <button
                   type="button"
                   onClick={() => !isMuscleLocked && setPath('hand-to-foot')}
-                  className={cn("py-1 text-[9.5px] font-black rounded-lg border uppercase tracking-wider transition-all cursor-pointer", path === 'hand-to-foot' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
+                  className={cn("min-h-[44px] flex items-center justify-center py-2 text-xs font-black rounded-xl border uppercase tracking-wider transition-all cursor-pointer select-none", path === 'hand-to-foot' ? 'bg-teal-500/20 border-teal-500/60 text-teal-300 shadow-sm' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white')}
                 >
                   H-F
                 </button>
@@ -597,15 +591,37 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
         <div className="hidden lg:block pt-2 shrink-0">
           <motion.button
             type="button"
-            onPointerDown={(e) => !isMuscleLocked && handleStart()}
-            onPointerUp={(e) => !isMuscleLocked && handleStop()}
-            onPointerLeave={() => !isMuscleLocked && handleStop()}
-            onPointerCancel={() => !isMuscleLocked && handleStop()}
+            onPointerDown={(e) => {
+              if (isMuscleLocked) return;
+              e.preventDefault();
+              try {
+                e.currentTarget.setPointerCapture(e.pointerId);
+              } catch (_) {}
+              handleStart();
+            }}
+            onPointerUp={(e) => {
+              if (isMuscleLocked) return;
+              handleStop();
+            }}
+            onPointerCancel={() => {
+              if (isMuscleLocked) return;
+              handleStop();
+            }}
+            onLostPointerCapture={() => {
+              if (isMuscleLocked) return;
+              handleStop();
+            }}
             onContextMenu={(e) => e.preventDefault()}
             disabled={isMuscleLocked}
             animate={isMuscleLocked ? { x: [-3, 3, -2, 2, 0], y: [-2, 2, -1, 1, 0] } : {}}
             transition={{ duration: 0.125, repeat: isMuscleLocked ? Infinity : 0 }}
-            style={{ touchAction: 'none' }}
+            style={{
+              touchAction: 'none',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
+              WebkitTapHighlightColor: 'transparent',
+            }}
             className={cn(
               "w-full py-3.5 px-3 text-xs md:text-sm font-black tracking-widest uppercase transition-all rounded-2xl flex flex-col items-center justify-center gap-0.5 select-none border-2 shadow-xl",
               isMuscleLocked
@@ -640,15 +656,37 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
         <MobileActionButton>
           <motion.button
             type="button"
-            onPointerDown={(e) => !isMuscleLocked && handleStart()}
-            onPointerUp={(e) => !isMuscleLocked && handleStop()}
-            onPointerLeave={() => !isMuscleLocked && handleStop()}
-            onPointerCancel={() => !isMuscleLocked && handleStop()}
+            onPointerDown={(e) => {
+              if (isMuscleLocked) return;
+              e.preventDefault();
+              try {
+                e.currentTarget.setPointerCapture(e.pointerId);
+              } catch (_) {}
+              handleStart();
+            }}
+            onPointerUp={(e) => {
+              if (isMuscleLocked) return;
+              handleStop();
+            }}
+            onPointerCancel={() => {
+              if (isMuscleLocked) return;
+              handleStop();
+            }}
+            onLostPointerCapture={() => {
+              if (isMuscleLocked) return;
+              handleStop();
+            }}
             onContextMenu={(e) => e.preventDefault()}
             disabled={isMuscleLocked}
             animate={isMuscleLocked ? { x: [-3, 3, -2, 2, 0], y: [-2, 2, -1, 1, 0] } : {}}
             transition={{ duration: 0.125, repeat: isMuscleLocked ? Infinity : 0 }}
-            style={{ touchAction: 'none' }}
+            style={{
+              touchAction: 'none',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
+              WebkitTapHighlightColor: 'transparent',
+            }}
             className={cn(
               "w-full py-4 px-3 text-sm font-black tracking-widest uppercase transition-all rounded-2xl border-2 flex flex-col items-center justify-center gap-1 select-none shadow-2xl",
               isMuscleLocked

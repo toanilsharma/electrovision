@@ -106,7 +106,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#0f172a] text-slate-100">
+    <div className="flex flex-col h-[100dvh] overflow-hidden bg-[#0f172a] text-slate-100">
       <TopNavigation 
         activeModule={activeModule} 
         onSelect={setActiveModule} 

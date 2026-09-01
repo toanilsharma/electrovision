@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { triggerHaptic, HAPTIC_PATTERNS } from '@/src/utils/haptics';
 
 export function useAudioHaptics() {
   const audioCtx = useRef<AudioContext | null>(null);
@@ -39,10 +40,8 @@ export function useAudioHaptics() {
       osc.start();
       activeOsc.current = osc;
 
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        // Continuous vibration pattern while holding
-        navigator.vibrate([10000]); 
-      }
+      // Sharp initial shock jolt [80ms]
+      triggerHaptic(HAPTIC_PATTERNS.INITIAL_SHOCK);
     } catch (e) {
       console.warn("Audio/Haptic playback failed", e);
     }
@@ -54,9 +53,7 @@ export function useAudioHaptics() {
         activeOsc.current.stop(audioCtx.current.currentTime + 0.1);
         activeOsc.current = null;
       }
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(0);
-      }
+      triggerHaptic(0);
     } catch (e) {
       // ignore
     }
@@ -101,10 +98,7 @@ export function useAudioHaptics() {
       gainNode.connect(ctx.destination);
       
       noise.start();
-      
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-         navigator.vibrate([200, 50, 200, 50, 400]);
-      }
+      triggerHaptic(HAPTIC_PATTERNS.ARC_BLAST);
     } catch (e) {
       console.warn("Audio/Haptic playback failed", e);
     }
@@ -114,9 +108,15 @@ export function useAudioHaptics() {
   const fibNodes = useRef<{ osc1?: OscillatorNode; osc2?: OscillatorNode; gain?: GainNode; noise?: AudioBufferSourceNode; interval?: ReturnType<typeof setInterval> } | null>(null);
 
   const triggerMuscleLockVibration = useCallback(() => {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([100, 50, 100]);
-    }
+    triggerHaptic(HAPTIC_PATTERNS.MUSCLE_LOCK);
+  }, []);
+
+  const triggerBreakerTripHaptic = useCallback(() => {
+    triggerHaptic(HAPTIC_PATTERNS.BREAKER_TRIP);
+  }, []);
+
+  const triggerVFibHaptic = useCallback(() => {
+    triggerHaptic(HAPTIC_PATTERNS.VF_ASYSTOLE);
   }, []);
 
   const stopHeartbeat = useCallback(() => {

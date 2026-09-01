@@ -15,7 +15,7 @@ export function DisclaimerModal({ onAccept }: DisclaimerProps) {
         <motion.div
           initial={{ opacity: 0, scale: 0.98, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          className="w-full max-w-full sm:max-w-xl lg:max-w-4xl xl:max-w-5xl overflow-hidden bg-slate-900 border shadow-[0_0_50px_rgba(249,115,22,0.25)] border-orange-500/40 rounded-2xl flex flex-col max-h-[calc(100vh-4.5rem)]"
+          className="w-full max-w-full sm:max-w-xl lg:max-w-4xl xl:max-w-5xl overflow-hidden bg-slate-900 border shadow-[0_0_50px_rgba(249,115,22,0.25)] border-orange-500/40 rounded-2xl flex flex-col max-h-[calc(100dvh-4.5rem)]"
         >
           {/* Top Commercial Tool Header */}
           <div className="px-3 py-3 sm:px-6 sm:py-4 border-b bg-gradient-to-r from-slate-900 via-slate-900/90 to-orange-950/40 border-white/10 flex items-center justify-between gap-3 shrink-0">

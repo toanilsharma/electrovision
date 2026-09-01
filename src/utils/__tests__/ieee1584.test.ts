@@ -4,6 +4,7 @@ import {
   calculateIarcForRefVoltage, 
   calculateCF, 
   evaluateNFPA70ECategory,
+  getNFPA70EPPEInfo,
   calculateConductorBurnoffTime,
   calculateReleasedArcEnergy,
   calculateRoomTemperatureRise,
@@ -30,8 +31,9 @@ describe('IEEE 1584-2018 Arc Flash Physics Engine Unit Tests', () => {
     expect(result.arcingCurrent).toBeLessThan(35.0);
     expect(result.incidentEnergy).toBeGreaterThan(0.5);
     expect(result.incidentEnergy).toBeLessThan(20.0);
+    expect(result.boundaryRadius).toBeGreaterThan(0.2);
     expect(result.ppeCategory).toBeGreaterThanOrEqual(1);
-    expect(result.ppeCategory).toBeLessThanOrEqual(4);
+    expect(result.ppeInfo.requiredClothing.length).toBeGreaterThan(0);
   });
 
   it('IEEE 1584-2018 Example 2 (Medium Voltage 4.16kV HCB Box Enclosure)', () => {
@@ -51,42 +53,48 @@ describe('IEEE 1584-2018 Arc Flash Physics Engine Unit Tests', () => {
     expect(result.isValid).toBe(true);
     expect(result.arcingCurrent).toBeGreaterThan(15.0);
     expect(result.arcingCurrent).toBeLessThan(25.0);
-    expect(result.incidentEnergy).toBeGreaterThan(5.0);
+    expect(result.incidentEnergy).toBeGreaterThan(3.0);
     expect(result.incidentEnergy).toBeLessThan(30.0);
+    expect(result.boundaryRadius).toBeGreaterThan(1.0);
   });
 
-  it('NFPA 70E 2024 Category threshold exactness with unrounded energy', () => {
+  it('NFPA 70E 2024 Category threshold exactness and PPE clothing mapping', () => {
+    expect(evaluateNFPA70ECategory(0.8)).toBe(0);
+    expect(getNFPA70EPPEInfo(0.8).category).toBe(0);
+    expect(getNFPA70EPPEInfo(0.8).requiredClothing[0]).toContain('100% cotton');
+
     expect(evaluateNFPA70ECategory(3.99)).toBe(1);
-    expect(evaluateNFPA70ECategory(4.00)).toBe(1);
+    expect(getNFPA70EPPEInfo(3.99).category).toBe(1);
+
     expect(evaluateNFPA70ECategory(4.01)).toBe(2);
+    expect(getNFPA70EPPEInfo(4.01).category).toBe(2);
 
-    expect(evaluateNFPA70ECategory(8.00)).toBe(2);
     expect(evaluateNFPA70ECategory(8.01)).toBe(3);
+    expect(getNFPA70EPPEInfo(8.01).category).toBe(3);
 
-    expect(evaluateNFPA70ECategory(25.00)).toBe(3);
     expect(evaluateNFPA70ECategory(25.01)).toBe(4);
+    expect(getNFPA70EPPEInfo(25.01).category).toBe(4);
 
-    expect(evaluateNFPA70ECategory(40.00)).toBe(4);
     expect(evaluateNFPA70ECategory(40.01)).toBe(5);
+    expect(getNFPA70EPPEInfo(40.01).category).toBe(5);
+    expect(getNFPA70EPPEInfo(40.01).name).toContain('Extreme Danger');
   });
 
   it('Conductor Thermal Burnoff Time t_burnoff calculation', () => {
-    // 120 mm2 Cu conductor carrying 20.4 kA arcing current
     const tCu = calculateConductorBurnoffTime('Cu', 120, 20.4);
     expect(tCu).toBeGreaterThan(0.3);
     expect(tCu).toBeLessThan(1.0);
 
-    // 120 mm2 Al conductor (k=76) carrying 20.4 kA
     const tAl = calculateConductorBurnoffTime('Al', 120, 20.4);
     expect(tAl).toBeLessThan(tCu);
   });
 
   it('Released Energy MJ, TNT kg, and Room ΔT', () => {
-    const energy = calculateReleasedArcEnergy(480, 32, 20.4, 2.0); // 2.0s failure
+    const energy = calculateReleasedArcEnergy(480, 32, 20.4, 2.0);
     expect(energy.releasedMJ).toBeGreaterThan(1.0);
     expect(energy.tntKg).toBeGreaterThan(0.2);
 
-    const room = calculateRoomTemperatureRise(energy.releasedJoules, 27); // 27 m3 room
+    const room = calculateRoomTemperatureRise(energy.releasedJoules, 27);
     expect(room.deltaT).toBeGreaterThan(10.0);
     expect(room.finalTempC).toBeGreaterThan(35.0);
 

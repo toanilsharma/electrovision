@@ -132,9 +132,17 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
         </div>
       </div>
       
-      {/* Scrollable Domain-Filtered Module Selector Row */}
+      {/* Scrollable Domain-Filtered Module Selector Row with Edge Fade Mask and Snap */}
       <div className="relative px-3 sm:px-4 pb-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+        <div 
+          style={{
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch',
+            WebkitMaskImage: 'linear-gradient(to right, transparent, black 5%, black 95%, transparent)',
+            maskImage: 'linear-gradient(to right, transparent, black 5%, black 95%, transparent)',
+          }}
+          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"
+        >
           {visibleModules.map(m => {
             const isActive = m.id === activeModule;
             const Icon = m.icon;
@@ -142,14 +150,15 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
               <button
                 key={m.id}
                 onClick={() => handleModuleSelect(m.id)}
+                style={{ scrollSnapAlign: 'start' }}
                 className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer border select-none",
+                  "flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer border select-none",
                   isActive
                     ? "bg-orange-500 text-slate-950 border-orange-400 shadow-md shadow-orange-500/10"
                     : "bg-slate-950/60 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white"
                 )}
               >
-                <Icon className={cn("w-3.5 h-3.5", isActive ? "text-slate-950" : "text-orange-400")} />
+                <Icon className={cn("w-4 h-4", isActive ? "text-slate-950" : "text-orange-400")} />
                 <span>{m.label}</span>
               </button>
             );

@@ -64,10 +64,10 @@ export const EmergencyBystanderDock: React.FC<EmergencyBystanderDockProps> = ({
               <CheckCircle2 className="w-8 h-8 text-emerald-400 shrink-0 animate-bounce" />
               <div className="flex flex-col text-left min-w-0">
                 <span className="text-sm sm:text-base font-black tracking-wider uppercase text-emerald-300 font-sans leading-tight">
-                  ✅ POWER SWITCHED OFF!
+                  ✅ CIRCUIT ISOLATED. LIFE SAVED.
                 </span>
                 <span className="text-xs sm:text-sm font-mono font-bold text-emerald-200 mt-0.5">
-                  The electricity is cut. Victim released safely!
+                  Standby person stopped the switch. Current cut to 0 mA.
                 </span>
               </div>
             </motion.div>
@@ -91,7 +91,7 @@ export const EmergencyBystanderDock: React.FC<EmergencyBystanderDockProps> = ({
                     🚨 CANNOT LET GO OF WIRE!
                   </span>
                   <p className="text-xs sm:text-sm font-sans font-bold text-red-100 leading-snug mt-1">
-                    Hand muscles frozen tight! Another person must switch off power!
+                    Hand muscles frozen tight! Standby person must stop switch!
                   </p>
                 </div>
               </div>
@@ -105,7 +105,7 @@ export const EmergencyBystanderDock: React.FC<EmergencyBystanderDockProps> = ({
               >
                 <div className="flex items-center justify-center gap-2 text-center text-sm sm:text-base md:text-lg leading-none font-black text-slate-950">
                   <Zap className="w-5 h-5 fill-slate-950 text-slate-950 shrink-0 animate-bounce" />
-                  <span>⚡ BYSTANDER: SWITCH OFF POWER</span>
+                  <span>⚡ STANDBY PERSON: STOP SWITCH</span>
                 </div>
                 <span className="text-xs sm:text-sm font-mono font-black text-slate-950 opacity-95 tracking-normal mt-0.5">
                   (PRESS ESC OR SPACE BAR)

@@ -1,5 +1,17 @@
 /**
- * IEC 60479-1:2018 Zone Classification & Curve c3 Digitized Model
+ * IEC 60479-1:2018 Zone Classification & Curve c3 Ventricular Fibrillation (VF) Engine
+ * 
+ * Implements:
+ * - Heart Current Factors (F_H): Hand-to-Hand = 0.4, Left-Hand-to-Feet = 1.0
+ * - Mathematical threshold for curve c3 (5% VF probability for 50kg body):
+ *   I = 116 / sqrt(t) for t < 1s (clamped to 40mA minimum for t >= 1s)
+ * - Defined time-current zones:
+ *   AC-1: < 0.5 mA (No perception)
+ *   AC-2: 0.5 to 10 mA (Muscle contraction, no harmful physiological effects)
+ *   AC-3: 10 mA to c3 (Reversible effects, muscle lock, let-go exceeded)
+ *   AC-4.1: c3 to 1.5*c3 (Up to 5% VF probability)
+ *   AC-4.2: 1.5*c3 to 2.5*c3 (5–50% VF probability)
+ *   AC-4.3: > 2.5*c3 (>50% VF probability)
  */
 
 export interface IECZoneResult {
@@ -10,129 +22,128 @@ export interface IECZoneResult {
   color: string;
   badgeStyle: string;
   vfibProbability: string;
+  heartCurrentFactor: number;
+  effectiveHeartCurrent: number;
 }
 
-// Digitized c3 curve anchors from IEC 60479-1:2018 Figure 20
-// Pairs of (timeInSeconds, currentInMA)
-export const C3_CURVE_ANCHORS = [
-  { t: 10.0, c3: 40.0 },
-  { t: 1.0, c3: 50.0 },
-  { t: 0.5, c3: 63.0 },
-  { t: 0.2, c3: 80.0 },
-  { t: 0.1, c3: 100.0 },
-  { t: 0.05, c3: 120.0 },
-  { t: 0.02, c3: 160.0 },
-  { t: 0.01, c3: 200.0 }
-];
+// IEC 60479-1 Table 12 Heart Current Factor (F_H)
+export const HEART_CURRENT_FACTORS: Record<string, number> = {
+  'hand-to-hand': 0.4,
+  'hand-to-foot': 1.0,
+  'left-hand-to-feet': 1.0,
+  'none': 0.0,
+};
 
 /**
- * Log-log interpolation of curve c3 threshold (in mA) at a given shock duration t (in seconds).
+ * Calculates curve c3 threshold (in mA) based on IEC 60479-1 / Dalziel 50kg formula:
+ * I = 116 / sqrt(t) for t < 1s
  */
 export function getC3Threshold(durationSec: number): number {
-  const t = Math.max(0.01, Math.min(10.0, durationSec));
-  const anchors = C3_CURVE_ANCHORS;
-
-  if (t >= anchors[0].t) return anchors[0].c3;
-  if (t <= anchors[anchors.length - 1].t) return anchors[anchors.length - 1].c3;
-
-  for (let i = 0; i < anchors.length - 1; i++) {
-    const a1 = anchors[i];
-    const a2 = anchors[i + 1];
-    if (t <= a1.t && t >= a2.t) {
-      // Log-log linear interpolation
-      const logT = Math.log10(t);
-      const logT1 = Math.log10(a1.t);
-      const logT2 = Math.log10(a2.t);
-      const logC1 = Math.log10(a1.c3);
-      const logC2 = Math.log10(a2.c3);
-
-      const frac = (logT - logT1) / (logT2 - logT1);
-      const logC3 = logC1 + frac * (logC2 - logC1);
-      return Math.pow(10, logC3);
-    }
+  const t = Math.max(0.005, durationSec);
+  if (t < 1.0) {
+    return 116 / Math.sqrt(t);
   }
-
-  return 50.0;
+  return Math.max(40.0, 116 / Math.sqrt(t));
 }
 
 /**
- * Classifies body current (in mA) and duration (in seconds) into IEC 60479-1 Zones (AC-1 to AC-4.3).
+ * Classifies body current (in mA) and duration (in seconds) into IEC 60479-1 Zones.
+ * Applies Heart Current Factor F_H (0.4 for hand-to-hand, 1.0 for hand-to-foot / left-hand-to-feet).
  */
-export function classifyIECZone(currentMA: number, durationSec: number): IECZoneResult {
+export function classifyIECZone(
+  currentMA: number,
+  durationSec: number,
+  path: 'hand-to-hand' | 'hand-to-foot' | 'left-hand-to-feet' | 'none' = 'hand-to-foot'
+): IECZoneResult {
+  const fh = HEART_CURRENT_FACTORS[path] ?? 1.0;
+  const effectiveHeartCurrent = currentMA * fh;
+
   const c1 = 0.5; // Perception threshold (0.5 mA)
   const c2 = 10.0; // Let-go threshold (10 mA)
   const c3 = getC3Threshold(durationSec);
 
-  if (currentMA <= c1) {
+  if (effectiveHeartCurrent < c1) {
     return {
       zone: 'AC-1',
-      label: 'AC-1 — Imperceptible Perception Zone',
-      description: 'Current is below 0.5 mA perception threshold. No muscle response or risk.',
-      shortImpact: 'No perception. Below 0.5mA sensory threshold. Zero physiological risk.',
+      label: 'AC-1 — Imperceptible Perception Zone (<0.5 mA)',
+      description: 'Current is below 0.5 mA perception threshold. No muscle response or physiological risk.',
+      shortImpact: 'No perception (<0.5mA). Zero physiological risk.',
       color: '#10b981',
       badgeStyle: 'bg-emerald-950 border-emerald-400 text-emerald-300',
-      vfibProbability: '0%'
+      vfibProbability: '0%',
+      heartCurrentFactor: fh,
+      effectiveHeartCurrent
     };
   }
 
-  if (currentMA <= c2) {
+  if (effectiveHeartCurrent <= c2) {
     return {
       zone: 'AC-2',
-      label: 'AC-2 — Perception & Involuntary Muscle Twitch Zone',
-      description: 'Current (0.5–10 mA) causes tingling and involuntary muscle contractions, but letting go remains possible.',
-      shortImpact: 'Tingling & muscle twitching (0.5–10mA). Letting go remains possible.',
+      label: 'AC-2 — Perception & Involuntary Twitch (0.5 - 10 mA)',
+      description: 'Current (0.5–10 mA) causes tingling and involuntary muscle contractions; letting go remains possible with no harmful physiological effects.',
+      shortImpact: 'Muscle contractions (0.5–10mA). Letting go possible, no harmful physiological effects.',
       color: '#eab308',
       badgeStyle: 'bg-yellow-950 border-yellow-400 text-yellow-200',
-      vfibProbability: '0%'
+      vfibProbability: '0%',
+      heartCurrentFactor: fh,
+      effectiveHeartCurrent
     };
   }
 
-  if (currentMA <= c3) {
+  if (effectiveHeartCurrent <= c3) {
     return {
       zone: 'AC-3',
-      label: 'AC-3 — Muscle Lock & Respiratory Distress Zone',
-      description: 'Current (>10 mA to c3 curve) causes flexor tetanization (cannot let go) and chest muscle cramps. No V-fib.',
-      shortImpact: 'Muscle tetanization (>10mA); victim locked to conductor. Reversible cardiac & respiratory distress.',
+      label: 'AC-3 — Muscle Lock & Respiratory Distress (10 mA to Let-Go/c3)',
+      description: 'Current (>10 mA to c3 threshold) causes flexor tetanization (cannot let go) and reversible cardiac/respiratory distress with no ventricular fibrillation.',
+      shortImpact: 'Reversible effects & muscle lock (>10mA). Cannot let go; no ventricular fibrillation.',
       color: '#f97316',
       badgeStyle: 'bg-orange-950 border-orange-400 text-amber-100',
-      vfibProbability: '0%'
+      vfibProbability: '0%',
+      heartCurrentFactor: fh,
+      effectiveHeartCurrent
     };
   }
 
   const c41Max = c3 * 1.5;
   const c42Max = c3 * 2.5;
 
-  if (currentMA <= c41Max) {
+  if (effectiveHeartCurrent <= c41Max) {
     return {
       zone: 'AC-4.1',
-      label: 'AC-4.1 — Pathophysiological Trauma (<5% V-Fib Risk)',
-      description: 'Pathological effects occur (cardiac arrest risk <5%, reversible arrhythmia, severe burns).',
-      shortImpact: 'Organic damage & atrial fibrillation risk (<5% V-fib risk). Reversible cardiac arrhythmia.',
+      label: 'AC-4.1 — Pathophysiological Trauma (Up to 5% VF Probability)',
+      description: 'Dangerous current exceeding c3 threshold. Ventricular fibrillation probability is up to 5% with reversible arrhythmia risk.',
+      shortImpact: 'Up to 5% VF probability. Pathophysiological trauma & reversible arrhythmia.',
       color: '#f43f5e',
       badgeStyle: 'bg-rose-950 border-rose-400 text-rose-100',
-      vfibProbability: '< 5%'
+      vfibProbability: '< 5%',
+      heartCurrentFactor: fh,
+      effectiveHeartCurrent
     };
   }
 
-  if (currentMA <= c42Max) {
+  if (effectiveHeartCurrent <= c42Max) {
     return {
       zone: 'AC-4.2',
-      label: 'AC-4.2 — Dangerous V-Fib Risk (<50% V-Fib Risk)',
-      description: 'Ventricular fibrillation probability up to 50%. Immediate emergency bystander power isolation required.',
-      shortImpact: 'High risk of fatal ventricular fibrillation (~50% V-fib risk). Severe thermal burns & asphyxia.',
+      label: 'AC-4.2 — Dangerous V-Fib Risk (5 - 50% VF Probability)',
+      description: 'Ventricular fibrillation probability ranges between 5% and 50%. Immediate emergency bystander circuit disconnection required.',
+      shortImpact: '5% to 50% VF probability. Severe cardiac fibrillation & asphyxia risk.',
       color: '#ef4444',
       badgeStyle: 'bg-red-950 border-red-500 text-white',
-      vfibProbability: '< 50%'
+      vfibProbability: '5 - 50%',
+      heartCurrentFactor: fh,
+      effectiveHeartCurrent
     };
   }
 
   return {
     zone: 'AC-4.3',
-    label: 'AC-4.3 — Lethal Ventricular Fibrillation Zone (>50% V-Fib)',
-    description: 'High probability of fatal ventricular fibrillation (>50%), cardiac arrest, and deep tissue burns.',
-    shortImpact: 'Extreme risk of fatal ventricular fibrillation (>50% V-fib risk). Immediate heart arrest.',
+    label: 'AC-4.3 — Lethal Ventricular Fibrillation (>50% VF Probability)',
+    description: 'High probability of fatal ventricular fibrillation (>50%), irreversible cardiac arrest, and massive tissue damage.',
+    shortImpact: '>50% VF probability. Lethal ventricular fibrillation & immediate cardiac arrest.',
     color: '#991b1b',
     badgeStyle: 'bg-red-950 border-2 border-red-500 text-white animate-pulse',
-    vfibProbability: '> 50%'
+    vfibProbability: '> 50%',
+    heartCurrentFactor: fh,
+    effectiveHeartCurrent
   };
 }

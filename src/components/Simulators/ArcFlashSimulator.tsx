@@ -1265,25 +1265,57 @@ NFPA 70E 2024 Category: PPE Category ${ppeCategory}`;
                 </div>
               )}
 
-              {/* TAB 2: CONSEQUENCE LADDER */}
+              {/* TAB 2: NFPA 70E PPE & CONSEQUENCE LADDER */}
               {drawerTab === 'ladder' && (
-                <div className="space-y-2 text-xs">
-                  <h4 className="text-xs font-black text-orange-400 uppercase">Stoll / NFPA 70E Physiological Burn Ladder</h4>
+                <div className="space-y-3 text-xs">
+                  {/* NFPA 70E Active Category Breakdown */}
+                  <div className={cn("p-3 rounded-xl border space-y-2 text-left shadow-lg", ieeeResult.ppeInfo.badgeStyle)}>
+                    <div className="flex items-center justify-between border-b border-white/20 pb-1.5">
+                      <span className="font-black text-sm uppercase tracking-wider">{ieeeResult.ppeInfo.name}</span>
+                      <span className="font-mono font-bold text-xs bg-black/60 px-2 py-0.5 rounded">
+                        E = {incidentEnergy.toFixed(2)} cal/cm²
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-bold opacity-90">{ieeeResult.ppeInfo.summary}</p>
+                    
+                    <div>
+                      <span className="text-[10px] font-black uppercase text-amber-300 block mb-1">Required Arc-Rated Clothing:</span>
+                      <ul className="list-disc list-inside space-y-0.5 text-[10.5px] font-sans text-slate-100">
+                        {ieeeResult.ppeInfo.requiredClothing.map((c, i) => (
+                          <li key={i}>{c}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-black uppercase text-amber-300 block mb-1">Required Protective Equipment (PPE):</span>
+                      <ul className="list-disc list-inside space-y-0.5 text-[10.5px] font-sans text-slate-100">
+                        {ieeeResult.ppeInfo.requiredPPE.map((p, i) => (
+                          <li key={i}>{p}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <h4 className="text-xs font-black text-orange-400 uppercase pt-2">Stoll / NFPA 70E Physiological Burn Ladder</h4>
                   <div className="space-y-1.5">
-                    <div className={cn("p-2 rounded border", incidentEnergy >= 1.2 ? "bg-yellow-950 border-yellow-500 text-yellow-300 font-bold" : "bg-slate-950 border-slate-800 text-slate-500")}>
-                      1.2 cal/cm² — Onset of 2nd-degree burn
+                    <div className={cn("p-2 rounded border", incidentEnergy < 1.2 ? "bg-emerald-950 border-emerald-500 text-emerald-300 font-bold" : "bg-slate-950 border-slate-800 text-slate-500")}>
+                      &lt; 1.2 cal/cm² — Category 0 (No second-degree burn risk)
                     </div>
-                    <div className={cn("p-2 rounded border", incidentEnergy >= 4.0 ? "bg-orange-950 border-orange-500 text-orange-300 font-bold" : "bg-slate-950 border-slate-800 text-slate-500")}>
-                      4.0 cal/cm² — Category 1 PPE threshold
+                    <div className={cn("p-2 rounded border", incidentEnergy >= 1.2 && incidentEnergy <= 4.0 ? "bg-yellow-950 border-yellow-500 text-yellow-300 font-bold" : "bg-slate-950 border-slate-800 text-slate-500")}>
+                      1.2 to 4.0 cal/cm² — Category 1 (Min 4 cal/cm² AR clothing)
                     </div>
-                    <div className={cn("p-2 rounded border", incidentEnergy >= 8.0 ? "bg-amber-950 border-amber-500 text-amber-300 font-bold" : "bg-slate-950 border-slate-800 text-slate-500")}>
-                      8.0 cal/cm² — Clothing ignition / 3rd-degree burn
+                    <div className={cn("p-2 rounded border", incidentEnergy > 4.0 && incidentEnergy <= 8.0 ? "bg-orange-950 border-orange-500 text-orange-300 font-bold" : "bg-slate-950 border-slate-800 text-slate-500")}>
+                      4.0 to 8.0 cal/cm² — Category 2 (Min 8 cal/cm² AR clothing & balaclava)
                     </div>
-                    <div className={cn("p-2 rounded border", incidentEnergy >= 25.0 ? "bg-red-950 border-red-500 text-red-300 font-bold" : "bg-slate-950 border-slate-800 text-slate-500")}>
-                      25.0 cal/cm² — Severe 3rd-degree burns
+                    <div className={cn("p-2 rounded border", incidentEnergy > 8.0 && incidentEnergy <= 25.0 ? "bg-amber-950 border-amber-500 text-amber-300 font-bold" : "bg-slate-950 border-slate-800 text-slate-500")}>
+                      8.0 to 25.0 cal/cm² — Category 3 (Min 25 cal/cm² arc flash suit)
                     </div>
-                    <div className={cn("p-2 rounded border", incidentEnergy >= 40.0 ? "bg-red-950 border-2 border-red-500 text-red-200 font-black animate-pulse" : "bg-slate-950 border-slate-800 text-slate-500")}>
-                      &gt;40 cal/cm² — Fatal exposure probable
+                    <div className={cn("p-2 rounded border", incidentEnergy > 25.0 && incidentEnergy <= 40.0 ? "bg-red-950 border-red-500 text-red-300 font-bold" : "bg-slate-950 border-slate-800 text-slate-500")}>
+                      25.0 to 40.0 cal/cm² — Category 4 (Min 40 cal/cm² multi-layer flash suit)
+                    </div>
+                    <div className={cn("p-2 rounded border", incidentEnergy > 40.0 ? "bg-red-950 border-2 border-red-500 text-red-200 font-black animate-pulse" : "bg-slate-950 border-slate-800 text-slate-500")}>
+                      &gt; 40.0 cal/cm² — EXTREME DANGER (Work de-energized only)
                     </div>
                   </div>
                 </div>

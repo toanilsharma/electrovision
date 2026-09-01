@@ -6,8 +6,8 @@
  * 2. All 5 electrode configurations: VCB, VCBB, HCB, VOA, HOA
  * 3. Enclosure Size Correction (EES & Cf)
  * 4. Normalized Incident Energy (En) at 610mm working distance
- * 5. Time-linear scaling & distance exponent x
- * 6. Incident Energy E (cal/cm² & kJ/m²) and Arc Flash Boundary Db (meters)
+ * 5. Incident Energy E (cal/cm² & kJ/m²) and Arc Flash Boundary AFB (meters / feet)
+ * 6. NFPA 70E 2024 PPE Category (0 to 4 / Dangerous) and required clothing list
  * 7. Breaker Failure (No Trip) Mode: Conductor burnoff time, released MJ, TNT kg, Room ΔT
  */
 
@@ -27,6 +27,16 @@ export interface IEEE1584Input {
   grounding: GroundingSystem; // solidly_grounded or ungrounded
 }
 
+export interface NFPA70EPPEInfo {
+  category: number; // 0, 1, 2, 3, 4, or 5 (5 = Dangerous >40 cal/cm2)
+  name: string;
+  minRatingCalCm2: number;
+  requiredClothing: string[];
+  requiredPPE: string[];
+  summary: string;
+  badgeStyle: string;
+}
+
 export interface IEEE1584Result {
   arcingCurrent: number; // kA
   arcingCurrentReduced: number; // kA (reduced arcing current Ia_min)
@@ -38,7 +48,8 @@ export interface IEEE1584Result {
   cf: number; // Enclosure Correction Factor CF
   ees: number; // Equivalent Enclosure Size EES
   xFactor: number; // Distance exponent x
-  ppeCategory: number; // 1, 2, 3, 4, or 5 (5 = Dangerous >40 cal/cm2)
+  ppeCategory: number; // 0, 1, 2, 3, 4, or 5 (5 = Dangerous >40 cal/cm2)
+  ppeInfo: NFPA70EPPEInfo; // Detailed NFPA 70E clothing requirements
   isExtrapolated: boolean;
   isValid: boolean;
   validationMessages: string[];
@@ -59,9 +70,6 @@ export interface IEEE1584Result {
 
 /**
  * Calculates Conductor Thermal Burnoff Time t_burnoff per IEEE / IEC k²S²/I²
- * @param material Conductor material ('Cu' | 'Al')
- * @param sizeMm2 Cross-section in mm² (35 to 600 mm²)
- * @param arcingCurrentKa Arcing current Ia in kA
  */
 export function calculateConductorBurnoffTime(material: 'Cu' | 'Al', sizeMm2: number, arcingCurrentKa: number): number {
   const k = material === 'Cu' ? 115 : 76;
@@ -73,18 +81,12 @@ export function calculateConductorBurnoffTime(material: 'Cu' | 'Al', sizeMm2: nu
 
 /**
  * Calculates Released Total Arc Energy (MJ) and TNT Equivalent (kg TNT)
- * @param voltageV System Voltage in Volts
- * @param gapMm Gap in mm
- * @param arcingCurrentKa Arcing current Ia in kA
- * @param clearingTimeSec Clearing time t in seconds
  */
 export function calculateReleasedArcEnergy(voltageV: number, gapMm: number, arcingCurrentKa: number, clearingTimeSec: number) {
-  // Arc Voltage Varc using 15 V/cm gradient model with a 100V floor
   const gapCm = gapMm / 10;
   const arcVoltageV = Math.max(100, Math.min(voltageV * 0.75, 15 * gapCm));
   const Iamps = arcingCurrentKa * 1000;
   
-  // Total 3-phase released thermal/mechanical energy Etot = 3 * Varc * I * t
   const releasedJoules = 3 * arcVoltageV * Iamps * clearingTimeSec;
   const releasedMJ = releasedJoules / 1000000;
   const tntKg = releasedMJ / 4.184; // 1 kg TNT = 4.184 MJ
@@ -122,7 +124,7 @@ export function calculateOverpressure(releasedMJ: number, enclosureVolumeM3: num
 }
 
 /**
- * Evaluates NFPA 70E 2024 PPE Category using UNROUNDED incident energy
+ * Evaluates NFPA 70E 2024 PPE Category number (0-5)
  */
 export function evaluateNFPA70ECategory(unroundedEnergy: number): number {
   if (unroundedEnergy > 40.0) return 5; // Dangerous >40 cal/cm2
@@ -130,11 +132,133 @@ export function evaluateNFPA70ECategory(unroundedEnergy: number): number {
   if (unroundedEnergy > 8.0)  return 3; // Category 3 (8.0 < E <= 25.0)
   if (unroundedEnergy > 4.0)  return 2; // Category 2 (4.0 < E <= 8.0)
   if (unroundedEnergy >= 1.2) return 1; // Category 1 (1.2 <= E <= 4.0)
-  return 0;
+  return 0; // Category 0 (< 1.2 cal/cm2)
 }
 
 /**
- * Calculates IEEE 1584-2018 Arcing Current
+ * Returns full NFPA 70E clothing and PPE requirements for a given incident energy
+ */
+export function getNFPA70EPPEInfo(incidentEnergy: number): NFPA70EPPEInfo {
+  if (incidentEnergy > 40.0) {
+    return {
+      category: 5,
+      name: 'Extreme Danger (>40 cal/cm²)',
+      minRatingCalCm2: 40,
+      requiredClothing: [
+        'DO NOT WORK ENERGIZED: Incident energy exceeds maximum NFPA 70E rating (>40 cal/cm²)',
+        'Thermal flux and blast overpressure exceed human biological survivability limits',
+      ],
+      requiredPPE: [
+        'Complete de-energization & Lockout/Tagout (LOTO) MANDATORY',
+        'Remote racking / remote operation only',
+      ],
+      summary: 'DANGEROUS: Incident energy exceeds 40 cal/cm². Work de-energized only.',
+      badgeStyle: 'bg-red-950 border-2 border-red-500 text-white animate-pulse',
+    };
+  }
+
+  if (incidentEnergy > 25.0) {
+    return {
+      category: 4,
+      name: 'PPE Category 4 (40 cal/cm²)',
+      minRatingCalCm2: 40,
+      requiredClothing: [
+        'Arc-rated flash suit jacket and pants (minimum arc rating 40 cal/cm²)',
+        'Arc-rated multi-layer flash suit hood (minimum arc rating 40 cal/cm²)',
+        'Arc-rated thermal undergarments (natural fiber / non-melting)',
+      ],
+      requiredPPE: [
+        'Arc-rated flash suit hood with full face shield (≥40 cal/cm²)',
+        'Heavy-duty arc-rated gloves',
+        'Hard hat, safety glasses with side shields, hearing protection (earplugs)',
+        'Heavy-duty leather work boots',
+      ],
+      summary: 'Category 4: Min 40 cal/cm² multi-layer arc flash suit and hood required.',
+      badgeStyle: 'bg-red-950 border-red-500 text-red-200',
+    };
+  }
+
+  if (incidentEnergy > 8.0) {
+    return {
+      category: 3,
+      name: 'PPE Category 3 (25 cal/cm²)',
+      minRatingCalCm2: 25,
+      requiredClothing: [
+        'Arc-rated flash suit jacket and pants (minimum arc rating 25 cal/cm²)',
+        'Arc-rated flash suit hood (minimum arc rating 25 cal/cm²)',
+        'Arc-rated long-sleeve shirt and pants (natural fiber / AR)',
+      ],
+      requiredPPE: [
+        'Arc-rated flash suit hood (≥25 cal/cm²)',
+        'Arc-rated gloves',
+        'Hard hat, safety glasses with side shields, hearing protection',
+        'Heavy-duty leather work shoes/boots',
+      ],
+      summary: 'Category 3: Min 25 cal/cm² arc flash suit jacket, pants, and hood required.',
+      badgeStyle: 'bg-amber-950 border-amber-500 text-amber-200',
+    };
+  }
+
+  if (incidentEnergy > 4.0) {
+    return {
+      category: 2,
+      name: 'PPE Category 2 (8 cal/cm²)',
+      minRatingCalCm2: 8,
+      requiredClothing: [
+        'Arc-rated long-sleeve shirt and pants or AR coverall (minimum arc rating 8 cal/cm²)',
+        'Arc-rated jacket / outer layer as required',
+      ],
+      requiredPPE: [
+        'Arc-rated face shield with AR balaclava (≥8 cal/cm²) OR AR flash suit hood',
+        'Heavy-duty leather gloves',
+        'Hard hat, safety glasses with side shields, hearing protection',
+        'Leather work shoes',
+      ],
+      summary: 'Category 2: Min 8 cal/cm² AR shirt & pants/coverall with AR balaclava & face shield.',
+      badgeStyle: 'bg-orange-950 border-orange-500 text-orange-200',
+    };
+  }
+
+  if (incidentEnergy >= 1.2) {
+    return {
+      category: 1,
+      name: 'PPE Category 1 (4 cal/cm²)',
+      minRatingCalCm2: 4,
+      requiredClothing: [
+        'Arc-rated long-sleeve shirt and pants or AR coverall (minimum arc rating 4 cal/cm²)',
+      ],
+      requiredPPE: [
+        'Arc-rated face shield (≥4 cal/cm²) and safety glasses with side shields',
+        'Heavy-duty leather gloves',
+        'Hard hat, hearing protection (ear canal inserts)',
+        'Leather footwear',
+      ],
+      summary: 'Category 1: Min 4 cal/cm² AR shirt & pants/coverall with AR face shield.',
+      badgeStyle: 'bg-yellow-950 border-yellow-500 text-yellow-200',
+    };
+  }
+
+  return {
+    category: 0,
+    name: 'PPE Category 0 / Non-AR (<1.2 cal/cm²)',
+    minRatingCalCm2: 0,
+    requiredClothing: [
+      'Untreated natural fiber (100% cotton) long-sleeve shirt and long pants',
+      'No synthetic or meltable fabrics (polyester, nylon, spandex)',
+    ],
+    requiredPPE: [
+      'Safety glasses with side shields',
+      'Heavy-duty leather gloves',
+      'Leather work footwear',
+      'Hearing protection as needed',
+    ],
+    summary: 'Category 0: Non-arc-rated natural fiber clothing (<1.2 cal/cm²).',
+    badgeStyle: 'bg-emerald-950 border-emerald-500 text-emerald-200',
+  };
+}
+
+/**
+ * Calculates IEEE 1584-2018 Arcing Current for Intermediate Reference Voltages
  */
 export function calculateIarcForRefVoltage(refVoltageV: number, Ibf: number, G: number, config: ElectrodeConfig): number {
   const logIbf = Math.log10(Ibf);
@@ -185,6 +309,9 @@ export function calculateIarcForRefVoltage(refVoltageV: number, Ibf: number, G: 
   }
 }
 
+/**
+ * Calculates Enclosure Size Correction Factor CF & Equivalent Enclosure Size (EES)
+ */
 export function calculateCF(width: number, height: number, depth: number, config: ElectrodeConfig): { cf: number; ees: number } {
   if (config === 'VOA' || config === 'HOA') {
     return { cf: 1.0, ees: 508 };
@@ -207,6 +334,9 @@ export function calculateCF(width: number, height: number, depth: number, config
   return { cf, ees };
 }
 
+/**
+ * IEEE Std 1584-2018 Main Calculation Entry Point
+ */
 export function calculateIEEE1584_2018(input: IEEE1584Input): IEEE1584Result {
   const {
     voltage,
@@ -297,15 +427,18 @@ export function calculateIEEE1584_2018(input: IEEE1584Input): IEEE1584Result {
 
   const clearingTimeSec = clearingTimeMs / 1000;
 
-  const incidentEnergy = 4.184 * cf * En * (clearingTimeSec / 0.2) * Math.pow(610 / D, xFactor);
+  // Incident Energy E in cal/cm² at working distance D (mm)
+  const incidentEnergy = cf * En * (clearingTimeSec / 0.2) * Math.pow(610 / D, xFactor);
   const incidentEnergyJoules = incidentEnergy * 4.184;
   const incidentEnergyKjM2 = incidentEnergy * 41.84;
 
-  const boundaryMm = 610 * Math.pow((4.184 * cf * En * (clearingTimeSec / 0.2)) / 1.2, 1 / xFactor);
+  // Arc Flash Boundary (AFB) in meters (where E = 1.2 cal/cm²)
+  const boundaryMm = 610 * Math.pow((cf * En * (clearingTimeSec / 0.2)) / 1.2, 1 / xFactor);
   const boundaryRadius = Math.max(0.1, boundaryMm / 1000);
   const boundaryRadiusFeet = boundaryRadius * 3.28084;
 
   const ppeCategory = evaluateNFPA70ECategory(incidentEnergy);
+  const ppeInfo = getNFPA70EPPEInfo(incidentEnergy);
 
   return {
     arcingCurrent,
@@ -319,6 +452,7 @@ export function calculateIEEE1584_2018(input: IEEE1584Input): IEEE1584Result {
     ees,
     xFactor,
     ppeCategory,
+    ppeInfo,
     isExtrapolated,
     isValid,
     validationMessages,
