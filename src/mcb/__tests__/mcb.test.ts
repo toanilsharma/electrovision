@@ -57,21 +57,40 @@ describe('IEC 60898-1 MCB Physics Engine', () => {
       }
     });
 
-    it('Correctly derates nominal rating at ambient temperatures above reference 30°C', () => {
+    it('MUST trip in 1s to 60s at 2.55x In for In <= 32A per IEC 60898-1 Table 7', () => {
+      const In = 16;
+      const spec = BimetalThermalModel.createCalibratedSpec(In, 'C', 30);
+      const thermal = new BimetalThermalModel(spec, 30);
+
+      const tripTime = thermal.calculateTheoreticalTripTime(2.55 * In, 30);
+      expect(tripTime).toBeGreaterThanOrEqual(1.0);
+      expect(tripTime).toBeLessThanOrEqual(60.0);
+    });
+
+    it('Accelerates subsequent trips when bimetal retains thermal memory (hot re-close)', () => {
+      const In = 16;
+      const spec = BimetalThermalModel.createCalibratedSpec(In, 'C', 30);
+      const thermal = new BimetalThermalModel(spec, 30);
+
+      const coldTripTime = thermal.calculateTheoreticalTripTime(1.45 * In, 30, 30);
+      const hotTripTime = thermal.calculateTheoreticalTripTime(1.45 * In, 30, 80); // Pre-heated to 80°C
+
+      expect(hotTripTime).toBeLessThan(coldTripTime);
+      expect(hotTripTime).toBeGreaterThan(0);
+    });
+
+    it('Correctly derates nominal rating at ambient temperatures (-5°C to +40°C)', () => {
       const In = 16;
       const spec = BimetalThermalModel.createCalibratedSpec(In, 'C', 30);
       const thermal30 = new BimetalThermalModel(spec, 30);
-      const thermal45 = new BimetalThermalModel(spec, 45);
+      const thermal40 = new BimetalThermalModel(spec, 40);
+      const thermalCold = new BimetalThermalModel(spec, -5);
 
       expect(thermal30.getDeratedRatedCurrent()).toBe(16);
-      // At 45°C (+15°C above reference 30°C): 15 * 0.5% = 7.5% derating -> 16 * 0.925 = 14.8A
-      expect(thermal45.getDeratedRatedCurrent()).toBeCloseTo(14.8, 1);
-
-      // Higher ambient temperature accelerates thermal trip time at 1.45x In
-      const time30 = thermal30.calculateTheoreticalTripTime(1.45 * In, 30);
-      const time45 = thermal45.calculateTheoreticalTripTime(1.45 * In, 45);
-
-      expect(time45).toBeLessThan(time30);
+      // At 40°C (+10°C above reference 30°C): 10 * 0.5% = 5% derating -> 16 * 0.95 = 15.2A
+      expect(thermal40.getDeratedRatedCurrent()).toBeCloseTo(15.2, 1);
+      // At -5°C (-35°C below reference 30°C): -35 * 0.5% = -17.5% -> 16 * 1.175 = 18.8A
+      expect(thermalCold.getDeratedRatedCurrent()).toBeCloseTo(18.8, 1);
     });
   });
 

@@ -1,298 +1,422 @@
-import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { MCBState, TripCause } from '../../mcb/types';
+import { BreakerCutaway } from './BreakerCutaway';
 import { cn } from '@/src/lib/utils';
-import { Eye, Layers, Zap, Flame, Info, Sparkles } from 'lucide-react';
+import { Eye, Layers, Zap, Sparkles, RotateCcw, Box, ShieldAlert, Clock, Info } from 'lucide-react';
 
 interface CutawayView3DProps {
   temperature: number;      // Bimetal temp °C
-  bimetalTripTemp: number;  // °C threshold (130°C)
+  bimetalTripTemp?: number;  // °C threshold (130°C)
   state: MCBState;          // CLOSED, UNLATCHED, ARCING, OPEN_CLEARED
   tripCause: TripCause;
-  current: number;          // Instantaneous current (A)
+  current?: number;          // Instantaneous current (A)
+  In?: number;
   remainingTimeSec?: number; // Countdown timer until trip
   className?: string;
 }
 
 export const CutawayView3D: React.FC<CutawayView3DProps> = ({
   temperature,
-  bimetalTripTemp,
+  bimetalTripTemp = 130,
   state,
   tripCause,
-  current,
+  current = 0,
+  In = 16,
   remainingTimeSec,
   className
 }) => {
-  // Exploded View Mode State
-  const [isExploded, setIsExploded] = useState<boolean>(false);
-  const [hoveredPart, setHoveredPart] = useState<string | null>(null);
+  const mountRef = useRef<HTMLDivElement>(null);
+  const [webglSupported, setWebglSupported] = useState<boolean>(true);
 
-  // 3D Camera Rotation Orbit State (Pitch & Yaw)
-  const [rotX, setRotX] = useState<number>(20);
-  const [rotY, setRotY] = useState<number>(-30);
-  const [zoomScale, setZoomScale] = useState<number>(1.0);
-  const isDraggingRef = useRef<boolean>(false);
-  const lastMouseRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  // Controls State
+  const [explodedRatio, setExplodedRatio] = useState<number>(0);
+  const [housingOpacityMode, setHousingOpacityMode] = useState<'transparent' | 'xray' | 'solid'>('transparent');
+  const [hoveredComponent, setHoveredComponent] = useState<string | null>(null);
 
   const isTripped = state !== MCBState.CLOSED;
   const isMagneticTrip = tripCause === TripCause.MAGNETIC || tripCause === TripCause.MAGNETIC_TOLERANCE_ZONE;
-  const isThermalTrip = tripCause === TripCause.THERMAL;
 
-  // Bimetal Deflection & Color Calculation
-  const tempRatio = Math.min(1.0, Math.max(0, (temperature - 30) / (bimetalTripTemp - 30)));
-  const bimetalAngle = tempRatio * 28; // Up to 28 deg deflection
+  // Check WebGL Support
+  useEffect(() => {
+    try {
+      const testCanvas = document.createElement('canvas');
+      const gl = testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
+      if (!gl) setWebglSupported(false);
+    } catch {
+      setWebglSupported(false);
+    }
+  }, []);
 
-  // Bimetal Heat Gradient Color (Blue -> Amber -> Glowing Red -> White Hot)
-  let bimetalColor = '#64748b'; // Ambient Slate
-  if (tempRatio > 0.8) {
-    bimetalColor = '#ef4444'; // Glowing Red
-  } else if (tempRatio > 0.4) {
-    bimetalColor = '#f59e0b'; // Amber
-  } else if (tempRatio > 0.1) {
-    bimetalColor = '#38bdf8'; // Warm Blue
+  // Three.js 3D WebGL Scene Lifecycle
+  useEffect(() => {
+    if (!webglSupported || !mountRef.current) return;
+
+    const container = mountRef.current;
+    const width = container.clientWidth || 600;
+    const height = container.clientHeight || 320;
+
+    // Scene & Camera
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x090d16);
+
+    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 100);
+    camera.position.set(4.5, 2.8, 6.0);
+
+    // Renderer (DPR Cap 2)
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    renderer.setPixelRatio(dpr);
+    renderer.setSize(width, height);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    container.replaceChildren(renderer.domElement);
+
+    // OrbitControls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 2.5;
+    controls.maxDistance = 12.0;
+    controls.target.set(0, 0, 0);
+
+    // Lighting setup
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x1e293b, 0.8);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    dirLight.position.set(5, 8, 5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    scene.add(dirLight);
+
+    const rimLight = new THREE.DirectionalLight(0x06b6d4, 0.7);
+    rimLight.position.set(-5, 2, -5);
+    scene.add(rimLight);
+
+    // Internal Arc PointLight for Flash & Trip
+    const arcLight = new THREE.PointLight(0x38bdf8, 0, 4);
+    arcLight.position.set(-0.8, 0.2, 0);
+    scene.add(arcLight);
+
+    // Ground Contact Shadow Grid Plane
+    const groundGeo = new THREE.PlaneGeometry(14, 14);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      roughness: 0.8,
+      metalness: 0.2
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -1.8;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const gridHelper = new THREE.GridHelper(12, 24, 0x334155, 0x1e293b);
+    gridHelper.position.y = -1.79;
+    scene.add(gridHelper);
+
+    // ==========================================
+    // PARAMETRIC 3D MCB MODEL CONSTRUCTION
+    // ==========================================
+    const mcbGroup = new THREE.Group();
+    scene.add(mcbGroup);
+
+    // 1. Polycarbonate Outer Housing (Front & Back Shells)
+    const housingMat = new THREE.MeshPhysicalMaterial({
+      color: 0x1e293b,
+      transparent: true,
+      opacity: housingOpacityMode === 'solid' ? 0.92 : housingOpacityMode === 'xray' ? 0.15 : 0.45,
+      roughness: 0.15,
+      metalness: 0.1,
+      transmission: housingOpacityMode === 'solid' ? 0.1 : 0.75,
+      ior: 1.5,
+      depthWrite: housingOpacityMode === 'solid'
+    });
+
+    const frontShellGeo = new THREE.BoxGeometry(3.6, 3.2, 0.35);
+    const frontShell = new THREE.Mesh(frontShellGeo, housingMat);
+    frontShell.position.set(0, 0, 0.45);
+    frontShell.castShadow = true;
+    mcbGroup.add(frontShell);
+
+    const backShellGeo = new THREE.BoxGeometry(3.6, 3.2, 0.35);
+    const backShell = new THREE.Mesh(backShellGeo, housingMat);
+    backShell.position.set(0, 0, -0.45);
+    backShell.receiveShadow = true;
+    mcbGroup.add(backShell);
+
+    // 2. Terminal Blocks (Top Line & Bottom Load)
+    const terminalMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.8, roughness: 0.3 });
+    const topTerminal = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.6), terminalMat);
+    topTerminal.position.set(-0.9, 1.6, 0);
+    mcbGroup.add(topTerminal);
+
+    const bottomTerminal = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.6), terminalMat);
+    bottomTerminal.position.set(0.9, -1.6, 0);
+    mcbGroup.add(bottomTerminal);
+
+    // 3. Operating Toggle Handle
+    const handleGroup = new THREE.Group();
+    handleGroup.position.set(0.6, 1.2, 0);
+
+    const handlePivotMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.5, roughness: 0.5 });
+    const handlePivot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.5, 16), handlePivotMat);
+    handlePivot.rotation.x = Math.PI / 2;
+    handleGroup.add(handlePivot);
+
+    const handleKnobMat = new THREE.MeshStandardMaterial({
+      color: isTripped ? 0xef4444 : 0x10b981,
+      roughness: 0.3,
+      metalness: 0.2
+    });
+    const handleKnob = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.7, 0.4), handleKnobMat);
+    handleKnob.position.set(0.2, 0.35, 0);
+    handleKnob.rotation.z = -0.3;
+    handleGroup.add(handleKnob);
+    mcbGroup.add(handleGroup);
+
+    // 4. Fixed & Moving Contact Assembly
+    const contactArmMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.2 });
+    const tipMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.9, roughness: 0.1 });
+
+    const fixedContact = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.2), contactArmMat);
+    fixedContact.position.set(-0.8, 0.3, 0);
+    const fixedTip = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 12), tipMat);
+    fixedTip.position.set(0.15, 0, 0);
+    fixedContact.add(fixedTip);
+    mcbGroup.add(fixedContact);
+
+    const movingContactGroup = new THREE.Group();
+    movingContactGroup.position.set(-0.4, -0.3, 0);
+    const movingArm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.75, 0.15), contactArmMat);
+    movingArm.position.set(0, 0.35, 0);
+    const movingTip = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 12), tipMat);
+    movingTip.position.set(-0.06, 0.7, 0);
+    movingArm.add(movingTip);
+    movingContactGroup.add(movingArm);
+    mcbGroup.add(movingContactGroup);
+
+    // 5. Arc Chute Stack (7 Steel De-ionizing Plates)
+    const arcChuteGroup = new THREE.Group();
+    arcChuteGroup.position.set(-1.1, -0.2, 0);
+
+    const plateMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.25 });
+    for (let i = 0; i < 7; i++) {
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.04, 0.5), plateMat);
+      plate.position.set(0, (i - 3) * 0.14, 0);
+      arcChuteGroup.add(plate);
+    }
+    mcbGroup.add(arcChuteGroup);
+
+    // 6. Magnetic Solenoid Coil & Plunger
+    const solenoidGroup = new THREE.Group();
+    solenoidGroup.position.set(0.2, -0.2, 0);
+
+    const coilMat = new THREE.MeshStandardMaterial({ color: 0xb45309, metalness: 0.7, roughness: 0.3 });
+    const coil = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.65, 20), coilMat);
+    coil.rotation.z = Math.PI / 2;
+    solenoidGroup.add(coil);
+
+    const plungerMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.9, roughness: 0.2 });
+    const plunger = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.6, 16), plungerMat);
+    plunger.rotation.z = Math.PI / 2;
+    plunger.position.set(-0.15, 0, 0);
+    solenoidGroup.add(plunger);
+    mcbGroup.add(solenoidGroup);
+
+    // 7. Bimetal Thermal Element (Layered Strip)
+    const bimetalGroup = new THREE.Group();
+    bimetalGroup.position.set(1.0, -0.6, 0);
+
+    const bimetalMat = new THREE.MeshStandardMaterial({
+      color: temperature >= bimetalTripTemp ? 0xef4444 : temperature > 60 ? 0xf59e0b : 0x38bdf8,
+      emissive: temperature > 60 ? (temperature >= bimetalTripTemp ? 0xef4444 : 0xf59e0b) : 0x000000,
+      emissiveIntensity: temperature > 60 ? 0.6 : 0,
+      metalness: 0.5,
+      roughness: 0.4
+    });
+
+    const bimetalStrip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 0.25), bimetalMat);
+    bimetalStrip.position.set(0, 0.6, 0);
+    bimetalGroup.add(bimetalStrip);
+    mcbGroup.add(bimetalGroup);
+
+    // Animation & State Update Variables
+    let animationFrameId: number;
+
+    const animate = () => {
+      animationFrameId = requestAnimationFrame(animate);
+
+      // Orbit controls update
+      controls.update();
+
+      // Exploded View Interpolation
+      frontShell.position.z = 0.45 + explodedRatio * 1.5;
+      backShell.position.z = -0.45 - explodedRatio * 1.5;
+      arcChuteGroup.position.x = -1.1 - explodedRatio * 0.8;
+      bimetalGroup.position.x = 1.0 + explodedRatio * 0.8;
+      solenoidGroup.position.y = -0.2 - explodedRatio * 0.6;
+      topTerminal.position.y = 1.6 + explodedRatio * 0.5;
+      bottomTerminal.position.y = -1.6 - explodedRatio * 0.5;
+
+      // Contact Arm Opening & Handle Snap
+      if (isTripped) {
+        movingContactGroup.rotation.z = THREE.MathUtils.lerp(movingContactGroup.rotation.z, -0.75, 0.15);
+        handleGroup.rotation.z = THREE.MathUtils.lerp(handleGroup.rotation.z, -0.85, 0.15);
+      } else {
+        movingContactGroup.rotation.z = THREE.MathUtils.lerp(movingContactGroup.rotation.z, 0, 0.15);
+        handleGroup.rotation.z = THREE.MathUtils.lerp(handleGroup.rotation.z, 0, 0.15);
+      }
+
+      // Solenoid Plunger Stroke
+      if (isMagneticTrip) {
+        plunger.position.x = THREE.MathUtils.lerp(plunger.position.x, -0.45, 0.2);
+      } else {
+        plunger.position.x = THREE.MathUtils.lerp(plunger.position.x, -0.15, 0.1);
+      }
+
+      // Bimetal Thermal Deflection
+      const bimetalBend = Math.min(0.5, ((temperature - 30) / (bimetalTripTemp - 30)) * 0.5);
+      bimetalStrip.rotation.z = THREE.MathUtils.lerp(bimetalStrip.rotation.z, -bimetalBend, 0.1);
+
+      // Arc PointLight Flash on Trip
+      if (state === MCBState.ARCING) {
+        arcLight.intensity = 2.5 + Math.random() * 2.0;
+      } else {
+        arcLight.intensity = THREE.MathUtils.lerp(arcLight.intensity, 0, 0.1);
+      }
+
+      renderer.render(scene, camera);
+    };
+
+    animate();
+
+    // Resize Handler
+    const handleResize = () => {
+      if (!container) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', handleResize);
+      renderer.dispose();
+      controls.dispose();
+    };
+  }, [webglSupported, explodedRatio, housingOpacityMode, isTripped, isMagneticTrip, temperature, bimetalTripTemp, state]);
+
+  // Fallback to SVG Cutaway if WebGL unavailable
+  if (!webglSupported) {
+    return (
+      <BreakerCutaway
+        temperature={temperature}
+        bimetalTripTemp={bimetalTripTemp}
+        state={state}
+        tripCause={tripCause}
+        remainingTimeSec={remainingTimeSec}
+        className={className}
+      />
+    );
   }
-
-  // Exploded View Offsets
-  const expCover = isExploded ? 70 : 0;
-  const expBimetal = isExploded ? -35 : 0;
-  const expSolenoid = isExploded ? 40 : 0;
-  const expArcChute = isExploded ? -60 : 0;
-
-  // Orbit Pointer Handlers
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    isDraggingRef.current = true;
-    lastMouseRef.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return;
-    const dx = e.clientX - lastMouseRef.current.x;
-    const dy = e.clientY - lastMouseRef.current.y;
-    lastMouseRef.current = { x: e.clientX, y: e.clientY };
-
-    setRotY((prevY) => prevY + dx * 0.5);
-    setRotX((prevX) => Math.min(60, Math.max(-20, prevX - dy * 0.5)));
-  };
-
-  const handlePointerUp = () => {
-    isDraggingRef.current = false;
-  };
 
   return (
     <div
-      className={cn('relative w-full h-full min-h-[320px] bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col justify-between overflow-hidden font-mono select-none cursor-grab active:cursor-grabbing', className)}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
+      className={cn(
+        'relative w-full h-full min-h-[320px] bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col justify-between overflow-hidden font-mono select-none',
+        className
+      )}
     >
-      {/* Top Controls Overlay */}
-      <div 
-        onPointerDown={(e) => e.stopPropagation()} 
-        className="absolute top-3 left-3 right-3 flex items-center justify-between z-20 pointer-events-auto"
-      >
-        <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-xs font-black text-emerald-400 flex items-center gap-1.5 shadow">
-            <Sparkles className="w-3.5 h-3.5" /> 3D CUTAWAY COCKPIT
+      {/* Top Header Overlay & Controls */}
+      <div className="w-full flex flex-wrap items-center justify-between gap-1.5 mb-1.5 z-20 shrink-0 border-b border-slate-800/80 pb-1.5 overflow-x-auto no-scrollbar whitespace-nowrap">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span className="text-xs font-black text-white uppercase tracking-wider">
+            WebGL 3D Cutaway Cockpit
           </span>
-          
-          {/* Reverse Timer Badge */}
-          {remainingTimeSec !== undefined && remainingTimeSec < 3600 && !isTripped && (
-            <span className="px-2.5 py-1 rounded-lg bg-amber-950/90 border border-amber-500 text-amber-300 text-xs font-black uppercase shadow flex items-center gap-1.5 animate-pulse">
-              TRIP IN: {remainingTimeSec.toFixed(1)}s
-            </span>
-          )}
+        </div>
 
-          {isTripped && (
-            <span className={cn(
-              "px-2.5 py-1 rounded-lg border text-xs font-black uppercase shadow animate-pulse",
-              isMagneticTrip ? "bg-rose-950/90 border-rose-500 text-rose-300" : "bg-amber-950/90 border-amber-500 text-amber-300"
-            )}>
-              {isMagneticTrip ? '⚡ MAGNETIC TRIP (<10ms)' : '🔥 THERMAL OVERLOAD TRIP'}
+        {/* Action Toggles: Transparency & Exploded View Slider */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Transparency Mode Toggle */}
+          <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[11px] shrink-0">
+            <span className="text-slate-400 pl-1 font-bold">Shell:</span>
+            {(['transparent', 'xray', 'solid'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setHousingOpacityMode(mode)}
+                className={cn(
+                  "px-2 py-0.5 rounded uppercase font-black transition-all cursor-pointer min-h-[28px] shrink-0",
+                  housingOpacityMode === mode ? "bg-cyan-500 text-slate-950 shadow" : "text-slate-400 hover:text-white"
+                )}
+              >
+                {mode === 'transparent' ? 'Glass' : mode === 'xray' ? 'X-Ray' : 'Solid'}
+              </button>
+            ))}
+          </div>
+
+          {/* EXPLODED-VIEW SLIDER */}
+          <div className="flex items-center gap-1.5 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800 text-[11px] shrink-0">
+            <Layers className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-slate-300 font-bold">EXPLODED VIEW:</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={explodedRatio}
+              onChange={(e) => setExplodedRatio(parseFloat(e.target.value))}
+              className="w-20 sm:w-28 h-1.5 accent-cyan-500 cursor-pointer rounded bg-slate-800"
+            />
+            <span className="text-cyan-400 font-mono text-[10px] tabular-nums">
+              {(explodedRatio * 100).toFixed(0)}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3D WebGL Canvas Viewport */}
+      <div className="relative w-full flex-1 min-h-[180px] rounded-lg overflow-hidden border border-slate-850 bg-[#090d16]">
+        
+        {/* Real-time Status Overlay Badges */}
+        <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 pointer-events-none">
+          {isTripped ? (
+            <span className="px-2.5 py-0.5 rounded bg-rose-950/90 border border-rose-500 text-rose-300 text-[11px] font-black uppercase shadow flex items-center gap-1 animate-pulse">
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> TRIPPED ({tripCause})
+            </span>
+          ) : remainingTimeSec !== undefined && remainingTimeSec < 3600 ? (
+            <span className="px-2.5 py-0.5 rounded bg-amber-950/90 border border-amber-500 text-amber-300 text-[11px] font-black uppercase shadow flex items-center gap-1 animate-pulse">
+              <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin" /> TRIP IN: {remainingTimeSec.toFixed(1)}s
+            </span>
+          ) : (
+            <span className="px-2.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-[11px] font-bold shadow flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-emerald-400" /> CLOSED &amp; ENERGIZED
             </span>
           )}
         </div>
 
-        {/* Exploded View Toggle */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsExploded((prev) => !prev);
-          }}
-          className={cn(
-            "px-3 py-1 rounded-lg text-xs font-black uppercase transition-all cursor-pointer shadow flex items-center gap-1.5 min-h-[34px]",
-            isExploded ? "bg-cyan-500 text-slate-950" : "bg-slate-900 border border-slate-750 text-slate-300 hover:text-white"
-          )}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          {isExploded ? 'COLLAPSE VIEW' : 'EXPLODED VIEW'}
-        </button>
-      </div>
-
-      {/* Part Hover Tooltip Banner */}
-      <AnimatePresence>
-        {hoveredPart && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute top-14 left-3 z-30 px-3 py-1.5 rounded-lg bg-slate-900/95 border border-sky-500/50 text-sky-200 text-xs font-bold shadow-xl flex items-center gap-2 pointer-events-none"
-          >
-            <Info className="w-4 h-4 text-sky-400 shrink-0" />
-            <span>{hoveredPart}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 3D Perspective Canvas Container */}
-      <div className="relative w-full h-[260px] flex items-center justify-center overflow-visible">
-        <div
-          className="w-[450px] h-[260px] transition-transform duration-75"
-          style={{
-            transform: `perspective(900px) rotateX(${rotX}deg) rotateY(${rotY}deg) scale(${zoomScale})`,
-            transformStyle: 'preserve-3d'
-          }}
-        >
-          <svg viewBox="0 0 500 300" className="w-full h-full overflow-visible">
-            <defs>
-              {/* Glass Housing Shading Gradient */}
-              <linearGradient id="glassGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#1e293b" stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#0f172a" stopOpacity="0.7" />
-              </linearGradient>
-              <filter id="plasmaGlow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="6" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-            </defs>
-
-            {/* 1. POLYCARBONATE TRANSPARENT HOUSING (SHELL) */}
-            <g
-              transform={`translate(${expCover}, ${-expCover * 0.3})`}
-              className="transition-transform duration-500 cursor-pointer"
-              onMouseEnter={() => setHoveredPart('Transparent Polycarbonate Housing Enclosure')}
-              onMouseLeave={() => setHoveredPart(null)}
-            >
-              <rect
-                x="80" y="30" width="340" height="230" rx="16"
-                fill="url(#glassGrad)" stroke="#38bdf8" strokeWidth={isExploded ? '2' : '1.5'}
-                strokeDasharray={isExploded ? '6 4' : 'none'} opacity={isExploded ? 0.4 : 0.8}
-              />
-              <text x="250" y="52" textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="bold">
-                IEC 60898-1 Polycarbonate Housing
-              </text>
-            </g>
-
-            {/* 2. ARC CHUTE ASSEMBLY (6 SPLITTER PLATES) */}
-            <g
-              transform={`translate(${expArcChute}, ${expArcChute * 0.5})`}
-              className="transition-transform duration-500 cursor-pointer"
-              onMouseEnter={() => setHoveredPart('Arc Chute Assembly (6 Steel De-ion Arc Splitter Plates)')}
-              onMouseLeave={() => setHoveredPart(null)}
-            >
-              <rect x="100" y="70" width="70" height="110" rx="6" fill="#1e293b" stroke="#475569" strokeWidth="1.5" />
-              <text x="135" y="85" textAnchor="middle" fill="#64748b" fontSize="9" fontWeight="bold">Arc Chute</text>
-
-              {/* 6 Steel Splitter Plates */}
-              {[95, 110, 125, 140, 155, 170].map((yPos, i) => (
-                <rect key={`plate-${i}`} x="105" y={yPos} width="60" height="4" rx="1" fill="#94a3b8" stroke="#cbd5e1" strokeWidth="0.5" />
-              ))}
-
-              {/* Arc Plasma Jet Animation during ARCING state */}
-              {state === MCBState.ARCING && (
-                <g filter="url(#plasmaGlow)">
-                  <path d="M 170,140 Q 140,110 135,90" fill="none" stroke="#60a5fa" strokeWidth="4" className="animate-ping" />
-                  <path d="M 170,140 Q 150,120 135,100" fill="none" stroke="#f43f5e" strokeWidth="3" className="animate-pulse" />
-                  {/* Splitter Arc Sparks */}
-                  {[95, 110, 125, 140, 155].map((yPos, idx) => (
-                    <circle key={`spark-${idx}`} cx="135" cy={yPos} r="3" fill="#fef08a" className="animate-ping" />
-                  ))}
-                </g>
-              )}
-            </g>
-
-            {/* 3. BIMETAL THERMAL ELEMENT */}
-            <g
-              transform={`translate(${expBimetal}, ${-expBimetal * 0.4})`}
-              className="transition-transform duration-500 cursor-pointer"
-              onMouseEnter={() => setHoveredPart(`Bimetal Strip (Layered Thermo-Bimetal Brass/Invar - Temp: ${temperature.toFixed(1)}°C)`)}
-              onMouseLeave={() => setHoveredPart(null)}
-            >
-              {/* Base Post */}
-              <rect x="340" y="170" width="20" height="40" rx="3" fill="#334155" />
-              
-              {/* Bending Strip */}
-              <motion.path
-                d="M 350,170 C 350,130 350,100 350,70"
-                fill="none"
-                stroke={bimetalColor}
-                strokeWidth="7"
-                strokeLinecap="round"
-                animate={{
-                  d: `M 350,170 C 350,130 ${350 - bimetalAngle},100 ${350 - bimetalAngle * 1.3},70`
-                }}
-                transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-              />
-              <text x="365" y="120" fill="#94a3b8" fontSize="9" fontWeight="bold">
-                Bimetal ({temperature.toFixed(1)}°C)
-              </text>
-            </g>
-
-            {/* 4. ELECTROMAGNETIC SOLENOID & PLUNGER */}
-            <g
-              transform={`translate(${expSolenoid}, ${expSolenoid * 0.3})`}
-              className="transition-transform duration-500 cursor-pointer"
-              onMouseEnter={() => setHoveredPart('Electromagnetic Solenoid (Instantaneous Short-Circuit Coil & Steel Plunger)')}
-              onMouseLeave={() => setHoveredPart(null)}
-            >
-              {/* Copper Wound Coil */}
-              <rect x="250" y="140" width="55" height="35" rx="6" fill="#78350f" stroke="#f59e0b" strokeWidth="1.5" />
-              {[255, 263, 271, 279, 287, 295].map((xPos, idx) => (
-                <line key={`coil-${idx}`} x1={xPos} y1="140" x2={xPos} y2="175" stroke="#fbbf24" strokeWidth="2.5" />
-              ))}
-
-              {/* Steel Plunger */}
-              <motion.rect
-                x="230" y="152" width="30" height="11" rx="2" fill="#cbd5e1" stroke="#475569" strokeWidth="1"
-                animate={{ x: isMagneticTrip ? 210 : 230 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-              />
-              <text x="277" y="192" textAnchor="middle" fill="#64748b" fontSize="9" fontWeight="bold">Solenoid</text>
-
-              {/* Magnetic Strike Wave */}
-              {isMagneticTrip && (
-                <circle cx="210" cy="157" r="12" fill="none" stroke="#38bdf8" strokeWidth="2" className="animate-ping" />
-              )}
-            </g>
-
-            {/* 5. MOVING CONTACT ARM & LATCH MECHANISM */}
-            <g
-              className="cursor-pointer"
-              onMouseEnter={() => setHoveredPart('Spring-Loaded Moving Contact & Unlatching Trip Lever')}
-              onMouseLeave={() => setHoveredPart(null)}
-            >
-              {/* Fixed Contact Post (Left) */}
-              <circle cx="180" cy="140" r="7" fill="#f8fafc" stroke="#475569" strokeWidth="2" />
-
-              {/* Moving Contact Blade */}
-              <motion.line
-                x1="180" y1="140" x2="250" y2="110"
-                stroke={isTripped ? '#f43f5e' : '#10b981'} strokeWidth="5" strokeLinecap="round"
-                animate={{ rotate: isTripped ? -42 : 0 }}
-                style={{ originX: '180px', originY: '140px' }}
-                transition={{ type: 'spring', stiffness: 350, damping: 18 }}
-              />
-            </g>
-          </svg>
+        <div className="absolute bottom-2 right-2 z-10 pointer-events-none text-[10px] text-slate-500 font-sans">
+          Left Drag: Orbit • Right Drag: Pan • Scroll: Zoom (Cap DPR: 2)
         </div>
+
+        {/* Mounting element for Three.js WebGL canvas */}
+        <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
       </div>
 
-      {/* Footer Helper Note */}
-      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-2 border-t border-slate-800">
-        <span className="flex items-center gap-1">
-          <Eye className="w-3.5 h-3.5 text-sky-400" /> Drag mouse/touch to orbit camera 360°
-        </span>
-        <span className="text-slate-500">Hover components for technical details</span>
+      {/* Footer Metrics */}
+      <div className="w-full flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800 pt-1.5 mt-1.5 shrink-0">
+        <span>Bimetal Temp: <strong className="text-amber-400">{temperature.toFixed(1)}°C</strong></span>
+        <span>Solenoid: <strong className={isMagneticTrip ? 'text-cyan-400' : 'text-slate-400'}>{isMagneticTrip ? 'PULLED (<10ms)' : 'STANDBY'}</strong></span>
+        <span>Contact: <strong className={isTripped ? 'text-rose-400' : 'text-emerald-400'}>{isTripped ? 'SEPARATED (Ag/C)' : 'CLOSED'}</strong></span>
       </div>
     </div>
   );

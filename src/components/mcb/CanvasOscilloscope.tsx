@@ -1,8 +1,10 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import uPlot from 'uplot';
+import 'uplot/dist/uPlot.min.css';
 import { WaveformSample } from '../../workers/mcbWorker';
-import { SystemType, CurrentType } from '../../mcb/types';
+import { SystemType, CurrentType, MCBState } from '../../mcb/types';
 import { cn } from '@/src/lib/utils';
-import { Activity, Zap, AlertTriangle, Eye } from 'lucide-react';
+import { Activity, Zap, AlertTriangle, Eye, Sliders, Layers } from 'lucide-react';
 
 interface CanvasOscilloscopeProps {
   samples: WaveformSample[];
@@ -11,6 +13,9 @@ interface CanvasOscilloscopeProps {
   systemType?: SystemType;
   currentType?: CurrentType;
   kappaPeakFactor?: number;
+  ratedCurrent?: number;
+  faultCurrent?: number;
+  isSimulating?: boolean;
   className?: string;
 }
 
@@ -21,366 +26,473 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
   systemType = '1ph_230v',
   currentType = 'ac',
   kappaPeakFactor = 1.45,
+  ratedCurrent = 16,
+  faultCurrent = 23.2,
+  isSimulating = false,
   className
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const plotRef = useRef<HTMLDivElement>(null);
+  const uplotInstanceRef = useRef<uPlot | null>(null);
 
-  // Interaction State
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [timeScale, setTimeScale] = useState<number>(1.0); // 0.25x, 0.5x, 1.0x
-  const [zoomScale, setZoomScale] = useState<number>(1.0);
-  const [panOffset, setPanOffset] = useState<number>(0);
+  // Timebase scale in ms (e.g. 20ms, 50ms, 100ms, 200ms)
+  const [timebaseMs, setTimebaseMs] = useState<number>(100);
+  const [scaleMode, setScaleMode] = useState<'linear' | 'log'>('linear');
+  const [showVoltage, setShowVoltage] = useState<boolean>(true);
+
+  // Hover telemetry
+  const [hoverData, setHoverData] = useState<{
+    timeMs: number;
+    iA: number;
+    iB?: number;
+    iC?: number;
+    vT: number;
+  } | null>(null);
 
   const is3Phase = systemType === '3ph_400v';
   const isDC = currentType === 'dc';
 
-  // Multi-touch tracking for pinch-to-zoom
-  const lastTouchDistRef = useRef<number | null>(null);
+  // Generate live dataset (Pre-fault continuous or Worker Fault Waveform)
+  const plotData = useMemo<uPlot.AlignedData>(() => {
+    const durationSec = timebaseMs / 1000;
+    const numPoints = 600;
+    const dt = durationSec / numPoints;
 
-  // Draw 60fps Canvas
-  const drawCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !samples.length) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const timeArr: number[] = new Array(numPoints);
+    const iArrA: number[] = new Array(numPoints);
+    const iArrB: number[] = new Array(numPoints);
+    const iArrC: number[] = new Array(numPoints);
+    const vArr: number[] = new Array(numPoints);
 
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
+    // If we have real worker samples from fault execution
+    if (samples && samples.length > 5) {
+      const stepRatio = Math.max(1, Math.floor(samples.length / numPoints));
+      const filtered = samples.filter((_, idx) => idx % stepRatio === 0).slice(0, numPoints);
 
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
+      const actualPoints = filtered.length;
+      const tData: number[] = new Array(actualPoints);
+      const iDataA: number[] = new Array(actualPoints);
+      const iDataB: number[] = new Array(actualPoints);
+      const iDataC: number[] = new Array(actualPoints);
+      const vData: number[] = new Array(actualPoints);
 
-    // Clear background
-    ctx.fillStyle = '#090d16';
-    ctx.fillRect(0, 0, width, height);
+      for (let i = 0; i < actualPoints; i++) {
+        const s = filtered[i];
+        const tMs = s.time * 1000;
+        tData[i] = tMs;
 
-    // Padding margins
-    const padL = 45;
-    const padR = 15;
-    const padT = 25;
-    const padB = 25;
-    const plotW = width - padL - padR;
-    const plotH = height - padT - padB;
+        let vVal = s.voltage;
+        // Arc voltage tail (25-35V) & TRV overvoltage spike on trip
+        if (tClear > 0 && s.time >= tClear - 0.0025 && s.time <= tClear) {
+          vVal = isDC ? 40 : 35;
+        } else if (tClear > 0 && Math.abs(s.time - tClear) < 0.0008) {
+          vVal = isDC ? 350 * 1.6 : 325 * 1.45; // L*di/dt overvoltage spike
+        } else if (s.state === MCBState.OPEN_CLEARED) { // OPEN_CLEARED
+          vVal = 0;
+        }
+        vData[i] = vVal;
 
-    // Find min/max values
-    let maxI = 10;
-    let maxV = 350;
-    const maxT = samples[samples.length - 1].time / timeScale;
-
-    for (const s of samples) {
-      if (Math.abs(s.current) > maxI) maxI = Math.abs(s.current);
-      if (Math.abs(s.voltage) > maxV) maxV = Math.abs(s.voltage);
-    }
-    maxI *= 1.15; // 15% headroom
-
-    // Draw Grid Lines & Labels
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-    ctx.font = '10px monospace';
-    ctx.fillStyle = '#64748b';
-
-    // Horizontal Grid Lines
-    const hLines = 4;
-    for (let i = 0; i <= hLines; i++) {
-      const y = padT + (plotH / hLines) * i;
-      ctx.beginPath();
-      ctx.moveTo(padL, y);
-      ctx.lineTo(width - padR, y);
-      ctx.stroke();
-
-      const val = maxI - (2 * maxI / hLines) * i;
-      ctx.fillText(`${val.toFixed(0)}A`, 5, y + 3);
-    }
-
-    // Time Mapping Helper
-    const timeToX = (t: number) => {
-      const norm = t / Math.max(1e-6, maxT);
-      const zoomedNorm = (norm - panOffset) * zoomScale;
-      return padL + zoomedNorm * plotW;
-    };
-
-    // Draw Voltage Waveform v(t) - Cyan / Arc Voltage Tail / TRV Spike
-    ctx.strokeStyle = '#0284c7';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    let started = false;
-    for (const s of samples) {
-      const x = timeToX(s.time);
-      let vVal = s.voltage;
-
-      // Arc voltage tail (2-3ms arc voltage tail V_arc ~ 25V)
-      if (tClear > 0 && s.time >= tClear - 0.0025 && s.time <= tClear) {
-        vVal = 35; // Arc voltage
-      }
-      // TRV Spike on voltage extinction
-      if (tClear > 0 && Math.abs(s.time - tClear) < 0.0005) {
-        vVal = isDC ? maxV * 1.4 : maxV * 1.3;
-      }
-
-      const y = padT + plotH / 2 - (vVal / maxV) * (plotH / 2);
-      if (x >= padL && x <= width - padR) {
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
+        if (is3Phase && !isDC) {
+          iDataA[i] = s.current;
+          iDataB[i] = s.current * Math.cos(- (2 * Math.PI / 3));
+          iDataC[i] = s.current * Math.cos(+(2 * Math.PI / 3));
         } else {
-          ctx.lineTo(x, y);
+          iDataA[i] = s.current;
+          iDataB[i] = 0;
+          iDataC[i] = 0;
         }
       }
+
+      if (is3Phase && !isDC) {
+        return [tData, iDataA, iDataB, iDataC, vData];
+      }
+      return [tData, iDataA, vData];
     }
-    ctx.stroke();
 
-    // Draw Current Waveforms
+    // ALWAYS PRE-FAULT SYNTHETIC LIVE LOAD WAVEFORM
+    const loadAmps = ratedCurrent;
+    const nominalV = isDC ? 220 : is3Phase ? 400 * Math.SQRT2 / Math.sqrt(3) : 230 * Math.SQRT2;
+
+    for (let i = 0; i < numPoints; i++) {
+      const t = i * dt;
+      const tMs = t * 1000;
+      timeArr[i] = tMs;
+
+      if (isDC) {
+        iArrA[i] = loadAmps;
+        iArrB[i] = 0;
+        iArrC[i] = 0;
+        vArr[i] = nominalV;
+      } else if (is3Phase) {
+        const omega = 2 * Math.PI * 50;
+        iArrA[i] = loadAmps * Math.SQRT2 * Math.sin(omega * t);
+        iArrB[i] = loadAmps * Math.SQRT2 * Math.sin(omega * t - (2 * Math.PI / 3));
+        iArrC[i] = loadAmps * Math.SQRT2 * Math.sin(omega * t + (2 * Math.PI / 3));
+        vArr[i] = nominalV * Math.cos(omega * t);
+      } else {
+        const omega = 2 * Math.PI * 50;
+        iArrA[i] = loadAmps * Math.SQRT2 * Math.sin(omega * t);
+        iArrB[i] = 0;
+        iArrC[i] = 0;
+        vArr[i] = nominalV * Math.cos(omega * t);
+      }
+    }
+
     if (is3Phase && !isDC) {
-      // 3-Phase Current Traces: Phase A (Emerald), Phase B (Amber), Phase C (Cyan)
-      const colors = ['#10b981', '#f59e0b', '#06b6d4'];
-      const phaseShifts = [0, - (2 * Math.PI / 3), +(2 * Math.PI / 3)];
+      return [timeArr, iArrA, iArrB, iArrC, vArr];
+    }
+    return [timeArr, iArrA, vArr];
+  }, [samples, timebaseMs, ratedCurrent, systemType, currentType, is3Phase, isDC, tClear]);
 
-      colors.forEach((color, idx) => {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2.0;
-        ctx.beginPath();
-        let pStarted = false;
+  // Build uPlot instance
+  useEffect(() => {
+    if (!plotRef.current || !containerRef.current) return;
 
-        for (const s of samples) {
-          const x = timeToX(s.time);
-          const phaseI = s.current * Math.cos(phaseShifts[idx]);
-          const y = padT + plotH / 2 - (phaseI / maxI) * (plotH / 2);
-          if (x >= padL && x <= width - padR) {
-            if (!pStarted) {
-              ctx.moveTo(x, y);
-              pStarted = true;
-            } else {
-              ctx.lineTo(x, y);
+    const width = plotRef.current.clientWidth || 360;
+    const height = Math.max(160, (plotRef.current.clientHeight || 200));
+
+    // Custom Plugin for vertical TRIP and DETECT lines
+    const tripMarkerPlugin: uPlot.Plugin = {
+      hooks: {
+        draw: (u: uPlot) => {
+          const { ctx } = u;
+          const { left, top, width: pW, height: pH } = u.bbox;
+
+          // Trip clearing marker line
+          if (tClear > 0) {
+            const tClearMs = tClear * 1000;
+            const xPos = u.valToPos(tClearMs, 'x', true);
+
+            if (xPos >= left && xPos <= left + pW) {
+              ctx.save();
+              ctx.strokeStyle = '#ef4444';
+              ctx.lineWidth = 2;
+              ctx.setLineDash([4, 3]);
+              ctx.beginPath();
+              ctx.moveTo(xPos, top);
+              ctx.lineTo(xPos, top + pH);
+              ctx.stroke();
+
+              // Badge
+              ctx.fillStyle = '#ef4444';
+              ctx.font = 'bold 11px monospace';
+              ctx.fillText(`⚡ TRIP: ${tClearMs.toFixed(1)}ms`, xPos + 4, top + 18);
+              ctx.restore();
+            }
+          }
+
+          // Solenoid detection marker
+          if (tDetect > 0 && tDetect !== tClear) {
+            const tDetectMs = tDetect * 1000;
+            const xPos = u.valToPos(tDetectMs, 'x', true);
+
+            if (xPos >= left && xPos <= left + pW) {
+              ctx.save();
+              ctx.strokeStyle = '#f59e0b';
+              ctx.lineWidth = 1.5;
+              ctx.setLineDash([3, 3]);
+              ctx.beginPath();
+              ctx.moveTo(xPos, top);
+              ctx.lineTo(xPos, top + pH);
+              ctx.stroke();
+
+              ctx.fillStyle = '#f59e0b';
+              ctx.font = 'bold 10px monospace';
+              ctx.fillText(`DETECT`, xPos + 4, top + 34);
+              ctx.restore();
             }
           }
         }
-        ctx.stroke();
-      });
-    } else {
-      // 1-Phase Current Waveform i(t) - Emerald/Red
-      ctx.strokeStyle = maxI > 100 ? '#f43f5e' : '#10b981';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      started = false;
-      for (const s of samples) {
-        const x = timeToX(s.time);
-        const y = padT + plotH / 2 - (s.current / maxI) * (plotH / 2);
-        if (x >= padL && x <= width - padR) {
-          if (!started) {
-            ctx.moveTo(x, y);
-            started = true;
-          } else {
-            ctx.lineTo(x, y);
+      }
+    };
+
+    // Series Definitions
+    const seriesList: uPlot.Series[] = [
+      {
+        label: 'Time (ms)',
+        value: (_u, v) => `${(v || 0).toFixed(1)} ms`
+      },
+      {
+        label: is3Phase ? 'Ia (A)' : 'i(t) (A)',
+        stroke: '#10b981',
+        width: 2.2,
+        scale: 'current',
+        value: (_u, v) => `${(v || 0).toFixed(1)} A`
+      }
+    ];
+
+    if (is3Phase && !isDC) {
+      seriesList.push(
+        {
+          label: 'Ib (A)',
+          stroke: '#f59e0b',
+          width: 2.0,
+          scale: 'current',
+          value: (_u, v) => `${(v || 0).toFixed(1)} A`
+        },
+        {
+          label: 'Ic (A)',
+          stroke: '#06b6d4',
+          width: 2.0,
+          scale: 'current',
+          value: (_u, v) => `${(v || 0).toFixed(1)} A`
+        }
+      );
+    }
+
+    // Ghost Voltage series
+    seriesList.push({
+      label: 'v(t) (V)',
+      stroke: 'rgba(56, 189, 248, 0.45)', // Cyan ghost trace
+      width: 1.5,
+      dash: [4, 2],
+      scale: 'voltage',
+      show: showVoltage,
+      value: (_u, v) => `${(v || 0).toFixed(0)} V`
+    });
+
+    const opts: uPlot.Options = {
+      width,
+      height,
+      plugins: [tripMarkerPlugin],
+      legend: {
+        show: false // We use custom interactive header chips
+      },
+      cursor: {
+        sync: { key: 'mcb-scope' },
+        drag: { setScale: false },
+        dataIdx: (_u, _seriesIdx, closestIdx) => {
+          if (closestIdx !== null && plotData[0][closestIdx] !== undefined) {
+            setHoverData({
+              timeMs: plotData[0][closestIdx],
+              iA: plotData[1][closestIdx],
+              iB: is3Phase && !isDC ? plotData[2]?.[closestIdx] : undefined,
+              iC: is3Phase && !isDC ? plotData[3]?.[closestIdx] : undefined,
+              vT: plotData[plotData.length - 1][closestIdx]
+            });
           }
+          return closestIdx;
+        }
+      },
+      scales: {
+        x: {
+          time: false,
+          auto: true
+        },
+        current: {
+          auto: true,
+          distr: scaleMode === 'log' ? 3 : 1
+        },
+        voltage: {
+          auto: true,
+          range: [-450, 450]
+        }
+      },
+      axes: [
+        {
+          scale: 'x',
+          stroke: '#64748b',
+          grid: { stroke: 'rgba(30, 41, 59, 0.65)', width: 1 },
+          ticks: { stroke: '#475569', width: 1 },
+          values: (_u, vals) => vals.map(v => `${v.toFixed(0)}ms`),
+          font: '10px monospace'
+        },
+        {
+          scale: 'current',
+          stroke: '#10b981',
+          grid: { stroke: 'rgba(30, 41, 59, 0.65)', width: 1 },
+          ticks: { stroke: '#10b981', width: 1 },
+          values: (_u, vals) => vals.map(v => `${v.toFixed(0)}A`),
+          font: '10px monospace',
+          size: 45
+        },
+        {
+          scale: 'voltage',
+          side: 1, // Right axis
+          stroke: 'rgba(56, 189, 248, 0.6)',
+          grid: { show: false },
+          ticks: { stroke: 'rgba(56, 189, 248, 0.6)', width: 1 },
+          values: (_u, vals) => vals.map(v => `${v.toFixed(0)}V`),
+          font: '10px monospace',
+          size: 40
+        }
+      ],
+      series: seriesList
+    };
+
+    // Clean up previous instance
+    if (uplotInstanceRef.current) {
+      uplotInstanceRef.current.destroy();
+      uplotInstanceRef.current = null;
+    }
+
+    plotRef.current.innerHTML = '';
+    const u = new uPlot(opts, plotData, plotRef.current);
+    uplotInstanceRef.current = u;
+
+    // Resize observer
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 50 && uplotInstanceRef.current) {
+          uplotInstanceRef.current.setSize({
+            width: entry.contentRect.width,
+            height: Math.max(150, entry.contentRect.height)
+          });
         }
       }
-      ctx.stroke();
-    }
+    });
 
-    // Draw IEC 60909 Kappa Peak Marker
-    if (maxI > 50 && !isDC) {
-      const peakVal = kappaPeakFactor * Math.SQRT2 * (maxI / 1.15);
-      const xPeak = timeToX(0.005);
-      const yPeak = padT + plotH / 2 - (peakVal / maxI) * (plotH / 2);
+    ro.observe(plotRef.current);
 
-      if (xPeak >= padL && xPeak <= width - padR) {
-        ctx.fillStyle = '#f43f5e';
-        ctx.beginPath();
-        ctx.arc(xPeak, yPeak, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.font = '10px monospace';
-        ctx.fillText(`κ-peak (${kappaPeakFactor.toFixed(2)}x)`, xPeak + 6, yPeak + 3);
+    return () => {
+      ro.disconnect();
+      if (uplotInstanceRef.current) {
+        uplotInstanceRef.current.destroy();
+        uplotInstanceRef.current = null;
       }
-    }
+    };
+  }, [plotData, is3Phase, isDC, scaleMode, showVoltage, tClear, tDetect]);
 
-    // Draw Vertical Markers: t_detect & t_clear
-    if (tDetect > 0) {
-      const xDet = timeToX(tDetect);
-      if (xDet >= padL && xDet <= width - padR) {
-        ctx.strokeStyle = '#f59e0b';
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(xDet, padT);
-        ctx.lineTo(xDet, padT + plotH);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#f59e0b';
-        ctx.fillText('t_detect', xDet + 3, padT + 12);
-      }
-    }
-
-    if (tClear > 0) {
-      const xClr = timeToX(tClear);
-      if (xClr >= padL && xClr <= width - padR) {
-        ctx.strokeStyle = '#ef4444';
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(xClr, padT);
-        ctx.lineTo(xClr, padT + plotH);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#ef4444';
-        ctx.fillText('t_clear', xClr + 3, padT + 24);
-      }
-    }
-
-    // Synchronized Interactive Crosshair
-    if (hoverIndex !== null && samples[hoverIndex]) {
-      const hoverSample = samples[hoverIndex];
-      const hX = timeToX(hoverSample.time);
-
-      if (hX >= padL && hX <= width - padR) {
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([2, 2]);
-        ctx.beginPath();
-        ctx.moveTo(hX, padT);
-        ctx.lineTo(hX, padT + plotH);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        const hY = padT + plotH / 2 - (hoverSample.current / maxI) * (plotH / 2);
-        ctx.fillStyle = '#10b981';
-        ctx.beginPath();
-        ctx.arc(hX, hY, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.stroke();
-      }
-    }
-  }, [samples, tDetect, tClear, hoverIndex, zoomScale, panOffset, timeScale, systemType, currentType, kappaPeakFactor, is3Phase, isDC]);
-
+  // Live 60fps data update
   useEffect(() => {
-    drawCanvas();
-  }, [drawCanvas]);
-
-  // Pointer & Touch Handlers
-  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !samples.length) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-
-    const padL = 45;
-    const padR = 15;
-    const plotW = rect.width - padL - padR;
-
-    const maxT = samples[samples.length - 1].time / timeScale;
-    const normX = (x - padL) / plotW;
-    const unzoomedNorm = normX / zoomScale + panOffset;
-    const targetTime = unzoomedNorm * maxT;
-
-    let closestIdx = 0;
-    let minDiff = Infinity;
-    for (let i = 0; i < samples.length; i++) {
-      const diff = Math.abs(samples[i].time - targetTime);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closestIdx = i;
-      }
+    if (uplotInstanceRef.current && plotData) {
+      uplotInstanceRef.current.setData(plotData);
     }
-    setHoverIndex(closestIdx);
-  };
-
-  const handlePointerLeave = () => {
-    setHoverIndex(null);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (e.touches.length === 2) {
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
-      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-
-      if (lastTouchDistRef.current !== null) {
-        const delta = dist - lastTouchDistRef.current;
-        if (delta > 5) {
-          setZoomScale((z) => Math.min(5.0, z * 1.05));
-        } else if (delta < -5) {
-          setZoomScale((z) => Math.max(1.0, z * 0.95));
-        }
-      }
-      lastTouchDistRef.current = dist;
-    }
-  };
-
-  const handleTouchEnd = () => {
-    lastTouchDistRef.current = null;
-  };
-
-  const activeSample = hoverIndex !== null && samples[hoverIndex] ? samples[hoverIndex] : samples[samples.length - 1];
+  }, [plotData]);
 
   return (
-    <div ref={containerRef} className={cn('relative flex flex-col bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-xl select-none touch-none font-mono', className)}>
-      
-      {/* DC WARNING CHIP */}
+    <div
+      ref={containerRef}
+      className={cn(
+        'relative flex flex-col justify-between bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-xl select-none font-mono text-xs h-full overflow-hidden',
+        className
+      )}
+    >
+      {/* DC WARNING BANNER */}
       {isDC && (
-        <div className="mb-2 px-2.5 py-1 rounded bg-amber-950/80 border border-amber-500/60 text-amber-300 text-[10px] font-bold flex items-center gap-1.5 animate-pulse">
+        <div className="mb-1.5 px-2.5 py-1 rounded bg-amber-950/80 border border-amber-500/60 text-amber-300 text-[11px] font-bold flex items-center gap-1.5 animate-pulse shrink-0">
           <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
           <span>DC: NO NATURAL CURRENT ZERO — LONGER ARCING TIME (L·di/dt Overvoltage)</span>
         </div>
       )}
 
-      {/* Header Bar & Time-Scale Controls */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-bold text-slate-200">
-            60fps Oscilloscope [{is3Phase ? 'ia, ib, ic' : 'i(t)'}, v(t)]
+      {/* TOP CONTROLS & SCOPE TIMEBASE HEADER */}
+      <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2 shrink-0 border-b border-slate-800/80 pb-1.5">
+        <div className="flex items-center gap-1.5">
+          <Activity className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="text-xs font-black text-white uppercase tracking-wider">
+            uPlot 60fps Oscilloscope
           </span>
         </div>
 
-        {/* Time-Scale Selectors (0.25x, 0.5x, 1.0x) */}
-        <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded border border-slate-800 text-[10px]">
-          {([0.25, 0.5, 1.0] as const).map(scale => (
-            <button
-              key={scale}
-              onClick={() => setTimeScale(scale)}
-              className={cn(
-                "px-2 py-0.5 rounded font-bold transition-all cursor-pointer min-h-[32px]",
-                timeScale === scale ? "bg-orange-500 text-slate-950 font-black" : "text-slate-400 hover:text-white"
-              )}
-            >
-              {scale}x
-            </button>
-          ))}
+        {/* Right Header Toggles & SCOPE TIMEBASE */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar whitespace-nowrap shrink-0">
+          {/* Voltage Ghost Toggle */}
+          <button
+            onClick={() => setShowVoltage(v => !v)}
+            className={cn(
+              "px-2 py-0.5 rounded text-[11px] font-bold border transition-all cursor-pointer min-h-[28px] flex items-center gap-1 shrink-0",
+              showVoltage ? "bg-sky-950 text-sky-300 border-sky-500" : "bg-slate-900 text-slate-500 border-slate-800"
+            )}
+            title="Toggle Voltage Ghost Waveform v(t)"
+          >
+            <Eye className="w-3 h-3" /> v(t) Ghost
+          </button>
+
+          {/* Scale Mode (Linear / Log) */}
+          <button
+            onClick={() => setScaleMode(m => m === 'linear' ? 'log' : 'linear')}
+            className={cn(
+              "px-2 py-0.5 rounded text-[11px] font-bold border transition-all cursor-pointer min-h-[28px] shrink-0",
+              scaleMode === 'log' ? "bg-purple-950 text-purple-300 border-purple-500" : "bg-slate-900 text-slate-300 border-slate-800"
+            )}
+            title="Toggle Y-Axis Auto-Scale Mode"
+          >
+            Scale: {scaleMode.toUpperCase()}
+          </button>
+
+          {/* SCOPE TIMEBASE SELECTOR (MANDATORY LABEL) */}
+          <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[11px] shrink-0">
+            <span className="text-slate-400 px-1 font-bold">SCOPE TIMEBASE:</span>
+            {([20, 50, 100, 200] as const).map(ms => (
+              <button
+                key={ms}
+                onClick={() => setTimebaseMs(ms)}
+                className={cn(
+                  "px-2 py-0.5 rounded font-black transition-all cursor-pointer min-h-[28px] shrink-0",
+                  timebaseMs === ms ? "bg-orange-500 text-slate-950 shadow" : "text-slate-400 hover:text-white"
+                )}
+              >
+                {ms}ms
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* HTML5 Canvas Element */}
-      <div className="relative w-full h-[200px]">
-        <canvas
-          ref={canvasRef}
-          onPointerMove={handlePointerMove}
-          onPointerLeave={handlePointerLeave}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          className="w-full h-full cursor-crosshair touch-none rounded-lg"
-        />
-      </div>
+      {/* INTERACTIVE LEGEND CHIPS */}
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] shrink-0 bg-slate-900/60 p-1.5 rounded-lg border border-slate-850">
+        <div className="flex items-center gap-1 text-emerald-400 font-bold">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+          <span>{is3Phase ? 'Phase A (Ia):' : 'Current i(t):'}</span>
+          <span className="font-mono text-white tabular-nums">
+            {hoverData ? `${hoverData.iA.toFixed(1)} A` : `${(samples?.[samples.length - 1]?.current || ratedCurrent).toFixed(1)} A`}
+          </span>
+        </div>
 
-      {/* Live Active Sample Readouts */}
-      {activeSample && (
-        <div className="flex items-center justify-between text-[10px] font-mono mt-2 pt-2 border-t border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-              t: {(activeSample.time * 1000).toFixed(1)}ms
-            </span>
-            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-amber-400">
-              I²t: {activeSample.i2t.toFixed(1)} A²s
-            </span>
-            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-rose-400">
-              Ip: {activeSample.peakIp.toFixed(1)} A
+        {is3Phase && !isDC && (
+          <>
+            <div className="flex items-center gap-1 text-amber-400 font-bold">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
+              <span>Phase B (Ib):</span>
+              <span className="font-mono text-white tabular-nums">
+                {hoverData?.iB !== undefined ? `${hoverData.iB.toFixed(1)} A` : `${(ratedCurrent * -0.5).toFixed(1)} A`}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-cyan-400 font-bold">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 inline-block" />
+              <span>Phase C (Ic):</span>
+              <span className="font-mono text-white tabular-nums">
+                {hoverData?.iC !== undefined ? `${hoverData.iC.toFixed(1)} A` : `${(ratedCurrent * -0.5).toFixed(1)} A`}
+              </span>
+            </div>
+          </>
+        )}
+
+        {showVoltage && (
+          <div className="flex items-center gap-1 text-sky-400 font-bold ml-auto">
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block opacity-80" />
+            <span>Voltage v(t):</span>
+            <span className="font-mono text-white tabular-nums">
+              {hoverData ? `${hoverData.vT.toFixed(0)} V` : `${(samples?.[samples.length - 1]?.voltage || 230).toFixed(0)} V`}
             </span>
           </div>
+        )}
+      </div>
 
-          <span className="text-slate-500 hidden sm:inline">Pinch/Scroll to zoom • Touch crosshair</span>
+      {/* uPlot Chart Container (Fills available space) */}
+      <div className="relative w-full flex-1 min-h-[140px] overflow-hidden rounded-lg bg-[#090d16] border border-slate-850 flex items-center justify-center">
+        <div ref={plotRef} className="w-full h-full" />
+      </div>
+
+      {/* FOOTER LIVE TELEMETRY */}
+      <div className="flex items-center justify-between text-[11px] font-mono mt-1.5 pt-1.5 border-t border-slate-800 shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+            t: {hoverData ? `${hoverData.timeMs.toFixed(1)}ms` : `${(samples?.[samples.length - 1]?.time ? samples[samples.length - 1].time * 1000 : timebaseMs).toFixed(1)}ms`}
+          </span>
+          <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-amber-300">
+            I²t: {(samples?.[samples.length - 1]?.i2t || 0).toFixed(1)} A²s
+          </span>
+          <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-rose-300">
+            Peak Ip: {(samples?.[samples.length - 1]?.peakIp || ratedCurrent * 1.414).toFixed(1)} A
+          </span>
         </div>
-      )}
+
+        <span className="text-slate-500 hidden sm:inline font-sans text-[11px]">
+          Live uPlot 60fps • IEC 60909 κ-factor: {kappaPeakFactor.toFixed(2)}
+        </span>
+      </div>
     </div>
   );
 };
