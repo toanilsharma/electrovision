@@ -10,6 +10,7 @@ import { HazardOverlay } from '../HazardOverlay';
 import { HumanBodyTwin } from '../HumanBodyTwin';
 import { SafetyLessonModal } from '../SafetyLessonModal';
 import { DebriefTriggerCard } from '../DebriefTriggerCard';
+import { useAudioHaptics } from '../useAudioHaptics';
 
 // IEC 60479-1 Earth Fault System Voltage Reference Levels
 const ALL_EARTH_VOLTAGES = [
@@ -70,6 +71,9 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
     }
   };
 
+  const [workerDistance, setWorkerDistance] = useState<number>(2.0);
+  const { playBreakerTripSound, playArcCrackle, startHum, stopHum } = useAudioHaptics();
+
   // Duration timer while fault is active
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -88,10 +92,21 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
     if (faultActive && scenario === 'solid') {
       const timeout = setTimeout(() => {
         setBreakerTripped(true);
+        playBreakerTripSound();
       }, 350); // Trips in 350ms to demonstrate transient shunting & breaker trip
       return () => clearTimeout(timeout);
     }
-  }, [faultActive, scenario]);
+  }, [faultActive, scenario, playBreakerTripSound]);
+
+  // Sound effect on fault trigger
+  useEffect(() => {
+    if (faultActive && !breakerTripped) {
+      playArcCrackle(300);
+      startHum(60);
+    } else {
+      stopHum();
+    }
+  }, [faultActive, breakerTripped, playArcCrackle, startHum, stopHum]);
 
   // Reset breaker when fault is cleared
   useEffect(() => {
@@ -110,6 +125,8 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
     setPpeEnabled(false);
     setVoltage(isResidential ? 230 : 415);
     setDurationMs(0);
+    setWorkerDistance(2.0);
+    stopHum();
   };
 
   // ----------------------------------------------------
@@ -129,6 +146,9 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
     let bodyCurrent = 0; // mA
     let groundCurrent = 0; // A
     let touchVoltage = 0; // V
+    let gprVolts = 0;
+    let stepVoltage = 0;
+    let stepCurrentMA = 0;
 
     if (faultActive && !breakerTripped) {
       if (scenario === 'solid') {
@@ -136,11 +156,22 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
         groundCurrent = voltage / rEarth; // e.g. 230V / 2Ω = 115A
         touchVoltage = 2.0; // Shunted to safe low touch voltage (< 50V SELV limit)
         bodyCurrent = (touchVoltage / (rBody + rShoes)) * 1000; // in mA
+        gprVolts = groundCurrent * rEarth; // GPR rises to line potential at rod center
+
+        // IEEE 80 Step potential across 1.0m stride at workerDistance x
+        const r0 = 0.5; // grounding hemisphere radius
+        const vAtFeet1 = gprVolts * (r0 / (workerDistance + r0));
+        const vAtFeet2 = gprVolts * (r0 / (workerDistance + 1.0 + r0));
+        stepVoltage = Math.max(0, vAtFeet1 - vAtFeet2);
+        stepCurrentMA = (stepVoltage / (rBody + 2 * rShoes)) * 1000;
       } else {
         // Broken Earthing (Severed PE conductor): Casing energized at full line potential!
         groundCurrent = 0; // No ground return current -> Breaker DOES NOT TRIP!
         touchVoltage = voltage; // Full line potential on metal shell
         bodyCurrent = (touchVoltage / rTotalBodyPath) * 1000; // in mA
+        gprVolts = 0;
+        stepVoltage = 0;
+        stepCurrentMA = 0;
       }
     }
 
@@ -152,10 +183,13 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
       bodyCurrent,
       groundCurrent,
       touchVoltage,
+      gprVolts,
+      stepVoltage,
+      stepCurrentMA,
       intensity,
       isPPESafe
     };
-  }, [faultActive, breakerTripped, scenario, ppeEnabled, voltage]);
+  }, [faultActive, breakerTripped, scenario, ppeEnabled, voltage, workerDistance]);
 
   // Track active fault parameters for SafetyLessonModal analysis
   useEffect(() => {
@@ -448,19 +482,46 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
           </div>
         </div>
 
-        {/* Hazard Assessment Report Box */}
-        <div className={cn("p-4 rounded-2xl border flex flex-col gap-2 transition-all shadow-xl", shockAnalysis.color)}>
-          <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+        {/* Visual GPR & Step/Touch Telemetry Matrix (No Long Paragraphs) */}
+        <div className={cn("p-2.5 rounded-2xl border flex flex-col gap-1.5 transition-all shadow-xl", shockAnalysis.color)}>
+          <div className="flex items-center justify-between border-b border-white/10 pb-1">
             <span className="text-xs font-black tracking-widest uppercase flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4 shrink-0" /> {shockAnalysis.label}
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {shockAnalysis.label}
             </span>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/40 border border-white/20">
+            <span className="text-[9.5px] font-mono font-bold px-1.5 py-0.2 rounded bg-black/40 border border-white/20">
               {voltage}V AC Grid
             </span>
           </div>
-          <p className="text-xs sm:text-sm leading-relaxed font-bold">
-            {shockAnalysis.desc}
-          </p>
+          
+          <div className="grid grid-cols-2 gap-1.5 pt-0.5 font-mono text-[10px]">
+            <div className="p-1.5 rounded-lg bg-black/40 border border-white/10 flex flex-col">
+              <span className="text-[8px] text-slate-400 font-bold uppercase">Touch Vector (E_touch)</span>
+              <span className={cn("text-xs font-black", physics.touchVoltage > 50 ? "text-red-400" : "text-emerald-400")}>
+                {physics.touchVoltage.toFixed(0)} V
+              </span>
+              <span className="text-[7.5px] text-slate-400">Path: Enclosure to Foot</span>
+            </div>
+
+            <div className="p-1.5 rounded-lg bg-black/40 border border-white/10 flex flex-col">
+              <span className="text-[8px] text-slate-400 font-bold uppercase">Step Vector (E_step 1m)</span>
+              <span className={cn("text-xs font-black", physics.stepVoltage > 50 ? "text-amber-400" : "text-emerald-400")}>
+                {physics.stepVoltage.toFixed(1)} V
+              </span>
+              <span className="text-[7.5px] text-slate-400">At X = {workerDistance.toFixed(1)}m from rod</span>
+            </div>
+
+            <div className="p-1.5 rounded-lg bg-black/40 border border-white/10 flex flex-col">
+              <span className="text-[8px] text-slate-400 font-bold uppercase">Ground Fault Current</span>
+              <span className="text-xs font-black text-cyan-300">{physics.groundCurrent.toFixed(0)} A</span>
+              <span className="text-[7.5px] text-slate-400">Shunted through R_E 2.0Ω</span>
+            </div>
+
+            <div className="p-1.5 rounded-lg bg-black/40 border border-white/10 flex flex-col">
+              <span className="text-[8px] text-slate-400 font-bold uppercase">Ground Potential Rise</span>
+              <span className="text-xs font-black text-amber-300">{physics.gprVolts.toFixed(0)} V</span>
+              <span className="text-[7.5px] text-slate-400">Peak GPR at Soil Center</span>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -517,41 +578,50 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
     const isFaultActive = faultActive && !breakerTripped;
     const isSolidEarth = scenario === 'solid';
 
+    // Worker dynamic screen coordinates (rod center at X=260, ground surface at Y=270)
+    const rodX = 260;
+    const groundY = 270;
+    const workerX = Math.min(440, Math.max(rodX + 35, rodX + Math.round(workerDistance * 24)));
+    const stepSpanPx = 22; // 1.0m human stride scale
+
     return (
-      <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_top,#0f172a,#020617)]">
+      <div className="relative w-full h-full flex flex-col items-center justify-between overflow-hidden bg-[radial-gradient(ellipse_at_top,#0f172a,#020617)] select-none">
         {/* Substation Grid Medical Scan Lines */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#38bdf8_1px,transparent_1px),linear-gradient(to_bottom,#38bdf8_1px,transparent_1px)] bg-[size:35px_35px] opacity-[0.04]"></div>
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#38bdf8_1px,transparent_1px),linear-gradient(to_bottom,#38bdf8_1px,transparent_1px)] bg-[size:35px_35px] opacity-[0.04] pointer-events-none"></div>
 
         {/* Top Telemetry Header Overlay Badge */}
-        <div className="absolute top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-          <div className="flex items-center gap-2">
+        <div className="w-full p-2 z-30 flex flex-wrap items-center justify-between gap-1.5 shrink-0 bg-slate-950/60 border-b border-slate-800">
+          <div className="flex items-center gap-1.5 min-w-0">
             <span className={cn(
-              "px-3 py-1 text-xs font-mono font-black uppercase tracking-wider rounded-xl border-2 shadow-lg flex items-center gap-1.5",
+              "px-2.5 py-0.5 text-[10px] font-mono font-black uppercase tracking-wider rounded-lg border shadow-md flex items-center gap-1.5 truncate",
               breakerTripped
-                ? "bg-emerald-950 border-emerald-400 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+                ? "bg-emerald-950 border-emerald-400 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                 : isCasingCharged
-                  ? "bg-red-950 border-red-500 text-white shadow-[0_0_25px_rgba(239,68,68,0.8)] animate-pulse"
+                  ? "bg-red-950 border-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.7)] animate-pulse"
                   : isFaultActive && isSolidEarth
                     ? "bg-emerald-950 border-emerald-400 text-emerald-300"
                     : "bg-slate-900/90 border-slate-700 text-slate-300"
             )}>
-              {breakerTripped ? "🟢 BREAKER TRIPPED SAFELY" : isCasingCharged ? `🚨 ENCLOSURE CHARGED: ${voltage}V TOUCH HAZARD` : isFaultActive ? "⚡ FAULT ACTIVE: SOLID EARTH SHUNTING" : "⚡ SYSTEM NORMAL: INSULATION OK"}
+              {breakerTripped ? "🟢 BREAKER TRIPPED (350ms)" : isCasingCharged ? `🚨 CASING CHARGED: ${voltage}V` : isFaultActive ? "⚡ GPR SURGE ACTIVE" : "⚡ NORMAL STANDBY"}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 text-xs font-mono font-black text-cyan-300 bg-slate-900/90 border border-slate-700 rounded-xl shadow-md">
-              GRID: {voltage}V AC
+            <span className="px-2 py-0.5 text-[9.5px] font-mono font-black text-cyan-300 bg-slate-900 border border-slate-700 rounded-md">
+              GPR: {physics.gprVolts.toFixed(0)}V
+            </span>
+            <span className="px-2 py-0.5 text-[9.5px] font-mono font-black text-amber-300 bg-slate-900 border border-slate-700 rounded-md">
+              ΔV_step: {physics.stepVoltage.toFixed(1)}V
             </span>
           </div>
         </div>
 
         {/* Main Interactive High-Fidelity SVG Diagram */}
-        <div className="relative w-full h-full flex items-center justify-center p-3">
-          <svg viewBox="0 0 500 380" className="w-full h-full drop-shadow-[0_0_25px_rgba(0,0,0,0.8)]">
+        <div className="relative flex-1 w-full min-h-0 flex items-center justify-center p-1">
+          <svg viewBox="0 0 500 370" className="w-full h-full drop-shadow-[0_0_25px_rgba(0,0,0,0.8)] overflow-visible">
             <defs>
               <radialGradient id="gprGlow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.6" />
+                <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.7" />
                 <stop offset="60%" stopColor="#38bdf8" stopOpacity="0.2" />
                 <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
               </radialGradient>
@@ -561,199 +631,259 @@ export function EarthFaultSimulator({ config }: { config?: UserConfig }) {
                 <stop offset="70%" stopColor="#ef4444" stopOpacity="0.2" />
                 <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
               </radialGradient>
+
+              {/* Equipotential Soil Shell Gradient */}
+              <radialGradient id="soilShellGrad" cx="50%" cy="0%" r="90%">
+                <stop offset="0%" stopColor="#f59e0b" stopOpacity={isFaultActive && isSolidEarth ? 0.35 : 0.08} />
+                <stop offset="40%" stopColor="#0284c7" stopOpacity={isFaultActive && isSolidEarth ? 0.25 : 0.04} />
+                <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
+              </radialGradient>
             </defs>
 
             {/* Ground Soil Sub-Surface Layer */}
-            <rect x="0" y="270" width="500" height="110" fill="#090d16" stroke="#1e293b" strokeWidth="2" />
-            <line x1="0" y1="270" x2="500" y2="270" stroke="#334155" strokeWidth="3" />
-            <text x="20" y="285" fill="#475569" fontSize="10" fontWeight="bold" fontFamily="monospace">SOIL / GROUND EARTH MATRIX (R_EARTH = 2.0 Ω)</text>
+            <rect x="0" y={groundY} width="500" height="100" fill="#060911" stroke="#1e293b" strokeWidth="2" />
+            <line x1="0" y1={groundY} x2="500" y2={groundY} stroke="#334155" strokeWidth="3" />
+            <text x="15" y={groundY + 16} fill="#475569" fontSize="9" fontWeight="bold" fontFamily="monospace">
+              SOIL MATRIX (R_E = 2.0Ω · ρ = 100Ω·m)
+            </text>
+
+            {/* ==================================================================== */}
+            {/* 3D HEMISPHERICAL VOLTAGE DECAY SHELLS V(x) = (ρ·If)/(2πx)            */}
+            {/* ==================================================================== */}
+            <g transform={`translate(${rodX}, ${groundY})`}>
+              {/* Shell 4: 15% GPR Contours */}
+              <ellipse cx="0" cy="0" rx="170" ry="75" fill="none" stroke="#0284c7" strokeWidth="1.2" strokeDasharray="6 4" opacity={isFaultActive && isSolidEarth ? 0.7 : 0.2} />
+              {isFaultActive && isSolidEarth && (
+                <text x="145" y="32" fill="#38bdf8" fontSize="7.5" fontWeight="bold" fontFamily="monospace">
+                  {(physics.gprVolts * 0.15).toFixed(0)}V (15%)
+                </text>
+              )}
+
+              {/* Shell 3: 35% GPR Contours */}
+              <ellipse cx="0" cy="0" rx="120" ry="54" fill="none" stroke="#0284c7" strokeWidth="1.5" strokeDasharray="5 3" opacity={isFaultActive && isSolidEarth ? 0.8 : 0.25} />
+              {isFaultActive && isSolidEarth && (
+                <text x="100" y="24" fill="#38bdf8" fontSize="7.5" fontWeight="bold" fontFamily="monospace">
+                  {(physics.gprVolts * 0.35).toFixed(0)}V (35%)
+                </text>
+              )}
+
+              {/* Shell 2: 60% GPR Contours */}
+              <ellipse cx="0" cy="0" rx="75" ry="34" fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeDasharray="4 2" opacity={isFaultActive && isSolidEarth ? 0.9 : 0.3} />
+              {isFaultActive && isSolidEarth && (
+                <text x="62" y="16" fill="#f59e0b" fontSize="8" fontWeight="bold" fontFamily="monospace">
+                  {(physics.gprVolts * 0.60).toFixed(0)}V (60%)
+                </text>
+              )}
+
+              {/* Shell 1: 90% Core GPR Contours */}
+              <ellipse cx="0" cy="0" rx="35" ry="16" fill="url(#soilShellGrad)" stroke="#ef4444" strokeWidth="2" opacity={isFaultActive && isSolidEarth ? 1.0 : 0.4} />
+              {isFaultActive && isSolidEarth && (
+                <text x="30" y="10" fill="#ef4444" fontSize="8" fontWeight="bold" fontFamily="monospace">
+                  {(physics.gprVolts * 0.90).toFixed(0)}V (90%)
+                </text>
+              )}
+
+              {/* Animated Voltage Wave Ripple when Fault Active */}
+              {isFaultActive && isSolidEarth && (
+                <g>
+                  <motion.ellipse
+                    cx="0" cy="0"
+                    rx="15" ry="8"
+                    fill="none" stroke="#38bdf8" strokeWidth="2.5"
+                    animate={{ rx: [20, 160], ry: [10, 72], opacity: [0.9, 0] }}
+                    transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
+                  />
+                  <motion.ellipse
+                    cx="0" cy="0"
+                    rx="15" ry="8"
+                    fill="none" stroke="#f59e0b" strokeWidth="2"
+                    animate={{ rx: [20, 160], ry: [10, 72], opacity: [0.9, 0] }}
+                    transition={{ duration: 1.2, repeat: Infinity, delay: 0.5, ease: 'easeOut' }}
+                  />
+                </g>
+              )}
+            </g>
 
             {/* 1. POWER GRID SOURCE BUSBAR */}
-            <g transform="translate(40, 40)">
-              <rect x="0" y="0" width="420" height="12" rx="4" fill="#f59e0b" className="drop-shadow-[0_0_10px_#f59e0b]" />
-              <text x="210" y="-8" textAnchor="middle" fill="#f59e0b" fontSize="11" fontWeight="black" fontFamily="monospace">
-                HIGH VOLTAGE POWER GRID SUPPLY LINE ({voltage}V AC)
+            <g transform="translate(35, 30)">
+              <rect x="0" y="0" width="430" height="12" rx="4" fill="#f59e0b" className="drop-shadow-[0_0_10px_#f59e0b]" />
+              <text x="215" y="-6" textAnchor="middle" fill="#f59e0b" fontSize="10.5" fontWeight="black" fontFamily="monospace">
+                HIGH VOLTAGE POWER GRID FEEDER ({voltage}V AC)
               </text>
             </g>
 
             {/* Feeder Connection Wire down to Breaker */}
-            <line x1="120" y1="52" x2="120" y2="85" stroke={breakerTripped ? "#475569" : "#f59e0b"} strokeWidth="4" />
+            <line x1="100" y1="42" x2="100" y2="70" stroke={breakerTripped ? "#475569" : "#f59e0b"} strokeWidth="4" />
 
             {/* 2. PROTECTIVE CIRCUIT BREAKER (PANEL ENCLOSURE) */}
-            <g transform="translate(85, 85)">
-              <rect x="0" y="0" width="70" height="50" rx="8" fill="#0f172a" stroke={breakerTripped ? "#10b981" : "#ef4444"} strokeWidth="2.5" className="shadow-2xl" />
-              <text x="35" y="15" textAnchor="middle" fill="#94a3b8" fontSize="8" fontWeight="black" fontFamily="monospace">CIRCUIT BREAKER</text>
+            <g transform="translate(70, 70)">
+              <rect x="0" y="0" width="60" height="46" rx="6" fill="#0f172a" stroke={breakerTripped ? "#10b981" : "#ef4444"} strokeWidth="2" className="shadow-2xl" />
+              <text x="30" y="13" textAnchor="middle" fill="#94a3b8" fontSize="7.5" fontWeight="black" fontFamily="monospace">BREAKER</text>
               
-              {/* Breaker Contacts */}
-              <circle cx="35" cy="24" r="3" fill="#cbd5e1" />
-              <circle cx="35" cy="40" r="3" fill="#cbd5e1" />
+              <circle cx="30" cy="22" r="2.5" fill="#cbd5e1" />
+              <circle cx="30" cy="36" r="2.5" fill="#cbd5e1" />
 
-              {/* Breaker Switch Arm Animation */}
               {breakerTripped ? (
-                <line x1="35" y1="24" x2="15" y2="35" stroke="#10b981" strokeWidth="3.5" strokeLinecap="round" />
+                <line x1="30" y1="22" x2="14" y2="32" stroke="#10b981" strokeWidth="3" strokeLinecap="round" />
               ) : (
-                <line x1="35" y1="24" x2="35" y2="40" stroke="#ef4444" strokeWidth="3.5" strokeLinecap="round" />
+                <line x1="30" y1="22" x2="30" y2="36" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
               )}
               
-              <text x="35" y="47" textAnchor="middle" fill={breakerTripped ? "#10b981" : "#ef4444"} fontSize="7" fontWeight="bold" fontFamily="monospace">
-                {breakerTripped ? "TRIPPED" : "CLOSED"}
+              <text x="30" y="43" textAnchor="middle" fill={breakerTripped ? "#10b981" : "#ef4444"} fontSize="7" fontWeight="bold" fontFamily="monospace">
+                {breakerTripped ? "OPEN" : "CLOSED"}
               </text>
             </g>
 
             {/* Feeder Wire from Breaker to Motor */}
-            <line x1="120" y1="135" x2="120" y2="185" stroke={breakerTripped ? "#475569" : "#f59e0b"} strokeWidth="4" />
+            <line x1="100" y1="116" x2="100" y2="165" stroke={breakerTripped ? "#475569" : "#f59e0b"} strokeWidth="4" />
 
             {/* 3. INDUSTRIAL MOTOR APPARATUS ENCLOSURE */}
-            <g transform="translate(60, 185)">
+            <g transform="translate(45, 165)">
               <rect 
-                x="0" y="0" width="120" height="85" rx="12" 
+                x="0" y="0" width="110" height="80" rx="10" 
                 fill="#1e293b" 
                 stroke={isCasingCharged ? "#ef4444" : isFaultActive && isSolidEarth ? "#38bdf8" : "#475569"} 
-                strokeWidth="3.5" 
+                strokeWidth="3" 
                 className={cn("transition-colors duration-300 shadow-2xl", isCasingCharged && "animate-pulse")}
-                style={{ filter: isCasingCharged ? "drop-shadow(0 0 25px #ef4444)" : undefined }}
+                style={{ filter: isCasingCharged ? "drop-shadow(0 0 22px #ef4444)" : undefined }}
               />
               
-              {/* Motor Cooling Fins */}
-              <line x1="15" y1="15" x2="15" y2="70" stroke="#334155" strokeWidth="3" />
-              <line x1="25" y1="15" x2="25" y2="70" stroke="#334155" strokeWidth="3" />
-              <line x1="35" y1="15" x2="35" y2="70" stroke="#334155" strokeWidth="3" />
+              <line x1="12" y1="12" x2="12" y2="68" stroke="#334155" strokeWidth="2.5" />
+              <line x1="20" y1="12" x2="20" y2="68" stroke="#334155" strokeWidth="2.5" />
+              <line x1="28" y1="12" x2="28" y2="68" stroke="#334155" strokeWidth="2.5" />
               
-              {/* Stator Winding Graphic */}
-              <circle cx="75" cy="42" r="24" fill="#0f172a" stroke="#64748b" strokeWidth="2" />
-              <path d="M60,42 Q75,25 90,42 T120,42" fill="none" stroke="#f59e0b" strokeWidth="2" />
-              <text x="75" y="46" textAnchor="middle" fill="#cbd5e1" fontSize="9" fontWeight="black" fontFamily="monospace">STATOR WINDING</text>
-              <text x="60" y="-8" fill="#94a3b8" fontSize="10" fontWeight="black" fontFamily="monospace">3-PHASE MOTOR APPARATUS</text>
+              <circle cx="70" cy="40" r="22" fill="#0f172a" stroke="#64748b" strokeWidth="2" />
+              <path d="M56,40 Q70,24 84,40 T110,40" fill="none" stroke="#f59e0b" strokeWidth="2" />
+              <text x="70" y="44" textAnchor="middle" fill="#cbd5e1" fontSize="8" fontWeight="black" fontFamily="monospace">MOTOR</text>
+              <text x="55" y="-6" fill="#94a3b8" fontSize="9" fontWeight="black" fontFamily="monospace">APPARATUS ENCLOSURE</text>
 
               {/* Insulation Fault Spark Arc Inside Motor */}
               {isFaultActive && (
                 <motion.g animate={{ opacity: [1, 0.2, 1] }} transition={{ duration: 0.08, repeat: Infinity }}>
-                  <path d="M75,30 L95,15 L88,18 L115,0" fill="none" stroke="#fbbf24" strokeWidth="3" style={{ filter: 'drop-shadow(0 0 8px #fbbf24)' }} />
-                  <circle cx="115" cy="0" r="4" fill="#ff0000" className="animate-ping" />
+                  <path d="M70,28 L88,14 L82,18 L105,0" fill="none" stroke="#fbbf24" strokeWidth="3" style={{ filter: 'drop-shadow(0 0 8px #fbbf24)' }} />
+                  <circle cx="105" cy="0" r="4" fill="#ff0000" className="animate-ping" />
                 </motion.g>
               )}
             </g>
 
             {/* 4. GROUNDING PE CONDUCTOR & GROUND ROD */}
-            <g transform="translate(180, 227)">
+            <g transform="translate(155, 205)">
               <line 
-                x1="0" y1="0" x2="80" y2="0" 
+                x1="0" y1="0" x2="105" y2="0" 
                 stroke={isSolidEarth ? "#10b981" : "#ef4444"} 
-                strokeWidth="4" 
+                strokeWidth="3.5" 
                 strokeDasharray={isSolidEarth ? "none" : "4 4"}
               />
               
-              <text x="40" y="-8" textAnchor="middle" fill={isSolidEarth ? "#10b981" : "#ef4444"} fontSize="9" fontWeight="black" fontFamily="monospace">
-                {isSolidEarth ? "PE GROUND CONDUCTOR (2.0 Ω)" : "❌ SEVERED BROKEN PE WIRE"}
+              <text x="52" y="-7" textAnchor="middle" fill={isSolidEarth ? "#10b981" : "#ef4444"} fontSize="8" fontWeight="black" fontFamily="monospace">
+                {isSolidEarth ? "PE BOND CONDUCTOR" : "❌ SEVERED PE"}
               </text>
 
-              <g transform="translate(80, 0)">
-                <line x1="0" y1="0" x2="0" y2="70" stroke={isSolidEarth ? "#10b981" : "#ef4444"} strokeWidth="4" />
+              <g transform="translate(105, 0)">
+                <line x1="0" y1="0" x2="0" y2="65" stroke={isSolidEarth ? "#10b981" : "#ef4444"} strokeWidth="4" />
                 
-                <line x1="-15" y1="45" x2="15" y2="45" stroke={isSolidEarth ? "#10b981" : "#ef4444"} strokeWidth="3" />
-                <line x1="-10" y1="53" x2="10" y2="53" stroke={isSolidEarth ? "#10b981" : "#ef4444"} strokeWidth="2.5" />
-                <line x1="-5" y1="61" x2="5" y2="61" stroke={isSolidEarth ? "#10b981" : "#ef4444"} strokeWidth="2" />
+                <line x1="-12" y1="45" x2="12" y2="45" stroke={isSolidEarth ? "#10b981" : "#ef4444"} strokeWidth="2.5" />
+                <line x1="-8" y1="52" x2="8" y2="52" stroke={isSolidEarth ? "#10b981" : "#ef4444"} strokeWidth="2" />
+                <line x1="-4" y1="58" x2="4" y2="58" stroke={isSolidEarth ? "#10b981" : "#ef4444"} strokeWidth="1.5" />
 
                 {isFaultActive && isSolidEarth && (
-                  <g>
-                    <circle cx="0" cy="45" r="45" fill="url(#gprGlow)" className="animate-pulse" />
-                    <motion.circle 
-                      cx="0" cy="45" r="25" fill="none" stroke="#38bdf8" strokeWidth="2"
-                      animate={{ scale: [0.8, 1.4, 0.8], opacity: [0.8, 0, 0.8] }}
-                      transition={{ duration: 1.2, repeat: Infinity }}
-                    />
-                    <text x="0" y="80" textAnchor="middle" fill="#38bdf8" fontSize="8" fontWeight="bold" fontFamily="monospace">
-                      {(voltage/2.0).toFixed(0)}A GROUND FAULT CURRENT SHUNTED
-                    </text>
-                  </g>
+                  <text x="0" y="80" textAnchor="middle" fill="#38bdf8" fontSize="8" fontWeight="bold" fontFamily="monospace">
+                    {physics.groundCurrent.toFixed(0)}A FAULT SURGE
+                  </text>
                 )}
               </g>
             </g>
 
-            {/* 5. HUMAN BODY DIGITAL TWIN SILHOUETTE (OPERATOR) */}
-            <g transform="translate(330, 130)">
+            {/* ==================================================================== */}
+            {/* 5. WORKER DIGITAL TWIN, STEP-SPAN VECTOR & TOUCH VECTOR              */}
+            {/* ==================================================================== */}
+            <g transform={`translate(${workerX}, ${groundY - 120})`}>
               {isCasingCharged && !ppeEnabled && (
-                <circle cx="50" cy="80" r="75" fill="url(#dangerAura)" />
+                <circle cx="20" cy="65" r="60" fill="url(#dangerAura)" />
               )}
 
+              {/* Operator Body Silhouette */}
               <path 
-                d="M40 20 C40 10, 50 10, 50 20 C50 30, 48 35, 45 40 C55 42, 65 45, 65 55 L70 100 L60 100 L55 58 L52 110 C52 120, 58 135, 58 150 L50 150 L46 108 C46 125, 40 150, 40 150 L32 150 C32 125, 38 108, 38 108 L36 58 L22 42 C18 38, 22 35, 25 35 L36 50 Z" 
+                d="M16 16 C16 8, 24 8, 24 16 C24 24, 22 28, 20 32 C28 34, 36 36, 36 44 L40 80 L32 80 L28 46 L26 88 C26 96, 30 108, 30 120 L24 120 L21 86 C21 100, 16 120, 16 120 L10 120 C10 100, 15 86, 15 86 L14 46 L2 34 C-1 30, 2 28, 4 28 L14 40 Z" 
                 fill={ppeEnabled ? "#10b981" : isCasingCharged ? "#ef4444" : "#cbd5e1"} 
                 stroke={ppeEnabled ? "#34d399" : isCasingCharged ? "#f87171" : "#475569"} 
-                strokeWidth="2.5"
+                strokeWidth="2"
                 className="transition-colors duration-300"
-                style={{ filter: isCasingCharged && !ppeEnabled ? "drop-shadow(0 0 18px #ef4444)" : undefined }}
+                style={{ filter: isCasingCharged && !ppeEnabled ? "drop-shadow(0 0 16px #ef4444)" : undefined }}
               />
 
-              <text x="45" y="2" textAnchor="middle" fill="#cbd5e1" fontSize="10" fontWeight="black" fontFamily="monospace">
-                OPERATOR DIGITAL TWIN
+              <text x="20" y="2" textAnchor="middle" fill="#cbd5e1" fontSize="8.5" fontWeight="black" fontFamily="monospace">
+                OPERATOR ({workerDistance.toFixed(1)}m)
               </text>
 
-              <line 
-                x1="22" y1="42" x2="-150" y2="100" 
-                stroke={isCasingCharged && !ppeEnabled ? "#ef4444" : ppeEnabled ? "#10b981" : "#cbd5e1"} 
-                strokeWidth="4" 
-                strokeLinecap="round"
-              />
-
-              <g transform="translate(45, 42)">
+              {/* Heart Pulse Icon */}
+              <g transform="translate(20, 34)">
                 <motion.path 
-                  d="M12 5 C10 1.5, 6 1.5, 4 3.5 C2 5.5, 2 9.5, 6 13.5 L12 19 L18 13.5 C22 9.5, 22 5.5, 20 3.5 C18 1.5, 14 1.5, 12 5 Z" 
+                  d="M10 4 C8 1, 5 1, 3 3 C1 5, 1 8, 5 11 L10 16 L15 11 C19 8, 19 5, 17 3 C15 1, 12 1, 10 4 Z" 
                   fill={shockAnalysis.heartColor}
                   animate={isCasingCharged && !ppeEnabled ? { scale: [1, 1.4, 0.9, 1.2, 1] } : { scale: [1, 1.1, 1] }}
                   transition={isCasingCharged && !ppeEnabled 
                     ? { duration: shockAnalysis.heartRate, repeat: Infinity } 
                     : { duration: 1.5, repeat: Infinity }
                   }
-                  style={{ originX: '12px', originY: '12px' }}
+                  style={{ originX: '10px', originY: '10px' }}
                 />
               </g>
 
-              {isCasingCharged && !ppeEnabled && (
-                <AnimatePresence>
-                  <motion.path 
-                    initial={{ pathLength: 0, opacity: 0 }}
-                    animate={{ pathLength: 1, opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.25, repeat: Infinity, ease: 'linear' }}
-                    d="M-150, 100 L22, 42 L45, 42 L46, 108 L40, 150" 
-                    fill="none" 
-                    stroke="#ef4444" 
-                    strokeWidth="3.5" 
-                    strokeDasharray="8 8"
-                    style={{ filter: 'drop-shadow(0 0 10px #ef4444)' }}
-                  />
-                </AnimatePresence>
-              )}
+              {/* Touch Potential Connection Line (Motor Casing to Hand) */}
+              <line 
+                x1="2" y1="34" 
+                x2={155 - workerX} y2={205 - (groundY - 120)} 
+                stroke={isCasingCharged && !ppeEnabled ? "#ef4444" : ppeEnabled ? "#10b981" : "#64748b"} 
+                strokeWidth="2.5" 
+                strokeLinecap="round"
+                strokeDasharray={isCasingCharged ? "none" : "3 3"}
+              />
 
-              {ppeEnabled && (
-                <g transform="translate(45, 25)">
-                  <circle cx="0" cy="0" r="20" fill="rgba(16,185,129,0.2)" stroke="#10b981" strokeWidth="2" strokeDasharray="4 4" className="animate-spin" />
-                  <path d="M-6,-2 L-1,3 L7,-5" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" />
-                  <text x="0" y="32" textAnchor="middle" fill="#10b981" fontSize="8" fontWeight="black" fontFamily="monospace">1MΩ PPE INSULATION</text>
-                </g>
+              {/* 1.0m Human Step Stride Dimension Vector */}
+              <g transform="translate(0, 120)">
+                {/* Left foot to Right foot dimension span */}
+                <line x1="10" y1="0" x2="30" y2="0" stroke="#f59e0b" strokeWidth="2" markerEnd="url(#arrow)" />
+                <line x1="10" y1="-4" x2="10" y2="4" stroke="#f59e0b" strokeWidth="2" />
+                <line x1="30" y1="-4" x2="30" y2="4" stroke="#f59e0b" strokeWidth="2" />
+                <text x="20" y="12" textAnchor="middle" fill="#f59e0b" fontSize="7.5" fontWeight="black" fontFamily="monospace">
+                  1.0m STEP: {physics.stepVoltage.toFixed(1)}V
+                </text>
+              </g>
+
+              {/* Touch Current Spark */}
+              {isCasingCharged && !ppeEnabled && (
+                <circle cx="2" cy="34" r="5" fill="#ff0000" className="animate-ping" />
               )}
             </g>
           </svg>
         </div>
 
-        {/* Bottom Educational Substation Diagnostics Footer */}
-        <div className="absolute bottom-3 left-3 right-3 z-30 p-2.5 px-4 bg-slate-900/95 border border-slate-800 rounded-2xl flex items-center justify-between gap-2 shadow-2xl backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-              System Topology:
+        {/* Bottom Interactive Step Distance Slider & Topology Footer */}
+        <div className="w-full p-2 bg-slate-900/95 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 z-30 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+              Worker Position:
             </span>
-            <span className="text-xs font-mono font-black text-amber-300 uppercase">
-              {scenario === 'solid' ? 'TN-S / TT Solid Earthing Rod (R=2Ω)' : 'Broken PE Conductor (Floating Casing)'}
+            <input 
+              type="range"
+              min="1.0"
+              max="6.0"
+              step="0.5"
+              value={workerDistance}
+              onChange={(e) => setWorkerDistance(Number(e.target.value))}
+              className="w-24 sm:w-32 accent-amber-500 cursor-pointer h-1.5"
+              title="Drag worker closer or farther from ground rod to observe Step Potential decay"
+            />
+            <span className="text-[10px] font-mono font-black text-amber-300">
+              {workerDistance.toFixed(1)}m from rod
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-              PPE Protection:
-            </span>
-            <span className={cn("text-xs font-mono font-black uppercase", ppeEnabled ? "text-emerald-400" : "text-amber-400")}>
-              {ppeEnabled ? "1MΩ Gloves & Boots Equipped" : "Unprotected (0Ω)"}
+          <div className="flex items-center gap-1.5 font-mono text-[9px]">
+            <span className="text-slate-400">Topology:</span>
+            <span className="font-bold text-slate-200">
+              {scenario === 'solid' ? 'TN-S/TT Bonded (R=2Ω)' : 'Broken PE (Floating Enclosure)'}
             </span>
           </div>
         </div>

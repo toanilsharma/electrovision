@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { MCBState, TripCause } from '../../mcb/types';
 import { cn } from '@/src/lib/utils';
 import { Clock, ShieldAlert, Zap, Play, Pause, RotateCcw, Sparkles } from 'lucide-react';
+import { useAudioHaptics } from '../useAudioHaptics';
 
 interface BreakerCutawayProps {
   temperature: number;      // Bimetal temp °C
@@ -40,6 +41,8 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { playBreakerTripSound, playArcCrackle } = useAudioHaptics();
+  const prevStateRef = useRef(state);
 
   const [scrubProgress, setScrubProgress] = useState<number | null>(null);
   const [isManualScrub, setIsManualScrub] = useState<boolean>(false);
@@ -47,6 +50,17 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
   const isTripped = state !== MCBState.CLOSED;
   const isMagneticTrip = tripCause === TripCause.MAGNETIC || tripCause === TripCause.MAGNETIC_TOLERANCE_ZONE;
   const isOverload = tripCause === TripCause.THERMAL || temperature > 60;
+
+  // Audio trigger on trip state transition
+  useEffect(() => {
+    if (prevStateRef.current === MCBState.CLOSED && state !== MCBState.CLOSED) {
+      playBreakerTripSound();
+      if (state === MCBState.ARCING) {
+        playArcCrackle();
+      }
+    }
+    prevStateRef.current = state;
+  }, [state, playBreakerTripSound, playArcCrackle]);
 
   // Effective scrub progress (0.0: Closed -> 0.3: Unlatched -> 0.7: Arcing -> 1.0: Cleared)
   const effectiveProgress = useMemo(() => {

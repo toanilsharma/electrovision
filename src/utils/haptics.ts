@@ -34,4 +34,5 @@ export const HAPTIC_PATTERNS = {
   VF_ASYSTOLE: [200, 100, 200, 100, 1000] as number[], // Fading cardiac arrhythmia / v-fib arrest
   BREAKER_TRIP: [30] as number[],                      // Light solenoid mechanical click
   ARC_BLAST: [150, 50, 250] as number[],               // Arc flash plasma explosion
+  CLICK: [15] as number[],                             // Subtle tactile UI click
 };

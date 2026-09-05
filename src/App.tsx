@@ -157,10 +157,10 @@ export default function App() {
       <div id="alert-container" className="w-full max-w-[1600px] mx-auto px-2 sm:px-4 pt-2 z-30 shrink-0 empty:hidden"></div>
       
       <main className="flex-1 overflow-y-auto lg:overflow-hidden bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#0f172a_100%)] relative flex flex-col">
-        <div className="max-w-[1600px] w-full p-2 lg:p-4 mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+        <div className="max-w-[1600px] w-full p-1.5 lg:p-2 mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
           <div id="mobile-action-container" className="fixed bottom-4 left-4 right-4 z-[100] lg:hidden empty:hidden pointer-events-none flex flex-col justify-end"></div>
           
-          <div className="flex-1 overflow-y-auto lg:overflow-hidden">
+          <div className="flex-1 overflow-y-auto lg:overflow-hidden min-h-0 flex flex-col">
             <ErrorBoundary>
               {renderModule()}
             </ErrorBoundary>

@@ -145,22 +145,22 @@ export const IECZoneChart: React.FC<IECZoneChartProps> = ({
   const iTicks = [0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0];
 
   return (
-    <div className={cn("w-full bg-slate-950/95 border border-slate-800 rounded-xl p-2.5 flex flex-col gap-2 shadow-2xl select-none", className)}>
+    <div className={cn("w-full bg-slate-950/95 border border-slate-800 rounded-xl p-1.5 sm:p-2 flex flex-col gap-1.5 shadow-2xl select-none flex-1 min-h-0 justify-between", className)}>
       {/* Header with Zone Badge */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+      <div className="flex items-center justify-between border-b border-slate-800 pb-1 shrink-0">
         <div className="flex items-center gap-1.5">
-          <Activity className="w-4 h-4 text-sky-400" />
-          <span className="text-xs font-black tracking-wider uppercase text-sky-300 font-sans">
+          <Activity className="w-3.5 h-3.5 text-sky-400" />
+          <span className="text-[11px] font-black tracking-wider uppercase text-sky-300 font-sans">
             IEC 60479-1 Time/Current Zones
           </span>
         </div>
-        <span className={cn("text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border shadow-md", currentZone.badgeStyle)}>
+        <span className={cn("text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded border shadow-md", currentZone.badgeStyle)}>
           {currentZone.zone} ({currentZone.vfibProbability} V-Fib Risk)
         </span>
       </div>
 
       {/* Log-Log Canvas / SVG Zone Chart */}
-      <div className="relative w-full aspect-[16/9] max-h-[220px] bg-slate-900/90 rounded-lg border border-slate-800 overflow-hidden flex items-center justify-center p-1 group cursor-crosshair">
+      <div className="relative w-full flex-1 min-h-[140px] max-h-[210px] bg-slate-900/90 rounded-lg border border-slate-800 overflow-hidden flex items-center justify-center p-0.5 group cursor-crosshair">
         
         {/* Hover Coordinate HUD Overlay */}
         <AnimatePresence>
@@ -362,26 +362,26 @@ export const IECZoneChart: React.FC<IECZoneChartProps> = ({
       </div>
 
       {/* 6-Zone Status Strip with Live Active Highlight */}
-      <div className="grid grid-cols-6 gap-1 shrink-0 pt-0.5">
+      <div className="grid grid-cols-6 gap-0.5 sm:gap-1 shrink-0">
         {(['AC-1', 'AC-2', 'AC-3', 'AC-4.1', 'AC-4.2', 'AC-4.3'] as const).map((z) => {
           const isActive = (hoverZone ? hoverZone.zone : currentZone.zone) === z;
           return (
             <div
               key={z}
               className={cn(
-                "py-1 px-0.5 rounded-lg border text-center transition-all flex flex-col items-center justify-center select-none",
+                "py-0.5 px-0.5 rounded border text-center transition-all flex flex-col items-center justify-center select-none",
                 isActive
-                  ? "bg-slate-900 border-2 border-white shadow-lg ring-1 ring-white/50 scale-105 z-10"
-                  : "bg-slate-950/60 border-slate-800 opacity-60"
+                  ? "bg-slate-900 border border-white shadow-md scale-105 z-10"
+                  : "bg-slate-950/60 border-slate-800/80 opacity-60"
               )}
             >
               <span className={cn(
-                "text-[9.5px] font-mono font-black",
+                "text-[8.5px] font-mono font-black",
                 isActive ? "text-white" : "text-slate-400"
               )}>
                 {z}
               </span>
-              <span className="text-[7.5px] font-sans font-bold text-slate-400 leading-none mt-0.5">
+              <span className="text-[7px] font-mono text-slate-400 leading-none mt-0.5">
                 {z === 'AC-1' ? '<0.5mA' : z === 'AC-2' ? '≤10mA' : z === 'AC-3' ? 'Let-Go' : z === 'AC-4.1' ? '<5% VF' : z === 'AC-4.2' ? '<50% VF' : '>50% VF'}
               </span>
             </div>
@@ -389,22 +389,22 @@ export const IECZoneChart: React.FC<IECZoneChartProps> = ({
         })}
       </div>
 
-      {/* Explanatory Banner Below Chart with Standards-Accurate Short Impact */}
-      <div className={cn("p-2 rounded-lg border text-left flex items-center justify-between gap-2 transition-all shadow-md", hoverZone ? hoverZone.badgeStyle : currentZone.badgeStyle)}>
+      {/* Compact Status Banner with Standards-Accurate Short Impact */}
+      <div className={cn("px-2 py-1 rounded-lg border text-left flex items-center justify-between gap-2 transition-all shadow-sm shrink-0", hoverZone ? hoverZone.badgeStyle : currentZone.badgeStyle)}>
         <div className="flex flex-col min-w-0">
-          <span className="text-xs font-black uppercase tracking-wider font-sans truncate">
+          <span className="text-[10.5px] font-black uppercase tracking-wider font-sans truncate">
             {hoverZone ? hoverZone.label : currentZone.label}
           </span>
-          <span className="text-[10px] font-extrabold leading-tight opacity-95 mt-0.5 truncate text-amber-200">
+          <span className="text-[9px] font-bold leading-none mt-0.5 truncate text-amber-200">
             ⚡ {hoverZone ? hoverZone.shortImpact : currentZone.shortImpact}
           </span>
         </div>
-        <div className="flex flex-col items-end shrink-0">
-          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-black/60 text-white shadow">
-            {hoverPos ? `Hover: ${hoverPos.iMA.toFixed(1)} mA` : `I_heart: ${effectiveHeartCurrent.toFixed(1)} mA`}
+        <div className="flex items-center gap-1.5 shrink-0 font-mono">
+          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-black/60 text-white shadow">
+            {hoverPos ? `${hoverPos.iMA.toFixed(1)} mA` : `${effectiveHeartCurrent.toFixed(1)} mA`}
           </span>
-          <span className="text-[9px] font-mono text-slate-400 mt-0.5">
-            {`F_H=${heartFactor.toFixed(1)} (I_body=${currentMA.toFixed(1)}mA)`}
+          <span className="text-[8px] text-slate-400">
+            F_H={heartFactor.toFixed(1)}
           </span>
         </div>
       </div>

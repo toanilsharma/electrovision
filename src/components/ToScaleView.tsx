@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { ElectrodeConfig, calculateIEEE1584_2018 } from '../utils/ieee1584-2018';
 import { ShieldAlert, Zap, Radio, CheckCircle, Flame, Volume2, VolumeX, Maximize2, Layers, Footprints, AlertTriangle, Eye, FlameKindling, Thermometer, Shield } from 'lucide-react';
+import { useAudioHaptics } from './useAudioHaptics';
 
 export type ScaleMode = 'auto' | '10m' | '60m';
 export type ViewMode = 'normal' | 'thermal';
@@ -40,6 +41,23 @@ export function ToScaleView({
   const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(false);
   const [pressureWaveDistM, setPressureWaveDistM] = useState<number>(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const { playArcBlast, playArcCrackle, playBreakerTripSound } = useAudioHaptics();
+  const prevSimulatingRef = useRef(isSimulating);
+
+  // Audio synch on simulation state change
+  useEffect(() => {
+    if (isSimulating && !prevSimulatingRef.current) {
+      if (!isMuted) {
+        playArcBlast();
+        playArcCrackle();
+      }
+    } else if (!isSimulating && prevSimulatingRef.current) {
+      if (!isMuted) {
+        playBreakerTripSound();
+      }
+    }
+    prevSimulatingRef.current = isSimulating;
+  }, [isSimulating, isMuted, playArcBlast, playArcCrackle, playBreakerTripSound]);
 
   // Detect prefers-reduced-motion
   useEffect(() => {
@@ -85,18 +103,27 @@ export function ToScaleView({
     ((incidentEnergy - conventionalResult.incidentEnergy) / Math.max(0.1, conventionalResult.incidentEnergy)) * 100
   );
 
+  // IEEE 1584-2018 Multi-Zone Physical Boundaries (Db for 1.2 cal, D8 for 8 cal, D40 for 40 cal)
+  const boundary8calMeters = useMemo(() => {
+    return Math.max(0.2, boundaryRadiusMeters * Math.pow(1.2 / 8.0, 1 / 1.2));
+  }, [boundaryRadiusMeters]);
+
+  const boundary40calMeters = useMemo(() => {
+    return Math.max(0.1, boundaryRadiusMeters * Math.pow(1.2 / 40.0, 1 / 1.2));
+  }, [boundaryRadiusMeters]);
+
   // Pressure Wave Runner
   useEffect(() => {
     if (isSimulating) {
       if (!prefersReducedMotion) {
         let startTime = Date.now();
-        const duration = 1500;
+        const duration = 1200;
         const interval = setInterval(() => {
           const elapsed = Date.now() - startTime;
           const progress = Math.min(1, elapsed / duration);
           setPressureWaveDistM(progress * boundaryRadiusMeters);
           if (progress >= 1) clearInterval(interval);
-        }, 30);
+        }, 25);
         return () => clearInterval(interval);
       } else {
         setPressureWaveDistM(boundaryRadiusMeters);
@@ -106,7 +133,7 @@ export function ToScaleView({
     }
   }, [isSimulating, boundaryRadiusMeters, prefersReducedMotion]);
 
-  // Canvas 2.5D Particle Overlay (Particles capped at 150)
+  // Canvas 2.5D Particle Overlay with Molten Copper Droplet Ejection
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -114,45 +141,47 @@ export function ToScaleView({
     if (!ctx) return;
 
     let animId: number;
-    let particles: { x: number; y: number; vx: number; vy: number; alpha: number; size: number; color?: string }[] = [];
+    let particles: { x: number; y: number; vx: number; vy: number; alpha: number; size: number; color?: string; gravity?: number }[] = [];
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       if (isSimulating && !prefersReducedMotion) {
-        if (particles.length < 150) {
+        if (particles.length < 160) {
+          // Molten copper droplet particle ejection stream
+          for (let i = 0; i < 3; i++) {
+            const angle = (Math.random() - 0.5) * Math.PI * 0.85;
+            const speed = Math.random() * 5.5 + 2.0;
+            particles.push({
+              x: canvas.width / 2 + (Math.random() - 0.5) * 14,
+              y: canvas.height * 0.42,
+              vx: Math.sin(angle) * speed,
+              vy: -Math.cos(angle) * speed * 0.75 + 1.2,
+              alpha: 1.0,
+              size: Math.random() * 2.8 + 1.2,
+              color: Math.random() > 0.4 ? '#fbbf24' : '#f97316',
+              gravity: 0.14
+            });
+          }
+
           // Rising smoke wisps
           particles.push({
-            x: canvas.width / 2 + (Math.random() - 0.5) * 40,
-            y: canvas.height * 0.45 + (Math.random() - 0.5) * 20,
+            x: canvas.width / 2 + (Math.random() - 0.5) * 36,
+            y: canvas.height * 0.42 + (Math.random() - 0.5) * 16,
             vx: (Math.random() - 0.5) * 1.5,
             vy: -Math.random() * 2.5 - 1.0,
-            alpha: 0.85,
-            size: Math.random() * 10 + 4,
-            color: viewMode === 'thermal' ? 'rgba(234, 179, 8, 0.6)' : 'rgba(148, 163, 184, 0.7)'
+            alpha: 0.75,
+            size: Math.random() * 8 + 4,
+            color: viewMode === 'thermal' ? 'rgba(234, 179, 8, 0.55)' : 'rgba(148, 163, 184, 0.65)'
           });
-
-          // Molten metal droplet sparks on breaker failure
-          if (clearingTimeMs > 400) {
-            for (let i = 0; i < 2; i++) {
-              particles.push({
-                x: canvas.width / 2 + (Math.random() - 0.5) * 16,
-                y: canvas.height * 0.45,
-                vx: (Math.random() - 0.5) * 6,
-                vy: Math.random() * 4 + 1.5,
-                alpha: 1.0,
-                size: Math.random() * 3 + 1.5,
-                color: '#f97316'
-              });
-            }
-          }
         }
 
         particles.forEach((p, idx) => {
           p.x += p.vx;
           p.y += p.vy;
-          p.alpha -= 0.015;
-          p.size += 0.15;
+          if (p.gravity) p.vy += p.gravity;
+          p.alpha -= 0.018;
+          p.size = Math.max(0.5, p.size + (p.gravity ? -0.02 : 0.12));
 
           ctx.fillStyle = p.color || `rgba(148, 163, 184, ${Math.max(0, p.alpha)})`;
           ctx.beginPath();
@@ -184,6 +213,12 @@ export function ToScaleView({
 
   const boundaryRx = Math.max(12, boundaryRadiusMeters * scalePxPerMeter);
   const boundaryRy = boundaryRx * 0.5;
+
+  const boundary8calRx = Math.max(8, boundary8calMeters * scalePxPerMeter);
+  const boundary8calRy = boundary8calRx * 0.5;
+
+  const boundary40calRx = Math.max(5, boundary40calMeters * scalePxPerMeter);
+  const boundary40calRy = boundary40calRx * 0.5;
 
   const boundary400msRx = Math.max(14, boundary400ms * scalePxPerMeter);
   const boundary400msRy = boundary400msRx * 0.5;
@@ -321,6 +356,28 @@ export function ToScaleView({
           animate={isSimulating && clearingTimeMs > 400 ? { x: [-2, 2, -3, 3, -1, 1, 0] } : { x: 0 }}
           transition={{ duration: 0.2, repeat: Infinity }}
         >
+          <defs>
+            <radialGradient id="plasmaFireball" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+              <stop offset="25%" stopColor="#67e8f9" stopOpacity="0.95" />
+              <stop offset="55%" stopColor="#fbbf24" stopOpacity="0.9" />
+              <stop offset="80%" stopColor="#f97316" stopOpacity="0.75" />
+              <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
+            </radialGradient>
+            <radialGradient id="plasmaThermal" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="30%" stopColor="#fbbf24" />
+              <stop offset="70%" stopColor="#dc2626" />
+              <stop offset="100%" stopColor="#1e3a8a" stopOpacity="0" />
+            </radialGradient>
+            <filter id="blastGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
           
           {/* 1. 2.5D ISOMETRIC METRE-GRID FLOOR PLANE (30° Angle) */}
           <g id="iso-floor-grid">
@@ -369,21 +426,21 @@ export function ToScaleView({
             <text 
               x={100 - boundary400msRx * 0.866} 
               y={110 + boundary400msRy * 0.5} 
-              textAnchor="end" fill="#f87171" fontSize="11" fontWeight="bold"
+              textAnchor="end" fill="#f87171" fontSize="10" fontWeight="bold"
             >
               400ms: {boundary400ms.toFixed(1)}m
             </text>
           </g>
 
-          {/* 4. ACTIVE ARC FLASH BOUNDARY ELLIPSE (Tag Attached ON Ring at 90° Angle) */}
+          {/* 4. ACTIVE ARC FLASH BOUNDARY ELLIPSE (1.2 cal/cm² Onset) */}
           <g>
             <motion.ellipse
               cx="100"
               cy="110"
               rx={boundaryRx}
               ry={boundaryRy}
-              fill="rgba(239, 68, 68, 0.14)"
-              stroke="#ef4444"
+              fill="rgba(234, 179, 8, 0.12)"
+              stroke="#eab308"
               strokeWidth="2"
               strokeDasharray="4 3"
               animate={{ rx: boundaryRx, ry: boundaryRy }}
@@ -393,11 +450,61 @@ export function ToScaleView({
             <text 
               x={100} 
               y={110 - boundaryRy - 3} 
-              textAnchor="middle" fill="#ef4444" fontSize="11" fontWeight="bold"
+              textAnchor="middle" fill="#eab308" fontSize="10" fontWeight="bold"
             >
-              Db: {boundaryRadiusMeters.toFixed(2)}m (1.2 cal onset)
+              Db: {boundaryRadiusMeters.toFixed(2)}m (1.2 cal/cm² AFB)
             </text>
           </g>
+
+          {/* 4B. CATEGORY 2 BOUNDARY ELLIPSE (8.0 cal/cm² Onset) */}
+          {boundary8calMeters < boundaryRadiusMeters && (
+            <g>
+              <motion.ellipse
+                cx="100"
+                cy="110"
+                rx={boundary8calRx}
+                ry={boundary8calRy}
+                fill="rgba(249, 115, 22, 0.15)"
+                stroke="#f97316"
+                strokeWidth="1.5"
+                strokeDasharray="4 2"
+                animate={{ rx: boundary8calRx, ry: boundary8calRy }}
+                transition={{ type: "spring", stiffness: 200, damping: 25 }}
+              />
+              <text 
+                x={100 + boundary8calRx + 2} 
+                y={110 - 2} 
+                textAnchor="start" fill="#fb923c" fontSize="9" fontWeight="bold"
+              >
+                Cat 2: {boundary8calMeters.toFixed(2)}m (8 cal)
+              </text>
+            </g>
+          )}
+
+          {/* 4C. FATAL BLAST & BURN ZONE (40.0 cal/cm² Dangerous Zone) */}
+          {boundary40calMeters < boundary8calMeters && (
+            <g>
+              <motion.ellipse
+                cx="100"
+                cy="110"
+                rx={boundary40calRx}
+                ry={boundary40calRy}
+                fill="rgba(239, 68, 68, 0.28)"
+                stroke="#ef4444"
+                strokeWidth="2"
+                strokeDasharray="3 2"
+                animate={{ rx: boundary40calRx, ry: boundary40calRy }}
+                transition={{ type: "spring", stiffness: 200, damping: 25 }}
+              />
+              <text 
+                x={100 - boundary40calRx - 2} 
+                y={110 - 2} 
+                textAnchor="end" fill="#f87171" fontSize="9" fontWeight="bold"
+              >
+                Fatal: {boundary40calMeters.toFixed(2)}m (40 cal)
+              </text>
+            </g>
+          )}
 
           {/* 5. WORKING DISTANCE ELLIPSE (D) */}
           <motion.ellipse
@@ -461,25 +568,57 @@ export function ToScaleView({
             <line x1="5" y1="-33" x2="5" y2="-8" stroke="#f97316" strokeWidth="3" />
           </g>
 
-          {/* 9. SUSTAINED ARC EXPLOSION */}
+          {/* 9. SUSTAINED 3D PLASMA FIREBALL SPHERE & ACOUSTIC SHOCKWAVES */}
           <AnimatePresence>
             {isSimulating && (
               <motion.g key="iso-arc-plasma" transform="translate(100, 85)">
-                {/* White-Hot Plasma Core */}
-                <motion.circle
-                  cx="0" cy="0" r={Math.min(28, boundaryRx * 0.6)}
-                  fill="#ffffff"
-                  style={{ filter: 'drop-shadow(0 0 30px #ffffff)' }}
-                  animate={prefersReducedMotion ? { opacity: 1 } : { scale: [1, 1.3, 0.95, 1.2], opacity: [1, 0.8, 1] }}
-                  transition={{ duration: 0.1, repeat: Infinity }}
+                {/* Acoustic Blast Wave Shockwave Ring 1 (Sonic Expansion) */}
+                <motion.ellipse
+                  cx="0" cy="25"
+                  rx="10" ry="5"
+                  fill="none"
+                  stroke="#fbbf24"
+                  strokeWidth="2.5"
+                  animate={{
+                    rx: [10, Math.min(100, boundaryRx * 1.15)],
+                    ry: [5, Math.min(50, boundaryRy * 1.15)],
+                    opacity: [0.95, 0],
+                    strokeWidth: [2.5, 0.5]
+                  }}
+                  transition={{ duration: 0.8, repeat: Infinity, ease: "easeOut" }}
                 />
-                {/* Flash Bloom */}
+                {/* Acoustic Blast Wave Shockwave Ring 2 */}
+                <motion.ellipse
+                  cx="0" cy="25"
+                  rx="6" ry="3"
+                  fill="none"
+                  stroke="#f97316"
+                  strokeWidth="2"
+                  animate={{
+                    rx: [6, Math.min(80, boundaryRx * 0.9)],
+                    ry: [3, Math.min(40, boundaryRy * 0.9)],
+                    opacity: [0.85, 0],
+                    strokeWidth: [2, 0.5]
+                  }}
+                  transition={{ duration: 0.65, repeat: Infinity, ease: "easeOut", delay: 0.2 }}
+                />
+                {/* 3D Plasma Fireball Outer Radiant Bloom */}
                 <motion.circle
-                  cx="0" cy="0" r={Math.min(42, workingRx * (1 + incidentEnergy / 40))}
-                  fill={viewMode === 'thermal' ? "rgba(255, 255, 255, 0.9)" : "rgba(251, 146, 60, 0.85)"}
-                  style={{ filter: 'drop-shadow(0 0 25px #fb923c)' }}
-                  animate={prefersReducedMotion ? { opacity: 0.8 } : { scale: [1, 1.15, 1] }}
-                  transition={{ duration: 0.15, repeat: Infinity }}
+                  cx="0" cy="0"
+                  r={Math.min(46, workingRx * (1.1 + incidentEnergy / 35))}
+                  fill={viewMode === 'thermal' ? "url(#plasmaThermal)" : "url(#plasmaFireball)"}
+                  filter="url(#blastGlow)"
+                  animate={prefersReducedMotion ? { opacity: 0.9 } : { scale: [1, 1.25, 0.92, 1.18], opacity: [0.85, 1, 0.8] }}
+                  transition={{ duration: 0.12, repeat: Infinity }}
+                />
+                {/* White-Hot Core Plasma (>20,000°C Ionized Core) */}
+                <motion.circle
+                  cx="0" cy="0"
+                  r={Math.min(22, boundaryRx * 0.45)}
+                  fill="#ffffff"
+                  style={{ filter: 'drop-shadow(0 0 25px #ffffff)' }}
+                  animate={prefersReducedMotion ? { opacity: 1 } : { scale: [1, 1.35, 0.9, 1.2], opacity: [1, 0.9, 1] }}
+                  transition={{ duration: 0.08, repeat: Infinity }}
                 />
               </motion.g>
             )}

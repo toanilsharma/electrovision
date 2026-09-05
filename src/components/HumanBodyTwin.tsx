@@ -14,6 +14,8 @@ interface HumanBodyTwinProps {
   isPPESafe?: boolean;
   activePPENames?: string[];
   onMasterReset?: () => void;
+  compareLabel?: string;
+  isCompactDual?: boolean;
 }
 
 export const HumanBodyTwin: React.FC<HumanBodyTwinProps> = ({
@@ -25,7 +27,9 @@ export const HumanBodyTwin: React.FC<HumanBodyTwinProps> = ({
   profile,
   isPPESafe,
   activePPENames = [],
-  onMasterReset
+  onMasterReset,
+  compareLabel,
+  isCompactDual = false
 }) => {
   const skinCondition = (profile && typeof profile === 'object' && (profile as any)?.skinCondition) || 'dry';
 
@@ -175,7 +179,7 @@ export const HumanBodyTwin: React.FC<HumanBodyTwinProps> = ({
 
   const currentPathString = activePath === 'hand-to-hand' ? pathHandToHand : pathHandToFoot;
 
-  // Left Column Alert Cards (Double-Sized, High-Contrast HTML DOM Badges)
+  // Left Column Compact Telemetry Chips (Visual-First, Zero Paragraphs)
   const leftAlerts = useMemo(() => {
     if (isPPESafe || !hasDamage || activeMA < 0.5) return [];
     const list = [];
@@ -183,37 +187,43 @@ export const HumanBodyTwin: React.FC<HumanBodyTwinProps> = ({
     if (activeMA >= 0.5 && activeMA < 10) {
       list.push({
         id: 'tingle',
-        icon: <Zap className="w-4 h-4 text-yellow-400 shrink-0" />,
-        title: '⚡ MILD TINGLE (0.5 - 10 mA)',
-        subtitle: 'Perception threshold. Buzzing sensations in fingertips.',
-        badgeClass: 'bg-yellow-950/98 border-yellow-400 text-yellow-100 shadow-[0_0_25px_rgba(250,204,21,0.35)]'
+        icon: <Zap className="w-3.5 h-3.5 text-yellow-400 shrink-0" />,
+        title: 'TINGLE PERCEPTION',
+        metric: `${activeMA.toFixed(1)} mA`,
+        tag: 'ZONE AC-2',
+        detail: 'Sensory threshold (IEC 60479-1 §5.2)',
+        badgeClass: 'bg-slate-900/95 border-yellow-500/60 text-yellow-300 shadow-[0_0_15px_rgba(250,204,21,0.2)]'
       });
     }
 
     if (activeMA >= 10) {
       list.push({
         id: 'letgo',
-        icon: <AlertOctagon className="w-4 h-4 text-orange-400 shrink-0" />,
-        title: '✊ CANNOT LET GO (10 mA+)',
-        subtitle: 'Forearm flexor spasm locks grip to live conductor!',
-        badgeClass: 'bg-orange-950/98 border-orange-400 text-amber-100 shadow-[0_0_25px_rgba(249,115,22,0.45)] ring-1 ring-orange-400/50'
+        icon: <AlertOctagon className="w-3.5 h-3.5 text-orange-400 shrink-0 animate-pulse" />,
+        title: 'TETANY LOCK',
+        metric: `${activeMA.toFixed(1)} mA > 10mA`,
+        tag: 'LET-GO FAILED',
+        detail: 'Forearm flexors seized; grip locked to conductor',
+        badgeClass: 'bg-orange-950/90 border-orange-500 text-orange-200 shadow-[0_0_18px_rgba(249,115,22,0.35)] ring-1 ring-orange-400/50'
       });
     }
 
     if (activeMA >= 100) {
       list.push({
         id: 'burns',
-        icon: <Flame className="w-4 h-4 text-rose-400 shrink-0" />,
-        title: '🔥 THERMAL BURNS (100 mA+)',
-        subtitle: 'Joule heating punctures stratum corneum at entry point.',
-        badgeClass: 'bg-rose-950/98 border-rose-400 text-rose-100 shadow-[0_0_25px_rgba(244,63,94,0.45)]'
+        icon: <Flame className="w-3.5 h-3.5 text-rose-400 shrink-0 animate-bounce" />,
+        title: 'ARC PUNCTURE',
+        metric: `JOULE HEATING`,
+        tag: 'STRATUM CORNEUM',
+        detail: 'Skin puncture & subcutaneous thermal necrosis',
+        badgeClass: 'bg-rose-950/90 border-rose-500 text-rose-200 shadow-[0_0_18px_rgba(244,63,94,0.35)]'
       });
     }
 
     return list;
   }, [isPPESafe, hasDamage, activeMA]);
 
-  // Right Column Alert Cards (Double-Sized, High-Contrast HTML DOM Badges)
+  // Right Column Compact Telemetry Chips (Visual-First, Zero Paragraphs)
   const rightAlerts = useMemo(() => {
     if (isPPESafe || !hasDamage || activeMA < 0.5) return [];
     const list = [];
@@ -221,30 +231,36 @@ export const HumanBodyTwin: React.FC<HumanBodyTwinProps> = ({
     if (activeMA >= 20) {
       list.push({
         id: 'respiratory',
-        icon: <Activity className="w-4 h-4 text-amber-400 shrink-0" />,
-        title: '🫁 CHEST CRAMP (20 mA+)',
-        subtitle: 'Intercostal muscle tetany. Severe asphyxia risk!',
-        badgeClass: 'bg-amber-950/98 border-amber-400 text-amber-100 shadow-[0_0_25px_rgba(245,158,11,0.4)]'
+        icon: <Activity className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />,
+        title: 'CHEST TETANY',
+        metric: 'RESPIRATORY SPASM',
+        tag: 'ASPHYXIA RISK',
+        detail: 'Intercostal muscle cramp blocks respiration',
+        badgeClass: 'bg-amber-950/90 border-amber-500 text-amber-200 shadow-[0_0_18px_rgba(245,158,11,0.3)]'
       });
     }
 
     if (activeMA >= 50) {
       list.push({
         id: 'vfib',
-        icon: <Skull className="w-4 h-4 text-red-400 shrink-0" />,
-        title: '💔 VFIB / CARDIAC ARREST (50 mA+)',
-        subtitle: 'Lethal dysrhythmia! Heart stops pumping blood!',
-        badgeClass: 'bg-red-950/98 border-red-500 text-white font-black animate-pulse shadow-[0_0_30px_rgba(239,68,68,0.7)] ring-2 ring-red-500'
+        icon: <Skull className="w-3.5 h-3.5 text-red-400 shrink-0 animate-bounce" />,
+        title: 'CARDIAC V-FIB',
+        metric: 'FATAL ARREST',
+        tag: 'ZONE AC-4',
+        detail: 'Ventricular fibrillation; heart stops pumping blood',
+        badgeClass: 'bg-red-950/95 border-red-500 text-white font-black animate-pulse shadow-[0_0_25px_rgba(239,68,68,0.7)] ring-2 ring-red-500'
       });
     }
 
     if (activePath === 'hand-to-foot' && activeMA >= 50) {
       list.push({
         id: 'toe_exit_burn',
-        icon: <Flame className="w-4 h-4 text-rose-400 shrink-0" />,
-        title: '🦶 FOOT EXIT BURN & GROUND ARC',
-        subtitle: 'High current density exiting plantar sole into earth ground.',
-        badgeClass: 'bg-red-950/98 border-red-500 text-rose-100 animate-pulse shadow-[0_0_25px_rgba(239,68,68,0.55)]'
+        icon: <Flame className="w-3.5 h-3.5 text-rose-400 shrink-0" />,
+        title: 'GROUND EXIT',
+        metric: 'PLANTAR ARC',
+        tag: 'EARTH EXIT',
+        detail: 'Current arcs through sole into ground plane',
+        badgeClass: 'bg-rose-950/90 border-rose-500 text-rose-200 shadow-[0_0_18px_rgba(239,68,68,0.4)]'
       });
     }
 
@@ -274,13 +290,23 @@ export const HumanBodyTwin: React.FC<HumanBodyTwinProps> = ({
       `}</style>
 
       {/* Header Bar with Live Status & Telemetry (Single Unified Architecture) */}
-      <div className="w-full bg-slate-900/95 border-b border-slate-800 py-1.5 px-3 flex items-center justify-between gap-2 z-20 shrink-0 min-h-[36px]">
-        <div className="flex items-center gap-2 flex-wrap min-w-0">
+      <div className="w-full bg-slate-900/95 border-b border-slate-800 py-1 px-2 flex items-center justify-between gap-1 z-20 shrink-0 min-h-[34px]">
+        {compareLabel && (
+          <span className={cn(
+            "px-2 py-0.5 text-[9px] sm:text-[9.5px] font-black uppercase tracking-wider rounded border font-mono shrink-0 shadow-sm",
+            isPPESafe
+              ? "bg-emerald-950 text-emerald-300 border-emerald-500/80 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+              : "bg-red-950 text-red-200 border-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse"
+          )}>
+            {compareLabel}
+          </span>
+        )}
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
           <span
             className={cn(
-              'px-2 py-0.5 text-[10px] sm:text-xs font-black uppercase tracking-wider rounded border shadow-sm flex items-center gap-1.5 transition-all whitespace-nowrap',
+              'px-1.5 py-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wider rounded border shadow-sm flex items-center gap-1 transition-all whitespace-nowrap',
               isPPESafe
-                ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/80 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/80 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
                 : isAnimating
                 ? 'bg-red-950/90 text-red-300 border-red-500/80 animate-pulse'
                 : 'bg-slate-800 text-slate-300 border-slate-700'
@@ -288,39 +314,43 @@ export const HumanBodyTwin: React.FC<HumanBodyTwinProps> = ({
           >
             {isPPESafe ? (
               <>
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                PPE ISOLATION ACTIVE (0.0 mA)
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                PROTECTED (0 mA)
               </>
             ) : isAnimating ? (
               <>
-                <Zap className="w-3.5 h-3.5 text-red-400 fill-current animate-bounce" />
-                SHOCK ACTIVE ({activeMA.toFixed(1)} mA)
+                <Zap className="w-3 h-3 text-red-400 fill-current animate-bounce" />
+                SHOCK ({activeMA.toFixed(1)} mA)
               </>
             ) : (
-              'STANDBY MONITOR'
+              'MONITOR'
             )}
           </span>
-          <span className="text-[10px] sm:text-xs font-mono font-bold text-slate-300">
-            {skinCondition === 'wet' ? 'WET SKIN (1328Ω)' : 'DRY SKIN (8280Ω)'}
-          </span>
-          <span className="text-[9.5px] sm:text-[11px] font-mono text-cyan-400/90 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40">
-            PATH: {activePath === 'hand-to-hand' ? 'HAND-TO-HAND' : 'HAND-TO-FOOT'}
-          </span>
+          {!isCompactDual && (
+            <>
+              <span className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-300">
+                {skinCondition === 'wet' ? 'WET (1328Ω)' : 'DRY (8280Ω)'}
+              </span>
+              <span className="text-[8.5px] sm:text-[9px] font-mono text-cyan-400/90 bg-cyan-950/40 px-1 py-0.2 rounded border border-cyan-800/40">
+                {activePath === 'hand-to-hand' ? 'H-H' : 'H-F'}
+              </span>
+            </>
+          )}
         </div>
 
         {/* Right Header: Dynamic Condition Indicator */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {isPPESafe ? (
-            <span className="text-[10.5px] sm:text-xs font-mono font-black text-emerald-400 bg-emerald-950/80 px-2.5 py-0.5 rounded-lg border border-emerald-500/60 shadow-[0_0_10px_rgba(16,185,129,0.3)]">
-              100% PROTECTED
+            <span className="text-[9px] sm:text-[10px] font-mono font-black text-emerald-400 bg-emerald-950/80 px-2 py-0.2 rounded border border-emerald-500/60 shadow-[0_0_8px_rgba(16,185,129,0.3)]">
+              SAFE
             </span>
           ) : hasDamage ? (
-            <span className="text-[10.5px] sm:text-xs font-mono font-black text-rose-300 bg-rose-950/80 px-2.5 py-0.5 rounded-lg border border-rose-500/70 animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.4)]">
-              TRAUMA RECORDED
+            <span className="text-[9px] sm:text-[10px] font-mono font-black text-rose-300 bg-rose-950/80 px-2 py-0.2 rounded border border-rose-500/70 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.4)]">
+              INJURY
             </span>
           ) : (
-            <span className="text-[10.5px] font-mono text-slate-400">
-              NO INJURY
+            <span className="text-[9px] font-mono text-slate-400">
+              OK
             </span>
           )}
         </div>
@@ -342,58 +372,92 @@ export const HumanBodyTwin: React.FC<HumanBodyTwinProps> = ({
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#38bdf8_1px,transparent_1px),linear-gradient(to_bottom,#38bdf8_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.04] pointer-events-none" />
 
         {/* ========================================================================= */}
-        {/* LEFT COLUMN: 25% Scaled-Down Crisp HTML Overlay Alerts */}
+        {/* LEFT COLUMN: Compact Visual Telemetry Chips (No Bulky Paragraphs) */}
         {/* ========================================================================= */}
-        <div className="absolute left-2 top-2 bottom-2 z-30 flex flex-col justify-around pointer-events-none w-[140px] sm:w-[165px] md:w-[180px]">
+        <div className={cn(
+          "absolute left-0.5 sm:left-1 top-1 bottom-1 z-30 flex flex-col justify-around pointer-events-none",
+          isCompactDual ? "w-[70px] sm:w-[82px]" : "w-[112px] sm:w-[126px] md:w-[136px]"
+        )}>
           <AnimatePresence>
-            {leftAlerts.map((alert) => (
+            {(isCompactDual ? leftAlerts.slice(0, 2) : leftAlerts).map((alert) => (
               <motion.div
                 key={alert.id}
-                initial={{ opacity: 0, x: -18, scale: 0.9 }}
+                initial={{ opacity: 0, x: -14, scale: 0.92 }}
                 animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: -18, scale: 0.9 }}
-                transition={{ duration: 0.18 }}
+                exit={{ opacity: 0, x: -14, scale: 0.92 }}
+                transition={{ duration: 0.16 }}
+                title={alert.detail}
                 className={cn(
-                  'p-2 sm:p-2.5 rounded-xl border shadow-[0_0_20px_rgba(0,0,0,0.8)] backdrop-blur-2xl pointer-events-auto flex flex-col text-left',
+                  isCompactDual ? 'p-1 rounded-lg' : 'p-1.5 sm:p-2 rounded-xl',
+                  'border shadow-[0_4px_16px_rgba(0,0,0,0.7)] backdrop-blur-2xl pointer-events-auto flex flex-col text-left cursor-help transition-transform hover:scale-105',
                   alert.badgeClass
                 )}
               >
-                <div className="flex items-center gap-1.5 font-sans font-black uppercase text-[10.5px] sm:text-[11.5px] md:text-[12px] tracking-wider leading-tight drop-shadow">
-                  {alert.icon}
-                  <span>{alert.title}</span>
+                <div className={cn(
+                  "flex items-center justify-between gap-0.5 font-mono font-black uppercase tracking-wider leading-none",
+                  isCompactDual ? "text-[7.5px]" : "text-[9px] sm:text-[9.5px]"
+                )}>
+                  <div className="flex items-center gap-1 min-w-0">
+                    {alert.icon}
+                    <span className="truncate">{alert.title}</span>
+                  </div>
                 </div>
-                <p className="text-[9px] sm:text-[10px] md:text-[10.5px] font-bold leading-snug mt-0.5 opacity-95">
-                  {alert.subtitle}
-                </p>
+                <div className={cn(
+                  "flex items-center justify-between gap-0.5 font-mono font-bold mt-0.5 text-slate-200",
+                  isCompactDual ? "text-[6.5px]" : "text-[8px] sm:text-[8.5px]"
+                )}>
+                  <span className="truncate">{alert.metric}</span>
+                  <span className={cn(
+                    "px-0.5 rounded bg-black/50 border border-white/10 font-bold shrink-0",
+                    isCompactDual ? "text-[6px]" : "text-[7.5px]"
+                  )}>{alert.tag}</span>
+                </div>
               </motion.div>
             ))}
           </AnimatePresence>
         </div>
 
         {/* ========================================================================= */}
-        {/* RIGHT COLUMN: 25% Scaled-Down Crisp HTML Overlay Alerts */}
+        {/* RIGHT COLUMN: Compact Visual Telemetry Chips (No Bulky Paragraphs) */}
         {/* ========================================================================= */}
-        <div className="absolute right-2 top-2 bottom-2 z-30 flex flex-col justify-around pointer-events-none w-[140px] sm:w-[165px] md:w-[180px]">
+        <div className={cn(
+          "absolute right-0.5 sm:right-1 top-1 bottom-1 z-30 flex flex-col justify-around pointer-events-none",
+          isCompactDual ? "w-[70px] sm:w-[82px]" : "w-[112px] sm:w-[126px] md:w-[136px]"
+        )}>
           <AnimatePresence>
-            {rightAlerts.map((alert) => (
+            {(isCompactDual ? rightAlerts.slice(0, 2) : rightAlerts).map((alert) => (
               <motion.div
                 key={alert.id}
-                initial={{ opacity: 0, x: 18, scale: 0.9 }}
+                initial={{ opacity: 0, x: 14, scale: 0.92 }}
                 animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: 18, scale: 0.9 }}
-                transition={{ duration: 0.18 }}
+                exit={{ opacity: 0, x: 14, scale: 0.92 }}
+                transition={{ duration: 0.16 }}
+                title={alert.detail}
                 className={cn(
-                  'p-2 sm:p-2.5 rounded-xl border shadow-[0_0_20px_rgba(0,0,0,0.8)] backdrop-blur-2xl pointer-events-auto flex flex-col text-left',
+                  isCompactDual ? 'p-1 rounded-lg' : 'p-1.5 sm:p-2 rounded-xl',
+                  'border shadow-[0_4px_16px_rgba(0,0,0,0.7)] backdrop-blur-2xl pointer-events-auto flex flex-col text-left cursor-help transition-transform hover:scale-105',
                   alert.badgeClass
                 )}
               >
-                <div className="flex items-center gap-1.5 font-sans font-black uppercase text-[10.5px] sm:text-[11.5px] md:text-[12px] tracking-wider leading-tight drop-shadow">
-                  {alert.icon}
-                  <span>{alert.title}</span>
+                <div className={cn(
+                  "flex items-center justify-between gap-0.5 font-mono font-black uppercase tracking-wider leading-none",
+                  isCompactDual ? "text-[7.5px]" : "text-[9px] sm:text-[9.5px]"
+                )}>
+                  <div className="flex items-center gap-1 min-w-0">
+                    {alert.icon}
+                    <span className="truncate">{alert.title}</span>
+                  </div>
                 </div>
-                <p className="text-[9px] sm:text-[10px] md:text-[10.5px] font-bold leading-snug mt-0.5 opacity-95">
-                  {alert.subtitle}
-                </p>
+                <div className={cn(
+                  "flex items-center justify-between gap-0.5 font-mono font-bold mt-0.5 text-slate-200",
+                  isCompactDual ? "text-[6.5px]" : "text-[8px] sm:text-[8.5px]"
+                )}>
+                  <span className="truncate">{alert.metric}</span>
+                  <span className={cn(
+                    "px-0.5 rounded bg-black/50 border border-white/10 font-bold shrink-0",
+                    isCompactDual ? "text-[6px]" : "text-[7.5px]"
+                  )}>{alert.tag}</span>
+                </div>
               </motion.div>
             ))}
           </AnimatePresence>

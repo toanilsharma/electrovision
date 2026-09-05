@@ -7,6 +7,7 @@ import {
   Plus, Minus, Maximize2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { useAudioHaptics } from '../useAudioHaptics';
 
 export interface IndustrialGridDiagramProps {
   time: number; // Simulated time 0 to 100ms
@@ -52,6 +53,28 @@ export function IndustrialGridDiagram({
   // Sound & Motion settings
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(false);
+  const { playBreakerTripSound } = useAudioHaptics();
+  const prevTrippedRef = useRef(tripped);
+
+  // Play breaker mechanical trip sound on trip transition
+  useEffect(() => {
+    if (!prevTrippedRef.current && tripped && !isMuted) {
+      playBreakerTripSound();
+    }
+    prevTrippedRef.current = tripped;
+  }, [tripped, isMuted, playBreakerTripSound]);
+
+  // Lorentz Electrodynamic Force Calculation (F/L = mu0 * I1 * I2 / (2 * pi * d))
+  // With busbar phase spacing d = 0.1m, F/L = 0.2 * Ip^2 / d (N/m) -> / 1000 for kN/m
+  const lorentzForceKNm = useMemo(() => {
+    const dMeters = 0.1;
+    const forceNm = (0.2 * Math.pow(peakCurrentKA, 2)) / dMeters;
+    return forceNm / 1000;
+  }, [peakCurrentKA]);
+
+  // Rated standard industrial LV busbar insulator mechanical withstand capacity (12 kN/m)
+  const insulatorRatingKNm = 12.0;
+  const insulatorStressPct = Math.min(150, Math.round((lorentzForceKNm / insulatorRatingKNm) * 100));
 
   // Audio Context Ref
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -451,16 +474,62 @@ export function IndustrialGridDiagram({
               </text>
             </g>
 
-            {/* 415V BUSBAR LINE */}
-            <path
-              d="M 130,50 L 200,50"
-              fill="none"
-              stroke="#64748b"
-              strokeWidth="3"
-            />
-            <text x="165" y="40" textAnchor="middle" fill="#94a3b8" fontSize="12" fontWeight="bold" fontFamily="monospace" className="pointer-events-none select-none">
-              415V Grid Bus
-            </text>
+            {/* 415V 3-PHASE COPPER BUSBAR ASSEMBLY WITH LORENTZ DEFLECTION */}
+            <g transform="translate(130, 35)">
+              {/* Stand-off Ceramic Insulator Brackets at each end */}
+              <rect x="0" y="5" width="6" height="22" rx="2" fill={insulatorStressPct > 80 ? '#ef4444' : insulatorStressPct > 50 ? '#f59e0b' : '#334155'} stroke="#64748b" strokeWidth="1" />
+              <rect x="64" y="5" width="6" height="22" rx="2" fill={insulatorStressPct > 80 ? '#ef4444' : insulatorStressPct > 50 ? '#f59e0b' : '#334155'} stroke="#64748b" strokeWidth="1" />
+
+              {/* L1 Phase Busbar (Top - Repelled Upward during fault) */}
+              <motion.path
+                d={isFaultActive && !prefersReducedMotion ? "M 6,7 Q 35,2 64,7" : "M 6,7 L 64,7"}
+                fill="none"
+                stroke={isFaultActive ? '#ef4444' : '#ea580c'}
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                animate={isFaultActive && !prefersReducedMotion ? { d: ["M 6,7 Q 35,2 64,7", "M 6,7 Q 35,3.5 64,7", "M 6,7 Q 35,1.5 64,7"] } : undefined}
+                transition={{ duration: 0.1, repeat: Infinity }}
+              />
+
+              {/* L2 Phase Busbar (Center - Rapid 100Hz Electrodynamic Vibration) */}
+              <motion.path
+                d="M 6,15 L 64,15"
+                fill="none"
+                stroke={isFaultActive ? '#fbbf24' : '#eab308'}
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                animate={isFaultActive && !prefersReducedMotion ? { y: [-0.8, 0.8, -0.5, 0.5, 0] } : { y: 0 }}
+                transition={{ duration: 0.08, repeat: Infinity }}
+              />
+
+              {/* L3 Phase Busbar (Bottom - Repelled Downward during fault) */}
+              <motion.path
+                d={isFaultActive && !prefersReducedMotion ? "M 6,23 Q 35,28 64,23" : "M 6,23 L 64,23"}
+                fill="none"
+                stroke={isFaultActive ? '#ef4444' : '#38bdf8'}
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                animate={isFaultActive && !prefersReducedMotion ? { d: ["M 6,23 Q 35,28 64,23", "M 6,23 Q 35,26.5 64,23", "M 6,23 Q 35,28.5 64,23"] } : undefined}
+                transition={{ duration: 0.1, repeat: Infinity }}
+              />
+
+              {/* Lorentz Repulsion Force Vectors during fault */}
+              {isFaultActive && (
+                <g>
+                  {/* Upward repulsion arrow on L1 */}
+                  <path d="M 35,5 L 35,-1 M 33,1 L 35,-2 L 37,1" stroke="#f87171" strokeWidth="1.2" fill="none" />
+                  {/* Downward repulsion arrow on L3 */}
+                  <path d="M 35,25 L 35,31 M 33,29 L 35,32 L 37,29" stroke="#f87171" strokeWidth="1.2" fill="none" />
+                  <text x="35" y="-4" textAnchor="middle" fill="#f87171" fontSize="9" fontWeight="bold" fontFamily="monospace">
+                    F={lorentzForceKNm.toFixed(1)}kN/m
+                  </text>
+                </g>
+              )}
+
+              <text x="35" y="38" textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="bold" fontFamily="monospace" className="pointer-events-none select-none">
+                3Φ 415V Busbar
+              </text>
+            </g>
 
             {/* 2. CT RING & PROTECTION RELAY MODULE 51 */}
             <path
@@ -750,6 +819,18 @@ export function IndustrialGridDiagram({
           <div className="flex items-center gap-1">
             <span className="text-slate-400">I²t:</span>
             <span className="font-bold text-amber-400 tabular-nums">{letThroughEnergyKA2s.toFixed(2)} kA²s</span>
+          </div>
+          <div className="flex items-center gap-1 border-l border-slate-800 pl-3">
+            <span className="text-slate-400">Lorentz F:</span>
+            <span className={cn("font-bold tabular-nums", isFaultActive ? "text-red-400 animate-pulse" : "text-slate-300")}>
+              {isFaultActive ? `${lorentzForceKNm.toFixed(2)} kN/m` : '0.00 kN/m'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-slate-400">Insulator:</span>
+            <span className={cn("font-bold tabular-nums", insulatorStressPct > 80 ? "text-red-400" : insulatorStressPct > 50 ? "text-amber-400" : "text-emerald-400")}>
+              {isFaultActive ? `${insulatorStressPct}%` : '0%'}
+            </span>
           </div>
         </div>
 

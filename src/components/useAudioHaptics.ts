@@ -250,6 +250,119 @@ export function useAudioHaptics() {
     }
   }, [stopHeartbeat]);
 
-  return { initAudio, playShockHum, startHum, stopHum, playArcBlast, startHeartbeat, stopHeartbeat, triggerMuscleLockVibration };
+  const playBreakerTripSound = useCallback(() => {
+    try {
+      initAudio();
+      if (!audioCtx.current) return;
+      const ctx = audioCtx.current;
+      const now = ctx.currentTime;
+
+      // Mechanical metal clack: high transient burst
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(450, now);
+      osc.frequency.exponentialRampToValueAtTime(80, now + 0.04);
+
+      gain.gain.setValueAtTime(0.6, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.05);
+
+      // Second impulse (spring latch release)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'square';
+      osc2.frequency.setValueAtTime(220, now + 0.015);
+      osc2.frequency.exponentialRampToValueAtTime(40, now + 0.06);
+
+      gain2.gain.setValueAtTime(0.4, now + 0.015);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.015);
+      osc2.stop(now + 0.07);
+
+      triggerHaptic(HAPTIC_PATTERNS.BREAKER_TRIP);
+    } catch (e) {
+      console.warn("Breaker trip sound failed", e);
+    }
+  }, []);
+
+  const playMetronomeTick = useCallback((pitch: number = 1000) => {
+    try {
+      initAudio();
+      if (!audioCtx.current) return;
+      const ctx = audioCtx.current;
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(pitch, now);
+      osc.frequency.exponentialRampToValueAtTime(pitch * 0.5, now + 0.025);
+
+      gain.gain.setValueAtTime(0.4, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.03);
+
+      triggerHaptic(HAPTIC_PATTERNS.CLICK);
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  const playArcCrackle = useCallback((durationMs: number = 300) => {
+    try {
+      initAudio();
+      if (!audioCtx.current) return;
+      const ctx = audioCtx.current;
+      const bufferSize = Math.floor(ctx.sampleRate * (durationMs / 1000));
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() > 0.85 ? 1 : Math.random() > 0.7 ? -0.8 : 0) * (Math.random() * 2 - 1);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(2400, ctx.currentTime);
+      filter.Q.setValueAtTime(3, ctx.currentTime);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.4, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + durationMs / 1000);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start();
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  return { 
+    initAudio, 
+    playShockHum, 
+    startHum, 
+    stopHum, 
+    playArcBlast, 
+    startHeartbeat, 
+    stopHeartbeat, 
+    triggerMuscleLockVibration,
+    triggerBreakerTripHaptic,
+    triggerVFibHaptic,
+    playBreakerTripSound,
+    playMetronomeTick,
+    playArcCrackle
+  };
 }
 

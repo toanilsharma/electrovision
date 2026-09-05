@@ -2,9 +2,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   HeartPulse, Zap, AlertTriangle, CheckCircle2, ChevronRight,
   ChevronLeft, RotateCcw, Shield, Activity, Brain, Thermometer,
-  PhoneCall, Eye, Wind, Hand, Radio, BookOpen, Target
+  PhoneCall, Eye, Wind, Hand, Radio, BookOpen, Target,
+  Volume2, VolumeX, Sparkles
 } from 'lucide-react';
 import { UserConfig } from '@/src/types';
+import { cn } from '@/src/lib/utils';
+import { triggerHaptic } from '@/src/utils/haptics';
+import { useAudioHaptics } from '../useAudioHaptics';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TabId = 'protocol' | 'cpr' | 'triage' | 'quiz';
@@ -621,31 +625,64 @@ function ProtocolModule() {
 }
 
 function CPRTrainer() {
+  const [subMode, setSubMode] = useState<'cpr' | 'aed'>('cpr');
   const [isRunning, setIsRunning] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [tapTimes, setTapTimes] = useState<number[]>([]);
   const [userBPM, setUserBPM] = useState<number | null>(null);
   const [phase, setPhase] = useState<'compress' | 'release'>('release');
   const [breathPhase, setBreathPhase] = useState(false);
   const [compCount, setCompCount] = useState(0);
+  const [compressionDepthCm, setCompressionDepthCm] = useState(0);
+  const { playMetronomeTick, playArcBlast, playBreakerTripSound } = useAudioHaptics();
+
   const TARGET_BPM = 110;
   const INTERVAL_MS = Math.round(60000 / TARGET_BPM);
 
+  // Metronome tick & cycle runner
   useEffect(() => {
-    if (!isRunning) { setPhase('release'); return; }
+    if (!isRunning || subMode !== 'cpr') { 
+      setPhase('release'); 
+      setCompressionDepthCm(0);
+      return; 
+    }
     const t = setInterval(() => {
       setCompCount(c => {
         const next = c + 1;
-        if (next % 30 === 0) { setBreathPhase(true); setTimeout(() => setBreathPhase(false), 1200); }
+        if (next % 30 === 0) { 
+          setBreathPhase(true); 
+          setTimeout(() => setBreathPhase(false), 1400); 
+        }
         return next;
       });
       setPhase('compress');
-      setTimeout(() => setPhase('release'), INTERVAL_MS * 0.4);
+      setCompressionDepthCm(5.4); // 5.4 cm ideal target
+      if (!isMuted) {
+        playMetronomeTick();
+      }
+      triggerHaptic([15]);
+
+      setTimeout(() => {
+        setPhase('release');
+        setCompressionDepthCm(0);
+      }, INTERVAL_MS * 0.38);
     }, INTERVAL_MS);
     return () => clearInterval(t);
-  }, [isRunning, INTERVAL_MS]);
+  }, [isRunning, subMode, INTERVAL_MS, isMuted, playMetronomeTick, triggerHaptic]);
 
+  // Handle user manual tap / compression
   const handleTap = useCallback(() => {
     const now = Date.now();
+    // Simulate user compression depth based on recent cadence
+    setCompressionDepthCm(5.5);
+    setPhase('compress');
+    if (!isMuted) playMetronomeTick();
+    triggerHaptic([20]);
+    setTimeout(() => {
+      setPhase('release');
+      setCompressionDepthCm(0);
+    }, 180);
+
     setTapTimes(prev => {
       const updated = [...prev, now].slice(-8);
       if (updated.length >= 2) {
@@ -654,106 +691,390 @@ function CPRTrainer() {
       }
       return updated;
     });
-  }, []);
+  }, [isMuted, playMetronomeTick, triggerHaptic]);
 
   const bpmDelta = userBPM ? userBPM - TARGET_BPM : null;
   const bpmLabel = bpmDelta === null ? null
     : bpmDelta < -15 ? { text: 'Too Slow — Speed Up!', color: 'text-red-400' }
     : bpmDelta > 15 ? { text: 'Too Fast — Slow Down!', color: 'text-orange-400' }
-    : Math.abs(bpmDelta) <= 10 ? { text: '✓ Perfect Rhythm!', color: 'text-green-400' }
+    : Math.abs(bpmDelta) <= 10 ? { text: '✓ Perfect Rhythm (100–120 BPM)!', color: 'text-green-400' }
     : { text: 'Almost There', color: 'text-yellow-400' };
 
   const cyclePos = compCount % 30;
 
+  // ─── Interactive AED State Machine ──────────────────────────────────────────
+  const [aedPhase, setAedPhase] = useState<'vfib' | 'analyzing' | 'shock_ready' | 'shocked' | 'sinus'>('vfib');
+  const [aedTimer, setAedTimer] = useState<number>(0);
+
+  const handleStartAnalysis = () => {
+    setAedPhase('analyzing');
+    setAedTimer(3);
+    const interval = setInterval(() => {
+      setAedTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setAedPhase('shock_ready');
+          playBreakerTripSound();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleDeliverShock = () => {
+    setAedPhase('shocked');
+    playArcBlast();
+    triggerHaptic([100, 50, 200]);
+    setTimeout(() => {
+      setAedPhase('sinus');
+    }, 1200);
+  };
+
+  const handleResetAED = () => {
+    setAedPhase('vfib');
+  };
+
   return (
-    <div className="flex flex-col gap-4 h-full">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
-        <div className="rounded-xl border border-red-500/40 bg-red-500/5 flex flex-col items-center justify-center p-6 gap-5">
-          <div className="relative flex items-center justify-center" style={{ width: 160, height: 160 }}>
-            {isRunning && phase === 'compress' && (
-              <div className="absolute inset-0 rounded-full border-2 border-red-400 animate-ping opacity-50" />
+    <div className="flex flex-col gap-3 h-full select-none font-mono">
+      {/* Sub-Mode Toggle: CPR Metronome vs AED Defibrillator */}
+      <div className="flex items-center justify-between gap-2 p-1.5 rounded-xl bg-slate-900 border border-slate-800 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setSubMode('cpr')}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all flex items-center gap-1.5 cursor-pointer",
+              subMode === 'cpr' ? "bg-red-600 text-white shadow-md shadow-red-600/30" : "text-slate-400 hover:text-white"
             )}
-            <div className="rounded-2xl border-4 flex items-center justify-center transition-all duration-100"
-              style={{
-                width: isRunning && phase === 'compress' ? 108 : 130,
-                height: isRunning && phase === 'compress' ? 92 : 114,
-                background: breathPhase ? 'rgba(56,189,248,0.18)' : 'rgba(239,68,68,0.13)',
-                borderColor: breathPhase ? 'rgba(56,189,248,0.6)' : 'rgba(239,68,68,0.5)',
-              }}>
-              <HeartPulse style={{ width: isRunning && phase === 'compress' ? 38 : 46, height: isRunning && phase === 'compress' ? 38 : 46, color: breathPhase ? '#7dd3fc' : '#ef4444', transition: 'all 0.1s' }} />
-            </div>
-          </div>
-
-          {breathPhase ? (
-            <div className="text-sky-400 font-black text-lg animate-pulse text-center">RESCUE BREATH ×2</div>
-          ) : (
-            <div className="text-center">
-              <div className="text-red-400 font-black text-3xl font-mono">{cyclePos + 1} <span className="text-slate-500 text-xl">/ 30</span></div>
-              <div className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">Compressions</div>
-            </div>
-          )}
-
-          <div className="flex items-center gap-4">
-            <div className="text-center"><div className="text-3xl font-black font-mono text-white">{TARGET_BPM}</div><div className="text-[10px] text-slate-500 uppercase tracking-widest">Target BPM</div></div>
-            <div className="text-slate-600 text-xl">vs</div>
-            <div className="text-center"><div className={`text-3xl font-black font-mono ${userBPM ? (bpmLabel?.color || 'text-white') : 'text-slate-600'}`}>{userBPM ?? '—'}</div><div className="text-[10px] text-slate-500 uppercase tracking-widest">Your BPM</div></div>
-          </div>
-
-          {bpmLabel && <div className={`text-sm font-black ${bpmLabel.color} tracking-wide`}>{bpmLabel.text}</div>}
-
-          <div className="flex gap-3 w-full">
-            <button onClick={() => { setIsRunning(r => !r); setCompCount(0); }} className={`flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-all ${isRunning ? 'bg-slate-700 hover:bg-slate-600 text-white border border-slate-600' : 'bg-red-600 hover:bg-red-500 text-white shadow-lg'}`}>
-              {isRunning ? '⏹ Stop' : '▶ Start'}
-            </button>
-            <button onClick={handleTap} className="flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-widest bg-orange-500 hover:bg-orange-400 active:scale-95 text-slate-950 transition-all shadow-lg">
-              TAP BEAT
-            </button>
-          </div>
+          >
+            <HeartPulse className="w-3.5 h-3.5" />
+            CPR Metronome & Depth Gauge
+          </button>
+          <button
+            onClick={() => {
+              setSubMode('aed');
+              setIsRunning(false);
+            }}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all flex items-center gap-1.5 cursor-pointer",
+              subMode === 'aed' ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30" : "text-slate-400 hover:text-white"
+            )}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Interactive AED Defibrillator
+          </button>
         </div>
 
-        <div className="flex flex-col gap-3 overflow-y-auto">
-          <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <BookOpen className="w-4 h-4 text-orange-400" />
-              <span className="text-xs font-black uppercase tracking-widest text-orange-400">AHA BLS 2024 — CPR Standards</span>
-            </div>
-            {[
-              { label: 'Compression Rate', value: '100–120 BPM', note: 'Use Stayin Alive by Bee Gees as a mental metronome' },
-              { label: 'Compression Depth', value: '5–6 cm', note: 'At least 2 inches — full weight through straight arms' },
-              { label: 'Chest Recoil', value: 'Full recoil between compressions', note: 'Do not lean — allows heart to fill with blood' },
-              { label: 'Ratio', value: '30 compressions : 2 breaths', note: 'Interruptions must not exceed 10 seconds' },
-              { label: 'Rescue Breaths', value: '1 second each', note: 'Avoid excessive ventilation — causes gastric inflation' },
-            ].map(item => (
-              <div key={item.label} className="py-2 border-b border-slate-700/60 last:border-0">
-                <div className="flex justify-between items-baseline">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">{item.label}</span>
-                  <span className="text-sm font-black text-white font-mono">{item.value}</span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">{item.note}</p>
-              </div>
-            ))}
-          </div>
-          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
-              <span className="text-xs font-black uppercase tracking-widest text-amber-400">Electrical Injury CPR Notes</span>
-            </div>
-            <ul className="space-y-2">
-              {[
-                'Electrical cardiac arrest often presents as ventricular fibrillation — AED is highly effective.',
-                'Young victims of electrical shock have high survival rates with early, high-quality CPR — do not give up.',
-                'Tetanic muscle contraction during shock may cause falls — always check for trauma injuries.',
-                'CPR quality for electrical victims is identical to standard cardiac arrest protocol.',
-              ].map((note, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <span className="text-amber-400 mt-0.5 flex-shrink-0">›</span>
-                  <span className="text-xs text-amber-200/80 leading-relaxed">{note}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+        {subMode === 'cpr' && (
+          <button
+            onClick={() => setIsMuted(m => !m)}
+            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            title={isMuted ? "Unmute 110 BPM Metronome Tick" : "Mute Metronome"}
+          >
+            {isMuted ? <VolumeX className="w-3.5 h-3.5 text-slate-500" /> : <Volume2 className="w-3.5 h-3.5 text-orange-400" />}
+            <span className="text-[10px]">{isMuted ? "MUTED" : "110 BPM AUDIO ON"}</span>
+          </button>
+        )}
       </div>
+
+      {subMode === 'cpr' ? (
+        /* ─── CPR METRONOME & REAL-TIME DEPTH GAUGE VIEW ─────────────────── */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+          
+          {/* LEFT: Chest Compressor & Heart Rate Stage (7 Cols) */}
+          <div className="lg:col-span-7 rounded-xl border border-red-500/40 bg-red-950/20 flex flex-col justify-between p-4 gap-3 relative overflow-hidden">
+            
+            {/* Header Readout Bar */}
+            <div className="flex items-center justify-between text-xs font-bold shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-white uppercase tracking-wider">AHA BLS 2024 METRONOME ENGINE</span>
+              </div>
+              <div className="px-2 py-0.5 rounded bg-red-950 border border-red-500/60 text-red-300 text-[10px] font-black">
+                110 BPM TARGET
+              </div>
+            </div>
+
+            {/* Interactive Chest & Recoil Simulator SVG */}
+            <div className="flex-1 flex items-center justify-center relative min-h-[160px]">
+              <svg viewBox="0 0 240 160" className="w-full h-full max-h-[180px] overflow-visible">
+                {/* Patient Torso Outline */}
+                <rect x="40" y="25" width="160" height="115" rx="20" fill="#0f172a" stroke="#334155" strokeWidth="2" />
+                
+                {/* Ribcage Strips */}
+                {[-20, 0, 20].map((offset, idx) => (
+                  <g key={`rib-${idx}`} opacity="0.4">
+                    <path d={`M 55,${65 + offset} Q 85,${60 + offset} 110,${70 + offset}`} fill="none" stroke="#64748b" strokeWidth="2" />
+                    <path d={`M 185,${65 + offset} Q 155,${60 + offset} 130,${70 + offset}`} fill="none" stroke="#64748b" strokeWidth="2" />
+                  </g>
+                ))}
+
+                {/* Sternum Compression Pad & Heart Center */}
+                <g transform="translate(120, 75)">
+                  {/* Heart Glow Chamber */}
+                  <circle 
+                    cx="0" cy="0" 
+                    r={phase === 'compress' ? 24 : 30} 
+                    fill={breathPhase ? "rgba(56, 189, 248, 0.25)" : "rgba(239, 68, 68, 0.25)"} 
+                    stroke={breathPhase ? "#38bdf8" : "#ef4444"} 
+                    strokeWidth="2"
+                    className="transition-all duration-75"
+                  />
+                  {/* Sinking Sternum Pad with live depth mm displacement */}
+                  <g transform={`translate(0, ${phase === 'compress' ? 14 : 0})`} className="transition-transform duration-75">
+                    <rect x="-35" y="-14" width="70" height="28" rx="6" fill="#1e293b" stroke="#f59e0b" strokeWidth="2" />
+                    <text x="0" y="4" textAnchor="middle" fill="#fbbf24" fontSize="10" fontWeight="black">
+                      {phase === 'compress' ? '▼ 5.4 cm' : '▲ RECOIL'}
+                    </text>
+                  </g>
+                </g>
+
+                {/* Depth Calibrated Ruler Line */}
+                <line x1="210" y1="50" x2="210" y2="105" stroke="#475569" strokeWidth="1.5" />
+                <line x1="206" y1="50" x2="214" y2="50" stroke="#475569" strokeWidth="1.5" />
+                <line x1="204" y1="75" x2="216" y2="75" stroke="#10b981" strokeWidth="2" />
+                <line x1="206" y1="105" x2="214" y2="105" stroke="#475569" strokeWidth="1.5" />
+                <text x="218" y="78" fill="#10b981" fontSize="9" fontWeight="bold">5-6cm</text>
+              </svg>
+            </div>
+
+            {/* Live Telemetry Bar */}
+            <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-xs font-mono">
+              <div className="text-center">
+                <span className="text-[10px] text-slate-400 block">CYCLE</span>
+                <span className="text-base font-black text-red-400 tabular-nums">{cyclePos + 1} / 30</span>
+              </div>
+              <div className="text-center">
+                <span className="text-[10px] text-slate-400 block">DEPTH GAUGE</span>
+                <span className={cn(
+                  "text-base font-black tabular-nums",
+                  phase === 'compress' ? "text-emerald-400" : "text-slate-400"
+                )}>
+                  {compressionDepthCm.toFixed(1)} cm
+                </span>
+              </div>
+              <div className="text-center">
+                <span className="text-[10px] text-slate-400 block">YOUR CADENCE</span>
+                <span className={cn("text-base font-black tabular-nums", userBPM ? "text-orange-400" : "text-slate-500")}>
+                  {userBPM ? `${userBPM} BPM` : '—'}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 w-full shrink-0">
+              <button
+                onClick={() => { setIsRunning(r => !r); setCompCount(0); }}
+                className={cn(
+                  "flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer",
+                  isRunning ? "bg-slate-800 hover:bg-slate-750 text-white border border-slate-700" : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30"
+                )}
+              >
+                {isRunning ? '⏹ Stop Metronome' : '▶ Start 110 BPM Metronome'}
+              </button>
+              <button
+                onClick={handleTap}
+                className="flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-orange-500 hover:bg-orange-400 active:scale-95 text-slate-950 transition-all cursor-pointer shadow-lg shadow-orange-500/20 flex items-center justify-center gap-1.5"
+              >
+                <Hand className="w-3.5 h-3.5" />
+                COMPRESS CHEST (TAP)
+              </button>
+            </div>
+          </div>
+
+          {/* RIGHT: Real-time Depth Gauge Visualizer & BLS Guidelines (5 Cols) */}
+          <div className="lg:col-span-5 flex flex-col gap-2 overflow-y-auto">
+            
+            {/* Real-time Vertical Compression Depth Gauge Card */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                <span className="uppercase flex items-center gap-1">
+                  <Target className="w-3.5 h-3.5 text-emerald-400" />
+                  Chest Depth Indicator
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 font-bold">5–6 cm TARGET</span>
+              </div>
+
+              {/* Vertical Gauge Meter */}
+              <div className="relative h-16 w-full rounded-lg bg-slate-950 border border-slate-800 p-1 flex flex-col justify-between overflow-hidden">
+                {/* Depth Bands */}
+                <div className="absolute inset-0 flex text-[9px] font-bold select-none pointer-events-none">
+                  <div className="w-[35%] bg-amber-950/40 border-r border-slate-800 flex items-center justify-center text-amber-400/80">0-4cm</div>
+                  <div className="w-[40%] bg-emerald-950/60 border-r border-slate-800 flex items-center justify-center text-emerald-300 font-black">5-6cm IDEAL</div>
+                  <div className="w-[25%] bg-red-950/50 flex items-center justify-center text-red-400">&gt;6cm DEEP</div>
+                </div>
+                {/* Pointer Marker */}
+                <div 
+                  className="absolute top-0 bottom-0 w-2 bg-white shadow-[0_0_12px_#ffffff] transition-all duration-75 z-10"
+                  style={{ left: `${Math.min(95, Math.max(5, (compressionDepthCm / 7.0) * 100))}%` }}
+                />
+              </div>
+
+              <div className="text-center text-[11px] font-bold">
+                {phase === 'compress' ? (
+                  <span className="text-emerald-400">✓ ADEQUATE PERFUSION DEPTH (5.4 cm)</span>
+                ) : (
+                  <span className="text-slate-400">ALLOW FULL CHEST RECOIL BETWEEN STROKES</span>
+                )}
+              </div>
+            </div>
+
+            {/* AHA BLS 2024 Standards Checklist */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 flex flex-col gap-1.5 text-xs">
+              <div className="flex items-center gap-1.5 text-orange-400 font-bold mb-1">
+                <BookOpen className="w-3.5 h-3.5" />
+                <span className="uppercase text-[11px]">AHA BLS 2024 Standards</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-800 text-[11px]">
+                <span className="text-slate-400">Compression Rate</span>
+                <span className="text-white font-bold">100–120 BPM</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-800 text-[11px]">
+                <span className="text-slate-400">Adult Depth</span>
+                <span className="text-emerald-400 font-bold">5.0–6.0 cm (2–2.4 in)</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-800 text-[11px]">
+                <span className="text-slate-400">Ratio</span>
+                <span className="text-white font-bold">30 Compressions : 2 Breaths</span>
+              </div>
+              <div className="flex justify-between py-1 text-[11px]">
+                <span className="text-slate-400">Chest Recoil</span>
+                <span className="text-sky-400 font-bold">Full recoil (do not lean)</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      ) : (
+        /* ─── INTERACTIVE AED DEFIBRILLATOR SIMULATOR VIEW ────────────────── */
+        <div className="flex-1 rounded-xl border border-emerald-500/40 bg-slate-950 p-4 flex flex-col justify-between gap-3 overflow-hidden">
+          
+          {/* AED Top Status Bar */}
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="p-1 rounded bg-emerald-500/20 text-emerald-400">
+                <Activity className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-black text-white uppercase block leading-none">
+                  LIFEPAK CR2 Biphasic AED Simulator
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">
+                  Automated External Defibrillator · ERC 2021 Protocol
+                </span>
+              </div>
+            </div>
+
+            <span className={cn(
+              "px-2 py-0.5 rounded text-[10px] font-black uppercase",
+              aedPhase === 'vfib' && "bg-red-950 text-red-300 border border-red-500 animate-pulse",
+              aedPhase === 'analyzing' && "bg-amber-950 text-amber-300 border border-amber-500 animate-pulse",
+              aedPhase === 'shock_ready' && "bg-red-950 text-red-200 border border-red-500 animate-bounce",
+              aedPhase === 'shocked' && "bg-yellow-950 text-yellow-200 border border-yellow-500",
+              aedPhase === 'sinus' && "bg-emerald-950 text-emerald-300 border border-emerald-500"
+            )}>
+              {aedPhase === 'vfib' && "VFIB DETECTED (NO PULSE)"}
+              {aedPhase === 'analyzing' && `ANALYZING RHYTHM (${aedTimer}s)`}
+              {aedPhase === 'shock_ready' && "⚡ SHOCK ADVISED — STAND CLEAR"}
+              {aedPhase === 'shocked' && "DISCHARGING 150J..."}
+              {aedPhase === 'sinus' && "NORMAL SINUS RHYTHM RESTORED (72 BPM)"}
+            </span>
+          </div>
+
+          {/* Oscilloscope ECG Cardiac Monitor Display */}
+          <div className="relative flex-1 min-h-[160px] rounded-xl bg-slate-950 border border-slate-800 p-2 flex flex-col justify-between overflow-hidden">
+            {/* Grid Pattern Background */}
+            <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-40 pointer-events-none" />
+
+            {/* Live ECG Waveform Canvas / SVG */}
+            <div className="relative w-full h-full flex items-center justify-center">
+              <svg viewBox="0 0 600 120" className="w-full h-full overflow-visible">
+                {aedPhase === 'sinus' ? (
+                  /* Normal Sinus Rhythm (NSR 72 BPM: P wave, sharp QRS spike, T wave) */
+                  <path
+                    d="M 0,60 L 60,60 L 75,55 L 85,60 L 95,60 L 100,20 L 105,95 L 110,60 L 125,60 L 145,50 L 165,60 L 220,60 L 235,55 L 245,60 L 255,60 L 260,20 L 265,95 L 270,60 L 285,60 L 305,50 L 325,60 L 380,60 L 395,55 L 405,60 L 415,60 L 420,20 L 425,95 L 430,60 L 445,60 L 465,50 L 485,60 L 600,60"
+                    fill="none"
+                    stroke="#10b981"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
+                ) : (
+                  /* Chaotic Ventricular Fibrillation Waveform (V-Fib) */
+                  <path
+                    d="M 0,60 Q 20,25 40,75 T 80,35 T 120,85 T 160,20 T 200,90 T 240,40 T 280,80 T 320,25 T 360,95 T 400,30 T 440,85 T 480,35 T 520,75 T 560,40 T 600,60"
+                    fill="none"
+                    stroke="#ef4444"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    className="animate-pulse"
+                  />
+                )}
+              </svg>
+            </div>
+
+            {/* Telemetry Readouts Bottom */}
+            <div className="flex items-center justify-between text-[11px] font-mono shrink-0 z-10">
+              <div className="flex items-center gap-3">
+                <span className="text-slate-400">Rhythm:</span>
+                <span className={cn("font-black", aedPhase === 'sinus' ? "text-emerald-400" : "text-red-400")}>
+                  {aedPhase === 'sinus' ? "Normal Sinus Rhythm (NSR)" : "Ventricular Fibrillation (V-Fib)"}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-slate-400">Heart Rate:</span>
+                <span className={cn("font-black", aedPhase === 'sinus' ? "text-emerald-400" : "text-red-400")}>
+                  {aedPhase === 'sinus' ? "72 BPM" : "320 BPM (Chaotic)"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive AED Action Controls */}
+          <div className="flex items-center justify-between gap-3 shrink-0">
+            {aedPhase === 'vfib' && (
+              <button
+                onClick={handleStartAnalysis}
+                className="flex-1 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-cyan-600/30"
+              >
+                <Radio className="w-4 h-4 animate-pulse" />
+                Step 1: Analyze Cardiac Rhythm (Stand Clear)
+              </button>
+            )}
+
+            {aedPhase === 'analyzing' && (
+              <div className="flex-1 py-3 rounded-xl bg-amber-950/80 border border-amber-500 text-amber-300 font-black text-xs uppercase text-center animate-pulse">
+                DO NOT TOUCH PATIENT — ANALYZING RHYTHM ({aedTimer}s)
+              </div>
+            )}
+
+            {aedPhase === 'shock_ready' && (
+              <button
+                onClick={handleDeliverShock}
+                className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-red-600 via-orange-500 to-red-600 hover:brightness-110 text-white font-black text-sm uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 animate-bounce shadow-2xl shadow-red-600/50"
+              >
+                <Zap className="w-5 h-5 fill-current" />
+                ⚡ DELIVER SHOCK NOW (150J BIPHASIC)
+              </button>
+            )}
+
+            {aedPhase === 'sinus' && (
+              <div className="flex items-center gap-3 w-full">
+                <div className="flex-1 p-2 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  PULSE RESTORED (72 BPM) — MAINTAIN AIRWAY
+                </div>
+                <button
+                  onClick={handleResetAED}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 inline mr-1" /> Re-Test AED
+                </button>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
     </div>
   );
 }
