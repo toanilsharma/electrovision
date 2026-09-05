@@ -6,7 +6,7 @@ import { DiagnosticScope } from '../DiagnosticScope';
 import { BatteryCharging, Droplets, Zap, Clock, UserSquare2, TrendingUp, AlertTriangle, BookOpen, RotateCcw, ShieldCheck, CheckCircle2, Lock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { ShockEffectLevel, PPEItem, UserConfig } from '@/src/types';
-import { PPESelectionCard } from '../PPESelectionCard';
+import { PPEMannequin } from '../PPEMannequin';
 import { PPEValidator } from '../PPEValidator';
 import { useAudioHaptics } from '../useAudioHaptics';
 import { motion } from 'motion/react';
@@ -619,8 +619,8 @@ export function DCShockSimulator({ config }: { config?: UserConfig }) {
             </div>
           </div>
 
-          {/* Dedicated Dielectric PPE Selection Suite (Prominently Positioned) */}
-          <PPESelectionCard
+          {/* Interactive PPE Mannequin Dressing Room (Rec 15) */}
+          <PPEMannequin
             voltage={voltage}
             isPPESafe={isPPESafe}
             activePPENames={activePPENames}

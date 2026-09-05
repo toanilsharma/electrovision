@@ -50,7 +50,7 @@ export function DisclaimerModal({ onAccept }: DisclaimerProps) {
                     </h3>
                   </div>
                   <p className="text-xs text-slate-300 leading-normal sm:leading-relaxed font-medium">
-                    Visualizes electrical hazards safely without real danger. Physics models align strictly with <strong className="text-white">OSHA, NFPA 70E, IEEE 1584, & IEC</strong> standards.
+                    Visualizes electrical hazards safely without real danger. Physics calculations use <strong className="text-white">formulae from published IEEE, IEC &amp; international engineering literature</strong> — for educational insight only.
                   </p>
                 </div>
                 <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center gap-2 text-xs text-sky-400 font-bold">

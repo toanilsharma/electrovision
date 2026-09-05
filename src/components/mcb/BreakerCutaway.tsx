@@ -41,7 +41,7 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { playBreakerTripSound, playArcCrackle } = useAudioHaptics();
+  const { playBreakerTripSound, playArcCrackle, playMagneticTripSolenoid } = useAudioHaptics();
   const prevStateRef = useRef(state);
 
   const [scrubProgress, setScrubProgress] = useState<number | null>(null);
@@ -54,13 +54,19 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
   // Audio trigger on trip state transition
   useEffect(() => {
     if (prevStateRef.current === MCBState.CLOSED && state !== MCBState.CLOSED) {
-      playBreakerTripSound();
+      if (isMagneticTrip) {
+        // Magnetic trip: explosive solenoid thud (F∝i², sub-2ms strike)
+        playMagneticTripSolenoid();
+      } else {
+        // Thermal trip: slower mechanical clack
+        playBreakerTripSound();
+      }
       if (state === MCBState.ARCING) {
         playArcCrackle();
       }
     }
     prevStateRef.current = state;
-  }, [state, playBreakerTripSound, playArcCrackle]);
+  }, [state, isMagneticTrip, playBreakerTripSound, playArcCrackle, playMagneticTripSolenoid]);
 
   // Effective scrub progress (0.0: Closed -> 0.3: Unlatched -> 0.7: Arcing -> 1.0: Cleared)
   const effectiveProgress = useMemo(() => {
@@ -88,8 +94,33 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
   // Handle position (0 deg: Up/ON -> 35 deg: Snapped Down/OFF)
   const handleAngle = effectiveProgress * 35;
 
-  // Plunger stroke (0px: Rest -> -25px: Struck Latch)
+  // Plunger stroke (0px: Rest → -25px: Struck Latch)
   const plungerOffset = isMagneticTrip || (isManualScrub && effectiveProgress > 0.2) ? -28 : 0;
+
+  // Magnetic solenoid force annotation: F ∝ i² (electromagnetic force law for solenoids)
+  // Simplified as F_mag = k × (current/In)² where k ≈ peak solenoid force at 10×In ≈ 45N
+  const magneticForceN = useMemo(() => {
+    if (!isMagneticTrip) return 0;
+    const ratio = Math.min(current / In, 15);
+    return Math.round(0.45 * ratio * ratio * 100) / 10; // kN × 10 → display as N with 1dp
+  }, [isMagneticTrip, current, In]);
+
+  // Bimetal color thermography — 5 thermal zones
+  const bimetalThermalColor = useMemo(() => {
+    const t = temperature;
+    if (t < 30) return '#64748b';          // Zone 1: Cold slate (ambient)
+    if (t < 60) return '#b45309';          // Zone 2: Warming copper
+    if (t < 100) return '#f59e0b';         // Zone 3: Dull bronze glow
+    if (t < bimetalTripTemp) return '#f97316'; // Zone 4: Glowing orange (pre-trip)
+    return '#ef4444';                      // Zone 5: Critical red snap
+  }, [temperature, bimetalTripTemp]);
+
+  const bimetalGlowIntensity = useMemo(() => {
+    const t = temperature;
+    if (t < 60) return 0;
+    if (t < bimetalTripTemp) return Math.min(12, ((t - 60) / (bimetalTripTemp - 60)) * 12);
+    return 18; // Maximum glow at trip
+  }, [temperature, bimetalTripTemp]);
 
   // PixiJS / 2D Canvas Arc Plasma & Chute Extinction Stream
   useEffect(() => {
@@ -261,11 +292,22 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
 
-            {/* Bimetal Thermal Heat Gradient */}
+            {/* Bimetal Thermal Glow Filter (intensity driven by bimetalGlowIntensity) */}
+            <filter id="bimetalGlow" x="-50%" y="-10%" width="200%" height="120%">
+              <feGaussianBlur stdDeviation={bimetalGlowIntensity} result="glow" />
+              <feMerge>
+                <feMergeNode in="glow" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+
+            {/* Bimetal Thermal Heat Gradient — 5-zone thermography */}
             <linearGradient id="bimetalHeatGrad" x1="0%" y1="100%" x2="0%" y2="0%">
-              <stop offset="0%" stopColor="#334155" />
-              <stop offset="60%" stopColor={temperature > 60 ? '#f59e0b' : '#38bdf8'} />
-              <stop offset="100%" stopColor={temperature >= bimetalTripTemp ? '#ef4444' : '#f59e0b'} />
+              <stop offset="0%" stopColor="#334155" />  {/* Anchor — always cold */}
+              <stop offset="30%" stopColor={temperature > 30 ? '#b45309' : '#334155'} />
+              <stop offset="60%" stopColor={temperature > 60 ? '#f59e0b' : '#334155'} />
+              <stop offset="85%" stopColor={temperature > 100 ? '#f97316' : (temperature > 60 ? '#f59e0b' : '#334155')} />
+              <stop offset="100%" stopColor={bimetalThermalColor} />
             </linearGradient>
           </defs>
 
@@ -384,7 +426,7 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
             <text x="-95" y="138" fill="#94a3b8" fontSize="11" fontWeight="bold">ARC CHUTE (7 Plates)</text>
           </g>
 
-          {/* 5. MAGNETIC SOLENOID (Fast Plunger <10ms) */}
+          {/* 5. MAGNETIC SOLENOID (Fast Plunger <10ms) — F ∝ i(t)² */}
           <g transform="translate(380, 195)">
             {/* Solenoid Coil Body */}
             <rect x="0" y="0" width="75" height="42" rx="6" fill="#78350f" stroke="#f59e0b" strokeWidth="1.5" />
@@ -392,32 +434,61 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
               <line key={`coil-${idx}`} x1={xp} y1="0" x2={xp} y2="42" stroke="#fbbf24" strokeWidth="2.5" />
             ))}
 
-            {/* Iron Moving Plunger */}
+            {/* Iron Moving Plunger — ultra-fast spring stiffness:1200 for explosive sub-2ms strike */}
             <motion.rect
               x="-20" y="14" width="30" height="14" rx="3"
-              fill="#e2e8f0" stroke="#475569" strokeWidth="1.5"
+              fill={isMagneticTrip ? '#e2e8f0' : '#94a3b8'}
+              stroke={isMagneticTrip ? '#fbbf24' : '#475569'}
+              strokeWidth={isMagneticTrip ? 2 : 1.5}
               animate={{ x: plungerOffset - 20 }}
-              transition={{ type: 'spring', stiffness: 550, damping: 18 }}
+              transition={isMagneticTrip
+                ? { type: 'spring', stiffness: 1200, damping: 10, mass: 0.08 }  // Explosive sub-2ms strike
+                : { type: 'spring', stiffness: 550, damping: 18 }               // Normal relaxed return
+              }
             />
 
-            {/* Leader-line */}
+            {/* Electromagnetic force field lines when energized */}
+            {isMagneticTrip && (
+              <>
+                {[6, 18, 30].map((y, i) => (
+                  <motion.line
+                    key={`flux-${i}`}
+                    x1="-25" y1={y} x2="-8" y2={y}
+                    stroke="#fbbf24" strokeWidth="1" opacity={0.6}
+                    animate={{ opacity: [0.3, 0.8, 0.3], x2: [-8, -12, -8] }}
+                    transition={{ duration: 0.15, repeat: Infinity, delay: i * 0.05 }}
+                  />
+                ))}
+              </>
+            )}
+
+            {/* F∝i² annotation tag */}
             <path d="M 37,45 L 37,65 L 0,65" fill="none" stroke="#64748b" strokeWidth="1" strokeDasharray="2,2" />
-            <text x="-120" y="68" fill="#94a3b8" fontSize="11" fontWeight="bold">SOLENOID (&lt;10ms)</text>
+            <text x="-120" y="60" fill="#94a3b8" fontSize="11" fontWeight="bold">SOLENOID (&lt;10ms)</text>
+            {isMagneticTrip && magneticForceN > 0 && (
+              <>
+                <rect x="-145" y="68" width="90" height="16" rx="3" fill="#78350f" stroke="#f59e0b" strokeWidth="1" />
+                <text x="-100" y="80" textAnchor="middle" fill="#fbbf24" fontSize="10" fontWeight="black">
+                  F∝i² = {magneticForceN.toFixed(1)} N
+                </text>
+              </>
+            )}
           </g>
 
-          {/* 6. BIMETAL THERMAL STRIP (Differential Expansion Strip) */}
+          {/* 6. BIMETAL THERMAL STRIP — 5-Zone Color Thermography */}
           <g transform="translate(560, 110)">
             {/* Lower Anchor Block */}
             <rect x="0" y="115" width="35" height="35" rx="4" fill="#334155" stroke="#64748b" strokeWidth="2" />
             <circle cx="17" cy="132" r="5" fill="#e2e8f0" />
 
-            {/* Calibrated Bending Curved Strip */}
+            {/* Calibrated Bending Curved Strip with thermography glow */}
             <motion.path
               d="M 17,115 C 17,75 17,35 17,0"
               fill="none"
               stroke="url(#bimetalHeatGrad)"
               strokeWidth="8"
               strokeLinecap="round"
+              filter={bimetalGlowIntensity > 0 ? 'url(#bimetalGlow)' : undefined}
               animate={{
                 d: `M 17,115 C 17,75 ${17 - bimetalDeflection * 0.8},35 ${17 - bimetalDeflection * 1.3},0`
               }}
@@ -427,9 +498,25 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
             {/* Calibration Adjustment Screw */}
             <circle cx="17" cy="0" r="4" fill="#fbbf24" stroke="#92400e" strokeWidth="1" />
 
+            {/* Live Thermography Temperature Chip */}
+            <g transform="translate(28, 50)">
+              <rect x="0" y="-10" width="62" height="20" rx="4"
+                fill={temperature >= bimetalTripTemp ? '#450a0a' : temperature > 100 ? '#431407' : '#0f172a'}
+                stroke={bimetalThermalColor} strokeWidth="1.5"
+              />
+              <text x="31" y="4" textAnchor="middle" fill={bimetalThermalColor} fontSize="10" fontWeight="black">
+                {temperature.toFixed(1)}°C
+              </text>
+            </g>
+
+            {/* Thermal zone label */}
+            <text x="60" y="95" fill="#94a3b8" fontSize="9" fontWeight="bold">
+              {temperature < 30 ? 'AMBIENT' : temperature < 60 ? 'WARMING' : temperature < 100 ? 'HOT' : temperature < bimetalTripTemp ? 'NEAR TRIP' : 'TRIPPED'}
+            </text>
+
             {/* Leader-line */}
             <path d="M 25,50 L 55,50" fill="none" stroke="#64748b" strokeWidth="1" strokeDasharray="2,2" />
-            <text x="60" y="53" fill="#94a3b8" fontSize="11" fontWeight="bold">
+            <text x="60" y="40" fill="#94a3b8" fontSize="11" fontWeight="bold">
               BIMETAL ({temperature.toFixed(1)}°C)
             </text>
           </g>

@@ -14,7 +14,7 @@ export function useAudioHaptics() {
     }
   };
 
-  const startHum = useCallback((frequency: number = 60) => {
+  const startHum = useCallback((frequency: number = 50, currentMultiplier: number = 0) => {
     try {
       initAudio();
       if (!audioCtx.current) return;
@@ -25,20 +25,42 @@ export function useAudioHaptics() {
       }
 
       const ctx = audioCtx.current;
+      const masterGain = ctx.createGain();
+      const baseVolume = 0.12 + currentMultiplier * 0.22; // Scales 0.12 → 0.34 with current
+      masterGain.gain.setValueAtTime(0, ctx.currentTime);
+      masterGain.gain.linearRampToValueAtTime(baseVolume, ctx.currentTime + 0.15);
+      masterGain.connect(ctx.destination);
+
+      // Fundamental 50/60Hz — the raw mains frequency
       const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(frequency, ctx.currentTime);
-      
-      gainNode.gain.setValueAtTime(0, ctx.currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.1);
-      
-      osc.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      
+      const gain0 = ctx.createGain();
+      gain0.gain.setValueAtTime(1.0, ctx.currentTime);
+      osc.connect(gain0);
+      gain0.connect(masterGain);
       osc.start();
       activeOsc.current = osc;
+
+      // 2nd Harmonic (100/120Hz) — THD, amplitude scales with currentMultiplier
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(frequency * 2, ctx.currentTime);
+      const gain2 = ctx.createGain();
+      gain2.gain.setValueAtTime(0.30 + currentMultiplier * 0.25, ctx.currentTime);
+      osc2.connect(gain2);
+      gain2.connect(masterGain);
+      osc2.start();
+
+      // 3rd Harmonic (150/180Hz) — Higher-order distortion under fault current
+      const osc3 = ctx.createOscillator();
+      osc3.type = 'square';
+      osc3.frequency.setValueAtTime(frequency * 3, ctx.currentTime);
+      const gain3 = ctx.createGain();
+      gain3.gain.setValueAtTime(0.12 + currentMultiplier * 0.18, ctx.currentTime);
+      osc3.connect(gain3);
+      gain3.connect(masterGain);
+      osc3.start();
 
       // Sharp initial shock jolt [80ms]
       triggerHaptic(HAPTIC_PATTERNS.INITIAL_SHOCK);
@@ -101,6 +123,165 @@ export function useAudioHaptics() {
       triggerHaptic(HAPTIC_PATTERNS.ARC_BLAST);
     } catch (e) {
       console.warn("Audio/Haptic playback failed", e);
+    }
+  }, []);
+
+  // ─── Rec 12: 3-Layer Spatial Arc Blast ─────────────────────────────────────
+  // Layer 1: Sub-bass boom 30–80 Hz (pressure wave / acoustic shock)
+  // Layer 2: Mid copper crackle 2.4 kHz bandpass (ionized copper vapour)
+  // Layer 3: High ionization hiss 8 kHz highpass (dielectric air breakdown)
+  const playSubBassArcBlast = useCallback(() => {
+    try {
+      initAudio();
+      if (!audioCtx.current) return;
+      const ctx = audioCtx.current;
+      const now = ctx.currentTime;
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(1.0, now);
+      masterGain.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+      masterGain.connect(ctx.destination);
+
+      // Layer 1 — Sub-bass pressure wave (30 → 80 Hz noise, 200ms)
+      const bufSize1 = Math.floor(ctx.sampleRate * 0.3);
+      const buf1 = ctx.createBuffer(1, bufSize1, ctx.sampleRate);
+      const d1 = buf1.getChannelData(0);
+      for (let i = 0; i < bufSize1; i++) d1[i] = (Math.random() * 2 - 1);
+      const src1 = ctx.createBufferSource();
+      src1.buffer = buf1;
+      const f1 = ctx.createBiquadFilter();
+      f1.type = 'lowpass';
+      f1.frequency.setValueAtTime(80, now);
+      f1.frequency.exponentialRampToValueAtTime(30, now + 0.2);
+      const g1 = ctx.createGain();
+      g1.gain.setValueAtTime(0.9, now);
+      g1.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      src1.connect(f1); f1.connect(g1); g1.connect(masterGain);
+      src1.start(now);
+
+      // Layer 2 — Copper crackle 2.4 kHz (300ms bandpass noise)
+      const bufSize2 = Math.floor(ctx.sampleRate * 0.35);
+      const buf2 = ctx.createBuffer(1, bufSize2, ctx.sampleRate);
+      const d2 = buf2.getChannelData(0);
+      for (let i = 0; i < bufSize2; i++) {
+        d2[i] = (Math.random() > 0.92 ? (Math.random() * 2 - 1) : 0); // Sparse crackle bursts
+      }
+      const src2 = ctx.createBufferSource();
+      src2.buffer = buf2;
+      const f2 = ctx.createBiquadFilter();
+      f2.type = 'bandpass';
+      f2.frequency.setValueAtTime(2400, now);
+      f2.Q.setValueAtTime(4, now);
+      const g2 = ctx.createGain();
+      g2.gain.setValueAtTime(0.5, now);
+      g2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      src2.connect(f2); f2.connect(g2); g2.connect(masterGain);
+      src2.start(now + 0.02); // Slight delay — crackle follows the pressure wave
+
+      // Layer 3 — Ionization hiss 8 kHz highpass (150ms, dielectric breakdown)
+      const bufSize3 = Math.floor(ctx.sampleRate * 0.2);
+      const buf3 = ctx.createBuffer(1, bufSize3, ctx.sampleRate);
+      const d3 = buf3.getChannelData(0);
+      for (let i = 0; i < bufSize3; i++) d3[i] = (Math.random() * 2 - 1);
+      const src3 = ctx.createBufferSource();
+      src3.buffer = buf3;
+      const f3 = ctx.createBiquadFilter();
+      f3.type = 'highpass';
+      f3.frequency.setValueAtTime(8000, now);
+      const g3 = ctx.createGain();
+      g3.gain.setValueAtTime(0.25, now);
+      g3.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      src3.connect(f3); f3.connect(g3); g3.connect(masterGain);
+      src3.start(now + 0.005);
+
+      triggerHaptic(HAPTIC_PATTERNS.ARC_BLAST);
+    } catch (e) {
+      console.warn('Spatial arc blast failed', e);
+    }
+  }, []);
+
+  // ─── Rec 12: Clinical VFib Patient Monitor Alarm ─────────────────────────
+  // Irregular 220 Hz tone bursts at 150–400ms random intervals (emergency cardiac monitor)
+  const vfibAlarmRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const playVFibAlarm = useCallback(() => {
+    try {
+      initAudio();
+      if (!audioCtx.current) return;
+      if (vfibAlarmRef.current) clearInterval(vfibAlarmRef.current);
+
+      const fireChirp = () => {
+        if (!audioCtx.current || audioCtx.current.state === 'closed') return;
+        const ctx = audioCtx.current;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.setValueAtTime(330, now + 0.05);
+        osc.frequency.setValueAtTime(220, now + 0.10);
+        gain.gain.setValueAtTime(0.28, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      };
+
+      fireChirp();
+      // Subsequent irregular chirps at 150–400ms intervals (irregular = clinical VFib rhythm)
+      vfibAlarmRef.current = setInterval(() => {
+        fireChirp();
+      }, 150 + Math.random() * 250);
+    } catch (e) {
+      console.warn('VFib alarm failed', e);
+    }
+  }, []);
+
+  const stopVFibAlarm = useCallback(() => {
+    if (vfibAlarmRef.current) {
+      clearInterval(vfibAlarmRef.current);
+      vfibAlarmRef.current = null;
+    }
+  }, []);
+
+  // ─── Rec 11: Magnetic Solenoid Explosive Trip Sound ──────────────────────
+  // Sub-2ms explosive thud + spring recoil reverb (F∝i² electromagnetic law)
+  const playMagneticTripSolenoid = useCallback(() => {
+    try {
+      initAudio();
+      if (!audioCtx.current) return;
+      const ctx = audioCtx.current;
+      const now = ctx.currentTime;
+
+      // Explosive initial impact — very short duration sub-bass thud (1.8ms)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(28, now + 0.0018); // Sub-2ms sweep
+      gain.gain.setValueAtTime(1.0, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.0018);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.003);
+
+      // Spring recoil metallic ring (bouncing plunger, decaying)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(380, now + 0.002);
+      osc2.frequency.exponentialRampToValueAtTime(150, now + 0.08);
+      gain2.gain.setValueAtTime(0.35, now + 0.002);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.002);
+      osc2.stop(now + 0.1);
+
+      triggerHaptic([80, 20, 40, 20, 20]); // Explosive-then-recoil pattern
+    } catch (e) {
+      console.warn('Solenoid trip sound failed', e);
     }
   }, []);
 
@@ -354,7 +535,11 @@ export function useAudioHaptics() {
     playShockHum, 
     startHum, 
     stopHum, 
-    playArcBlast, 
+    playArcBlast,
+    playSubBassArcBlast,
+    playVFibAlarm,
+    stopVFibAlarm,
+    playMagneticTripSolenoid,
     startHeartbeat, 
     stopHeartbeat, 
     triggerMuscleLockVibration,

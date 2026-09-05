@@ -42,7 +42,7 @@ export const SEO_ROUTES: Record<SimulationType | 'home', RouteSEOData> = {
     moduleId: 'home',
     path: '/',
     title: 'ElectroLive™ | High-Fidelity Electrical Hazard, Arc Flash & Shock Physics Simulator',
-    description: 'Explore interactive, standards-compliant electrical engineering simulators (IEC 60479, IEEE 1584, IEEE 80, IEC 60909). Real-time AC/DC shock, arc flash boundary, step & touch potential, MCB curves, and LOTO diagnostics.',
+    description: 'Explore interactive, physics-accurate electrical engineering simulators. Calculations use published formulae from IEEE 1584, IEC 60479, IEEE 80, and IEC 60909 research literature. Real-time AC/DC shock, arc flash boundary, step & touch potential, MCB curves, and LOTO diagnostics.',
     canonicalUrl: `${BASE_URL}/`,
     keywords: [
       'electrical safety simulator',
@@ -81,7 +81,7 @@ export const SEO_ROUTES: Record<SimulationType | 'home', RouteSEOData> = {
     moduleId: 'ac_shock',
     path: '/simulators/ac-shock',
     title: 'AC Electric Shock Simulator & IEC 60479-1 Biomechanics | ElectroLive™',
-    description: 'Simulate alternating current (50/60Hz) shock physics based on IEC 60479-1. Calculate touch potential, dry vs wet skin impedance, let-go muscle lock (10mA), and ventricular fibrillation thresholds with live McSharry ECG morphology.',
+    description: 'Simulate alternating current (50/60Hz) shock physics using published IEC 60479-1 body impedance formulae. Calculate touch potential, dry vs wet skin impedance, let-go muscle lock (10mA), and ventricular fibrillation thresholds with live McSharry ECG morphology.',
     canonicalUrl: `${BASE_URL}/simulators/ac-shock`,
     keywords: [
       'AC shock simulator',
@@ -97,7 +97,7 @@ export const SEO_ROUTES: Record<SimulationType | 'home', RouteSEOData> = {
       name: 'AC Electric Shock & Bio-Impedance Simulator (IEC 60479-1)',
       applicationCategory: 'EducationalApplication',
       operatingSystem: 'Web',
-      description: 'Interactive simulator modeling the physiological effects of alternating current on the human body, computing touch voltage, total body impedance (ZT), let-go threshold, and cardiac fibrillation risk under IEC 60479-1 standards.',
+      description: 'Interactive simulator modelling physiological effects of alternating current on the human body. Computes touch voltage, total body impedance (ZT), let-go threshold, and cardiac fibrillation risk using published IEC 60479-1 research formulae.',
       url: `${BASE_URL}/simulators/ac-shock`,
       author: {
         '@type': 'Person',

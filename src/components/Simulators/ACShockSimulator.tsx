@@ -6,9 +6,10 @@ import { DiagnosticScope } from '../DiagnosticScope';
 import { Activity, Droplets, Zap, Clock, UserSquare2, TrendingUp, AlertTriangle, BookOpen, RotateCcw, ShieldCheck, ShieldAlert, CheckCircle2, Lock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { ShockEffectLevel, PPEItem, UserConfig } from '@/src/types';
-import { PPESelectionCard } from '../PPESelectionCard';
+import { PPEMannequin } from '../PPEMannequin';
 import { PPEValidator } from '../PPEValidator';
 import { useAudioHaptics } from '../useAudioHaptics';
+import { LabMissionMode, AC_SHOCK_MISSIONS } from '../LabMissionMode';
 import { motion } from 'motion/react';
 import { InfoTooltip } from '../InfoTooltip';
 import { UpgradedDebriefModal } from '../UpgradedDebriefModal';
@@ -110,6 +111,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
   const [showSafetyLesson, setShowSafetyLesson] = useState(false);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [isCompareMode, setIsCompareMode] = useState<boolean>(false);
+  const [isLabOpen, setIsLabOpen] = useState<boolean>(false);
 
   // ELCB / RCBO (Residual Current Device) Protection State
   const [rcdType, setRcdType] = useState<'off' | 'rcbo_30ma' | 'rcd_10ma' | 'rcd_100ma'>('off');
@@ -345,6 +347,13 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
 
   const results = calculateResults();
 
+  // Lab Mission Mode — live params exposed to auto-evaluator
+  const labParams = useMemo(() => ({
+    voltage,
+    shockCurrentMa: results.currentMA,
+    durationMs: duration,
+  }), [voltage, results.currentMA, duration]);
+
   // Cardiac VF / Asystole Haptic Alert ([200, 100, 200, 100, 1000])
   useEffect(() => {
     if (isSimulating && !isPPESafe && results.level >= 7 && !hasTriggeredVFibHaptic.current) {
@@ -447,6 +456,14 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
       animate={{ x: isSimulating ? [-2, 2, -3, 3, -1, 1, 0] : 0 }}
       transition={{ duration: 0.2, repeat: isSimulating ? Infinity : 0, ease: "linear" }}
     >
+      {/* Lab Mission Mode Drawer */}
+      <LabMissionMode
+        simulatorName="AC Shock Physics"
+        missions={AC_SHOCK_MISSIONS}
+        currentParams={labParams}
+        isOpen={isLabOpen}
+        onClose={() => setIsLabOpen(false)}
+      />
       {/* Top Tactical Status HUD: Continuous Shock / Tetany Lock */}
       {isMuscleLocked && isSimulating && (
         <motion.div
@@ -559,15 +576,25 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
             <h3 className="flex items-center gap-1.5 text-[11px] font-black tracking-[0.15em] uppercase text-orange-400 border-l-3 border-orange-500 pl-1.5">
               <Zap className="w-3.5 h-3.5 text-orange-400" /> AC Parameters
             </h3>
-            <button
-              type="button"
-              onClick={handleResetSimulator}
-              className="py-0.5 px-2 bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-500/80 hover:border-rose-400 font-black text-[9.5px] uppercase tracking-wider rounded shadow-[0_0_10px_rgba(244,63,94,0.3)] flex items-center gap-1 cursor-pointer transition-all active:scale-95 shrink-0"
-              title="Master Reset all inputs, outputs, and body twin diagram to baseline state"
-            >
-              <RotateCcw className="w-2.5 h-2.5 text-rose-400 stroke-[3]" />
-              <span>MASTER RESET</span>
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setIsLabOpen(true)}
+                className="py-0.5 px-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/60 hover:border-emerald-400 font-black text-[9.5px] uppercase tracking-wider rounded flex items-center gap-1 cursor-pointer transition-all active:scale-95 shrink-0"
+                title="Open Lab Mission Mode — structured experiments with auto-evaluation"
+              >
+                🔬 Lab
+              </button>
+              <button
+                type="button"
+                onClick={handleResetSimulator}
+                className="py-0.5 px-2 bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-500/80 hover:border-rose-400 font-black text-[9.5px] uppercase tracking-wider rounded shadow-[0_0_10px_rgba(244,63,94,0.3)] flex items-center gap-1 cursor-pointer transition-all active:scale-95 shrink-0"
+                title="Master Reset all inputs, outputs, and body twin diagram to baseline state"
+              >
+                <RotateCcw className="w-2.5 h-2.5 text-rose-400 stroke-[3]" />
+                <span>MASTER RESET</span>
+              </button>
+            </div>
           </div>
 
           {/* 1-Click Real-World Disaster Presets */}
@@ -719,8 +746,8 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
             </div>
           </div>
 
-          {/* Dedicated Dielectric PPE Selection Suite (Prominently Positioned) */}
-          <PPESelectionCard
+          {/* Interactive PPE Mannequin Dressing Room (Rec 15) */}
+          <PPEMannequin
             voltage={voltage}
             isPPESafe={isPPESafe}
             activePPENames={activePPENames}
