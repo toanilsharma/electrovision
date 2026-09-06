@@ -3,13 +3,18 @@ import {
   Lock, Shield, CheckCircle, AlertTriangle,
   ChevronRight, ChevronLeft, RotateCcw, Zap, Eye, BookOpen,
   ClipboardList, HelpCircle, CheckCircle2, XCircle, Power,
-  Unlock, Info, Award, ArrowRight, Sparkles, Filter, RefreshCw
+  Unlock, Info, Award, ArrowRight, Sparkles, Filter, RefreshCw, Skull,
+  Volume2, VolumeX, FileText, Timer, Printer
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { UserConfig } from "@/src/types";
 import { assessmentAudio } from "@/src/utils/assessmentSound";
 import { LOTO_QUESTION_BANK, LOTOQuizQuestion } from "@/src/data/lotoQuestions";
+import { LOTOFailureConsequenceModal } from "./LOTOFailureConsequenceModal";
+import { LOTOPermitModal } from "./LOTOPermitModal";
+import { LOTOPracticalExamModal } from "./LOTOPracticalExamModal";
+import { LOTOCertificateModal } from "./LOTOCertificateModal";
 
 type TabId = "procedure" | "learn" | "checklist" | "quiz";
 
@@ -57,7 +62,40 @@ const CHECKLIST_ITEMS = [
   { id: 16, category: "Verification", text: "All energy verification documented and signed", critical: false },
 ];
 
-import { LOTOMachineryVisualEngine } from "./LOTOMachineryVisualEngine";
+import { LOTOMachineryVisualEngine, lotoAudio } from "./LOTOMachineryVisualEngine";
+
+const HARDWARE_TOOLS = [
+  [
+    { name: "Hazard Survey", icon: "📋" },
+    { name: "LOTO Permit PTW", icon: "📜" },
+    { name: "Arc Flash PPE", icon: "🦺" },
+  ],
+  [
+    { name: "Stop Pushbutton", icon: "🔴" },
+    { name: "Tachometer", icon: "⏱️" },
+    { name: "Ammeter", icon: "📟" },
+  ],
+  [
+    { name: "400A Knife Switch", icon: "🔌" },
+    { name: "Air Ball Valve", icon: "🚰" },
+    { name: "Air Gap Verification", icon: "↔️" },
+  ],
+  [
+    { name: "Master Lock 410", icon: "🔒" },
+    { name: "6-Hole Steel Hasp", icon: "⛓️" },
+    { name: "OSHA Danger Tag", icon: "🏷️" },
+  ],
+  [
+    { name: "Pneumatic Relief Valve", icon: "💨" },
+    { name: "DC Bleeder Resistor", icon: "⚡" },
+    { name: "Die Safety Block", icon: "🧱" },
+  ],
+  [
+    { name: "Fluke Multimeter", icon: "📟" },
+    { name: "CAT IV Probes", icon: "🥢" },
+    { name: "TRY Pushbutton", icon: "🔘" },
+  ],
+];
 
 
 // === Main Component ===
@@ -66,6 +104,29 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [learnCard, setLearnCard] = useState(0);
+  const [showConsequenceModal, setShowConsequenceModal] = useState(false);
+  const [showPermitModal, setShowPermitModal] = useState(false);
+  const [showExamModal, setShowExamModal] = useState(false);
+  const [showCertModal, setShowCertModal] = useState(false);
+  const [certScore, setCertScore] = useState(100);
+  const [ambientHumEnabled, setAmbientHumEnabled] = useState(false);
+
+  // Ambient 60Hz transformer hum effect
+  useEffect(() => {
+    if (ambientHumEnabled) {
+      // If Step 3 is completed or shutdown occurred, drop hum to silence
+      if (completedSteps.has(2)) {
+        lotoAudio.stopAmbientHum();
+      } else {
+        lotoAudio.startAmbientHum();
+      }
+    } else {
+      lotoAudio.stopAmbientHum();
+    }
+    return () => {
+      lotoAudio.stopAmbientHum();
+    };
+  }, [ambientHumEnabled, completedSteps]);
 
   // Checklist state
   const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
@@ -310,26 +371,85 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
           </div>
         </div>
 
-        {/* Global Prominent Reset Button in Header */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Global Prominent Actions in Header */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {/* Ambient 60Hz Sound Toggle */}
+          <button
+            onClick={() => {
+              const next = !ambientHumEnabled;
+              setAmbientHumEnabled(next);
+              if (!next) lotoAudio.stopAmbientHum();
+              else if (!completedSteps.has(2)) lotoAudio.startAmbientHum();
+            }}
+            className={cn(
+              "flex items-center gap-1 px-2 py-1.5 rounded-xl border text-[11px] font-black uppercase tracking-wider cursor-pointer shadow-md transition-all active:scale-95",
+              ambientHumEnabled
+                ? "bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+                : "bg-slate-900 border-slate-700 text-slate-400 hover:text-white"
+            )}
+            title="Toggle 60Hz Industrial Ambiance Hum"
+          >
+            {ambientHumEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-400 animate-pulse" /> : <VolumeX className="w-3.5 h-3.5" />}
+            <span className="hidden md:inline">60Hz</span>
+          </button>
+
+          {/* LOTO Permit (PTW) Generator */}
+          <button
+            onClick={() => setShowPermitModal(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-blue-500/50 bg-blue-950/40 hover:bg-blue-900/60 text-blue-300 hover:text-white text-[11px] font-black uppercase tracking-wider cursor-pointer shadow-md transition-all active:scale-95"
+            title="Generate & View OSHA Hazardous Energy Permit-to-Work (PTW)"
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">PTW Permit</span>
+          </button>
+
+          {/* Timed Practical Exam (120s) */}
+          <button
+            onClick={() => setShowExamModal(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-red-500/50 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white text-[11px] font-black uppercase tracking-wider cursor-pointer shadow-md transition-all active:scale-95"
+            title="Launch High-Stakes Timed Practical Exam (120s)"
+          >
+            <Timer className="w-3.5 h-3.5 text-red-400" />
+            <span className="hidden sm:inline">Practical Exam</span>
+          </button>
+
+          {/* Safety Certificate Button */}
+          <button
+            onClick={() => {
+              setCertScore(allDone ? 100 : Math.max(certScore, 85));
+              setShowCertModal(true);
+            }}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-xl border border-amber-500/50 bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 hover:text-white text-[11px] font-black uppercase tracking-wider cursor-pointer shadow-md transition-all active:scale-95"
+            title="View Accredited OSHA 1910.147 Authorized Employee Certificate"
+          >
+            <Award className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden lg:inline">Certificate</span>
+          </button>
+
+          {/* Reset Button */}
           <button
             onClick={resetProcedure}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-red-950/40 hover:border-red-500/60 text-slate-200 hover:text-red-300 transition-all text-xs font-black uppercase tracking-wider cursor-pointer shadow-md active:scale-95"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-red-950/40 hover:border-red-500/60 text-slate-200 hover:text-red-300 transition-all text-[11px] font-black uppercase tracking-wider cursor-pointer shadow-md active:scale-95"
             title="Reset procedure from Step 1"
           >
             <RotateCcw className="w-3.5 h-3.5 text-orange-400" />
-            <span className="hidden sm:inline">Reset LOTO</span>
+            <span className="hidden xl:inline">Reset</span>
           </button>
 
           {allDone && activeTab === "procedure" && (
-            <motion.div
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0"
+            <motion.button
+              onClick={() => {
+                setCertScore(100);
+                setShowCertModal(true);
+              }}
+              className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0 cursor-pointer hover:bg-emerald-500/30 transition-all"
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
+              title="Claim Safety Certificate"
             >
               <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
               <span className="text-[9.5px] font-black text-emerald-300 uppercase tracking-wide">All Done!</span>
-            </motion.div>
+            </motion.button>
           )}
         </div>
       </div>
@@ -457,12 +577,38 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                     </span>
                   </div>
 
-                  <div className="flex-1 min-h-0 bg-slate-950 border border-slate-800 rounded-lg relative flex items-center justify-center overflow-hidden">
+                  <div className="flex-1 min-h-0 bg-slate-950 border border-slate-800 rounded-lg relative flex flex-col items-center justify-center overflow-hidden">
                     <LOTOMachineryVisualEngine
                       step={currentStep}
                       isCompleted={completedSteps.has(currentStep)}
                       color={step.color}
+                      onStepAccomplished={(idx) => {
+                        setCompletedSteps(prev => new Set([...prev, idx]));
+                      }}
                     />
+                  </div>
+
+                  {/* Hardware Tool Dock Bar (Interactive) */}
+                  <div className="shrink-0 mt-1 pt-1 border-t border-slate-800/80 flex items-center justify-between gap-1.5 px-2 py-0.5 bg-slate-950/70 rounded-lg">
+                    <span className="text-[9px] font-mono font-black uppercase text-slate-400 shrink-0 hidden sm:inline">
+                      Hardware Dock:
+                    </span>
+                    <div className="flex-1 flex items-center justify-end gap-1.5 overflow-x-auto no-scrollbar">
+                      {HARDWARE_TOOLS[currentStep]?.map((t, ti) => (
+                        <button
+                          key={ti}
+                          onClick={() => {
+                            assessmentAudio.playClick();
+                            completeStep();
+                          }}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 hover:bg-orange-950/60 border border-slate-700/80 hover:border-orange-500/60 text-[9.5px] font-bold text-slate-200 hover:text-orange-300 shadow-sm whitespace-nowrap cursor-pointer transition-all active:scale-95"
+                          title={`Equip and apply ${t.name}`}
+                        >
+                          <span>{t.icon}</span>
+                          <span>{t.name}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -511,7 +657,7 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                     </div>
 
                     {/* Fatal Mistake Alert (5 cols) */}
-                    <div className="sm:col-span-5 p-2.5 rounded-xl border border-red-500/40 bg-red-950/30 flex flex-col justify-between overflow-hidden min-h-0">
+                    <div className="sm:col-span-5 p-2 rounded-xl border border-red-500/40 bg-red-950/30 flex flex-col justify-between overflow-hidden min-h-0">
                       <div>
                         <div className="flex items-center gap-1.5 mb-1 text-red-400">
                           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -520,11 +666,19 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                         <p className="text-[10.5px] text-red-200 leading-tight">
                           {step.warning}
                         </p>
+                        <button
+                          onClick={() => setShowConsequenceModal(true)}
+                          className="w-full mt-1.5 py-1 px-1.5 rounded-md border border-red-500/60 bg-red-950/80 hover:bg-red-900 text-red-200 hover:text-white transition-all text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-sm active:scale-95"
+                          title="Simulate what happens if this step is skipped"
+                        >
+                          <Skull className="w-3 h-3 text-red-400 shrink-0" />
+                          <span>Simulate Failure</span>
+                        </button>
                       </div>
 
-                      <div className="pt-1.5 border-t border-red-500/20 text-[9px] font-mono text-red-400/80 flex items-center justify-between">
+                      <div className="pt-1 border-t border-red-500/20 text-[8.5px] font-mono text-red-400/80 flex items-center justify-between">
                         <span>OSHA Standard</span>
-                        <span className="text-[8px] bg-red-950 px-1 py-0.2 rounded border border-red-800 text-red-300">CRITICAL</span>
+                        <span className="text-[7.5px] bg-red-950 px-1 py-0.2 rounded border border-red-800 text-red-300">CRITICAL</span>
                       </div>
                     </div>
                   </div>
@@ -566,9 +720,16 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                         {completedSteps.has(currentStep) ? "Step Verified ✓" : `Complete Step ${currentStep + 1}`}
                       </motion.button>
                     ) : (
-                      <div className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-black text-xs md:text-sm uppercase tracking-wider bg-gradient-to-r from-emerald-500 to-teal-500 border border-emerald-400 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]">
-                        <Award className="w-4 h-4" /> LOTO Completed!
-                      </div>
+                      <button
+                        onClick={() => {
+                          setCertScore(100);
+                          setShowCertModal(true);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-black text-xs md:text-sm uppercase tracking-wider bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 hover:brightness-110 border border-emerald-300 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-pointer active:scale-95 transition-all"
+                        title="Click to view and print official accredited LOTO Certificate"
+                      >
+                        <Award className="w-4 h-4" /> LOTO Completed · Claim Certificate!
+                      </button>
                     )}
 
                     <button
@@ -837,6 +998,18 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                     })}
                   </div>
 
+                  {totalQuizMarks >= 70 && (
+                    <button
+                      onClick={() => {
+                        setCertScore(totalQuizMarks);
+                        setShowCertModal(true);
+                      }}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs md:text-sm uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.3)] active:scale-95"
+                    >
+                      <Award className="w-4 h-4" /> Claim Accredited LOTO Safety Certificate ({totalQuizMarks}%)
+                    </button>
+                  )}
+
                   <button
                     onClick={initializeQuiz}
                     className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-slate-950 font-black text-xs md:text-sm uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95"
@@ -1016,6 +1189,39 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
 
         </AnimatePresence>
       </div>
+
+      {/* Catastrophe Failure Consequence Modal */}
+      <LOTOFailureConsequenceModal
+        stepIndex={currentStep}
+        isOpen={showConsequenceModal}
+        onClose={() => setShowConsequenceModal(false)}
+      />
+
+      {/* Industrial Permit-to-Work (PTW) Generator Modal */}
+      <LOTOPermitModal
+        isOpen={showPermitModal}
+        onClose={() => setShowPermitModal(false)}
+        candidateName={config?.name || "Authorized Electrical Specialist"}
+        completedStepsCount={completedSteps.size}
+      />
+
+      {/* Timed OSHA 1910.147 Practical Competency Exam Modal */}
+      <LOTOPracticalExamModal
+        isOpen={showExamModal}
+        onClose={() => setShowExamModal(false)}
+        onCertificateRequested={(score) => {
+          setCertScore(score);
+          setShowCertModal(true);
+        }}
+      />
+
+      {/* Accredited LOTO Authorized Employee Certificate Modal */}
+      <LOTOCertificateModal
+        isOpen={showCertModal}
+        onClose={() => setShowCertModal(false)}
+        candidateName={config?.name || "Authorized Electrical Specialist"}
+        score={certScore}
+      />
     </div>
   );
 }

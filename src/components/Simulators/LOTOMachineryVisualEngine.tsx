@@ -1,17 +1,194 @@
-import React, { useState, useEffect } from "react";
-import { motion } from "motion/react";
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/src/lib/utils";
+import { assessmentAudio } from "@/src/utils/assessmentSound";
+
+// Web Audio sound synthesizer for mechanical & industrial sounds
+class LOTOSoundEngine {
+  private ctx: AudioContext | null = null;
+  private humOsc: OscillatorNode | null = null;
+  private humGain: GainNode | null = null;
+  private isHumPlaying: boolean = false;
+
+  private initCtx() {
+    if (!this.ctx) {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtxClass) {
+        this.ctx = new AudioCtxClass();
+      }
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+  }
+
+  public startAmbientHum() {
+    try {
+      this.initCtx();
+      if (!this.ctx || this.isHumPlaying) return;
+      this.humOsc = this.ctx.createOscillator();
+      this.humGain = this.ctx.createGain();
+      
+      this.humOsc.type = 'sawtooth';
+      this.humOsc.frequency.setValueAtTime(60, this.ctx.currentTime);
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(140, this.ctx.currentTime);
+
+      this.humGain.gain.setValueAtTime(0.02, this.ctx.currentTime);
+
+      this.humOsc.connect(filter);
+      filter.connect(this.humGain);
+      this.humGain.connect(this.ctx.destination);
+
+      this.humOsc.start();
+      this.isHumPlaying = true;
+    } catch (e) {}
+  }
+
+  public stopAmbientHum() {
+    try {
+      if (this.humGain && this.ctx) {
+        this.humGain.gain.linearRampToValueAtTime(0.0001, this.ctx.currentTime + 0.25);
+      }
+      setTimeout(() => {
+        if (this.humOsc) {
+          try { this.humOsc.stop(); } catch(e) {}
+          this.humOsc.disconnect();
+          this.humOsc = null;
+        }
+        this.isHumPlaying = false;
+      }, 300);
+    } catch (e) {
+      this.isHumPlaying = false;
+    }
+  }
+
+  public isHumming(): boolean {
+    return this.isHumPlaying;
+  }
+
+  public playSwitchClack() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.35, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.12);
+    } catch (e) {}
+  }
+
+  public playPadlockSnap() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1600, this.ctx.currentTime + 0.04);
+      gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.06);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.06);
+    } catch (e) {}
+  }
+
+  public playAirHiss() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const bufferSize = this.ctx.sampleRate * 0.4;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.15));
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 3200;
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+      noise.start();
+    } catch (e) {}
+  }
+
+  public playMeterBeep() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(2400, this.ctx.currentTime);
+      gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.08);
+    } catch (e) {}
+  }
+
+  public playClick() {
+    try {
+      this.initCtx();
+      if (!this.ctx) {
+        assessmentAudio.playClick();
+        return;
+      }
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1200, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.03);
+      gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.03);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.03);
+    } catch (e) {
+      assessmentAudio.playClick();
+    }
+  }
+}
+
+export const lotoAudio = new LOTOSoundEngine();
 
 interface LOTOMachineryVisualEngineProps {
   step: number; // 0 to 5
   isCompleted: boolean;
   color: string;
+  onStepAccomplished?: (stepIndex: number) => void;
 }
 
-export function LOTOMachineryVisualEngine({ step, isCompleted, color }: LOTOMachineryVisualEngineProps) {
+export function LOTOMachineryVisualEngine({
+  step,
+  isCompleted,
+  color,
+  onStepAccomplished
+}: LOTOMachineryVisualEngineProps) {
   return (
-    <div className="w-full h-full relative overflow-hidden flex items-center justify-center select-none bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-lg p-1">
-      {/* Background Precision Grid */}
+    <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-between select-none bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-lg p-1.5">
+      {/* Precision Grid Overlay */}
       <div 
         className="absolute inset-0 opacity-15 pointer-events-none"
         style={{
@@ -20,40 +197,41 @@ export function LOTOMachineryVisualEngine({ step, isCompleted, color }: LOTOMach
         }}
       />
 
-      {/* Render Active Machinery Scene */}
-      {step === 0 && <Step0PlantMappingScene isCompleted={isCompleted} />}
-      {step === 1 && <Step1MotorShutdownScene isCompleted={isCompleted} />}
-      {step === 2 && <Step2PhysicalIsolationScene isCompleted={isCompleted} />}
-      {step === 3 && <Step3LockoutTagoutScene isCompleted={isCompleted} />}
-      {step === 4 && <Step4StoredEnergyBleedScene isCompleted={isCompleted} />}
-      {step === 5 && <Step5ZeroEnergyVerifyScene isCompleted={isCompleted} />}
+      {/* Persistent Industrial HUD Bar */}
+      <div className="w-full shrink-0 flex items-center justify-between px-2 py-1 z-20 pointer-events-none">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full animate-ping" style={{ backgroundColor: color }} />
+          <span className="text-[9px] font-mono font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-slate-950/80 border border-slate-700/80 text-slate-300 backdrop-blur-sm">
+            INTERACTIVE SIMULATOR · OSHA 1910.147
+          </span>
+        </div>
 
-      {/* Persistent Industrial HUD Overlay Bar */}
-      <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none">
-        <span className="w-2 h-2 rounded-full animate-ping" style={{ backgroundColor: color }} />
-        <span className="text-[9px] font-mono font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-slate-950/80 border border-slate-700/80 text-slate-300 backdrop-blur-sm">
-          LOTO SIMULATOR · OSHA 1910.147
-        </span>
+        {isCompleted && (
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/80 text-emerald-400 font-mono text-[9px] font-black uppercase tracking-wider backdrop-blur-sm shadow-[0_0_10px_rgba(16,185,129,0.4)]">
+            <span>✓ VERIFIED COMPLETE</span>
+          </div>
+        )}
       </div>
 
-      {isCompleted && (
-        <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/80 text-emerald-400 font-mono text-[9px] font-black uppercase tracking-wider backdrop-blur-sm shadow-[0_0_10px_rgba(16,185,129,0.4)]">
-          <span>✓ VERIFIED COMPLETE</span>
-        </div>
-      )}
+      {/* Main Interactive Canvas */}
+      <div className="flex-1 w-full min-h-0 flex items-center justify-center relative overflow-hidden z-10">
+        {step === 0 && <Step0InteractivePlant onComplete={() => onStepAccomplished?.(0)} />}
+        {step === 1 && <Step1InteractiveMotor onComplete={() => onStepAccomplished?.(1)} />}
+        {step === 2 && <Step2InteractiveIsolation onComplete={() => onStepAccomplished?.(2)} />}
+        {step === 3 && <Step3InteractiveLockoutTagout onComplete={() => onStepAccomplished?.(3)} />}
+        {step === 4 && <Step4InteractiveStoredEnergy onComplete={() => onStepAccomplished?.(4)} />}
+        {step === 5 && <Step5InteractiveZeroVerify onComplete={() => onStepAccomplished?.(5)} />}
+      </div>
     </div>
   );
 }
 
 // ============================================================================
-// STEP 1 (Index 0): MULTI-ENERGY INDUSTRIAL PLANT MAPPING
+// STEP 1 (Index 0): INTERACTIVE PLANT ENERGY MAPPING
+// User clicks each of the 6 energy sources to inspect and acknowledge them.
 // ============================================================================
-function Step0PlantMappingScene({ isCompleted }: { isCompleted: boolean }) {
-  const [pulse, setPulse] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setPulse(p => (p + 1) % 6), 900);
-    return () => clearInterval(t);
-  }, []);
+function Step0InteractivePlant({ onComplete }: { onComplete: () => void }) {
+  const [inspected, setInspected] = useState<Set<string>>(new Set());
 
   const energySources = [
     { id: "ELEC", name: "480V 3-Phase", val: "ACTIVE 68A", color: "#f59e0b", icon: "⚡", x: 60, y: 50 },
@@ -64,626 +242,760 @@ function Step0PlantMappingScene({ isCompleted }: { isCompleted: boolean }) {
     { id: "CHEM", name: "Acid Reagent", val: "ISOLATED", color: "#10b981", icon: "☣️", x: 150, y: 170 },
   ];
 
+  const handleInspect = (id: string) => {
+    lotoAudio.playClick();
+    setInspected(prev => {
+      const next = new Set([...prev, id]);
+      if (next.size === energySources.length) {
+        assessmentAudio.playCorrectChime();
+        onComplete();
+      }
+      return next;
+    });
+  };
+
+  const handleInspectAll = () => {
+    lotoAudio.playClick();
+    const all = new Set(energySources.map(e => e.id));
+    setInspected(all);
+    assessmentAudio.playCorrectChime();
+    onComplete();
+  };
+
+  const allDone = inspected.size === energySources.length;
+
   return (
-    <svg viewBox="0 0 320 220" className="w-full h-full max-h-[260px] object-contain">
-      <defs>
-        <radialGradient id="plantGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.18" />
-          <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
-        </radialGradient>
-        <filter id="glow-amber" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="3" result="blur" />
-          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-        </filter>
-      </defs>
+    <div className="w-full h-full flex flex-col items-center justify-between">
+      <svg viewBox="0 0 320 205" className="w-full h-full max-h-[240px] object-contain">
+        <defs>
+          <radialGradient id="plantGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+          </radialGradient>
+        </defs>
 
-      {/* Central Industrial Processing Machine Silhouette */}
-      <circle cx="150" cy="105" r="75" fill="url(#plantGlow)" />
-      <rect x="110" y="65" width="80" height="75" rx="8" fill="#1e293b" stroke="#f59e0b" strokeWidth="1.8" />
-      <rect x="120" y="75" width="60" height="28" rx="4" fill="#0f172a" stroke="#475569" strokeWidth="1" />
-      <text x="150" y="92" textAnchor="middle" fill="#f59e0b" fontSize="9" fontWeight="900" fontFamily="monospace">
-        MACHINE UNIT #4
-      </text>
-      <text x="150" y="125" textAnchor="middle" fill="#94a3b8" fontSize="8" fontFamily="monospace">
-        6 ENERGY SOURCES
-      </text>
+        <circle cx="150" cy="105" r="75" fill="url(#plantGlow)" />
+        <rect x="110" y="65" width="80" height="75" rx="8" fill="#1e293b" stroke="#f59e0b" strokeWidth="1.8" />
+        <text x="150" y="92" textAnchor="middle" fill="#f59e0b" fontSize="9" fontWeight="900" fontFamily="monospace">
+          MACHINE UNIT #4
+        </text>
+        <text x="150" y="125" textAnchor="middle" fill="#94a3b8" fontSize="8" fontFamily="monospace">
+          {inspected.size}/6 MAPPED
+        </text>
 
-      {/* Animated Red Laser Isolation Perimeter */}
-      <ellipse cx="150" cy="105" rx="135" ry="85" fill="none" stroke="#ef4444" strokeWidth="1.2" strokeDasharray="5 4" opacity="0.8">
-        <animate attributeName="stroke-dashoffset" from="0" to="36" dur="3s" repeatCount="indefinite" />
-      </ellipse>
-      <text x="150" y="205" textAnchor="middle" fill="#ef4444" fontSize="7.5" fontWeight="bold" fontFamily="monospace" letterSpacing="1">
-        LOTO BOUNDARY PERIMETER · NOTIFY AFFECTED CREW
-      </text>
+        {/* Animated Laser Perimeter */}
+        <ellipse cx="150" cy="105" rx="135" ry="85" fill="none" stroke="#ef4444" strokeWidth="1.2" strokeDasharray="5 4" opacity="0.8">
+          <animate attributeName="stroke-dashoffset" from="0" to="36" dur="3s" repeatCount="indefinite" />
+        </ellipse>
 
-      {/* Energy Source Nodes and Interconnecting Traces */}
-      {energySources.map((es, idx) => {
-        const isFocused = pulse === idx;
-        return (
-          <g key={es.id}>
-            {/* Connecting bus line to central unit */}
-            <line
-              x1={es.x}
-              y1={es.y}
-              x2="150"
-              y2="105"
-              stroke={isFocused ? es.color : "#334155"}
-              strokeWidth={isFocused ? 2 : 1}
-              strokeDasharray={isFocused ? "none" : "3 3"}
-              opacity={isFocused ? 1 : 0.6}
-            />
-            {/* Node Card */}
-            <rect
-              x={es.x - 36}
-              y={es.y - 15}
-              width="72"
-              height="30"
-              rx="6"
-              fill="#0f172a"
-              stroke={isFocused ? es.color : "#475569"}
-              strokeWidth={isFocused ? 2 : 1}
-              filter={isFocused ? "url(#glow-amber)" : undefined}
-            />
-            <text x={es.x - 26} y={es.y + 4} fontSize="12">{es.icon}</text>
-            <text x={es.x - 8} y={es.y - 3} fill={isFocused ? "#ffffff" : "#cbd5e1"} fontSize="7.5" fontWeight="bold" fontFamily="sans-serif">
-              {es.name}
-            </text>
-            <text x={es.x - 8} y={es.y + 8} fill={es.color} fontSize="7" fontWeight="bold" fontFamily="monospace">
-              {es.val}
-            </text>
-          </g>
-        );
-      })}
+        {/* Energy Source Nodes */}
+        {energySources.map(es => {
+          const isDone = inspected.has(es.id);
+          return (
+            <g
+              key={es.id}
+              onClick={() => handleInspect(es.id)}
+              className="cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              <line
+                x1={es.x}
+                y1={es.y}
+                x2="150"
+                y2="105"
+                stroke={isDone ? "#22c55e" : es.color}
+                strokeWidth={isDone ? 2 : 1}
+                strokeDasharray={isDone ? "none" : "3 3"}
+              />
+              <rect
+                x={es.x - 36}
+                y={es.y - 15}
+                width="72"
+                height="30"
+                rx="6"
+                fill={isDone ? "#064e3b" : "#0f172a"}
+                stroke={isDone ? "#22c55e" : es.color}
+                strokeWidth={isDone ? 2 : 1}
+              />
+              <text x={es.x - 26} y={es.y + 4} fontSize="12">{es.icon}</text>
+              <text x={es.x - 8} y={es.y - 3} fill="#ffffff" fontSize="7.5" fontWeight="bold">
+                {es.name}
+              </text>
+              <text x={es.x - 8} y={es.y + 8} fill={isDone ? "#86efac" : es.color} fontSize="7" fontWeight="bold" fontFamily="monospace">
+                {isDone ? "✓ IDENTIFIED" : es.val}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
 
-      {/* OSHA Standard Badge */}
-      <rect x="6" y="196" width="90" height="18" rx="4" fill="#0f172a" stroke="#334155" />
-      <text x="51" y="208" textAnchor="middle" fill="#f59e0b" fontSize="7" fontWeight="bold" fontFamily="monospace">
-        OSHA 1910.147(c)(4)
-      </text>
-    </svg>
+      {/* Interactive Guidance Bar */}
+      <div className="w-full flex items-center justify-between px-3 py-1 bg-slate-950/90 border-t border-slate-800 rounded-b-lg">
+        <span className="text-[10px] text-amber-300 font-mono font-bold flex items-center gap-1">
+          <span>👉</span> {allDone ? "✓ All 6 Energy Sources Mapped!" : "Click each energy node to verify identification"}
+        </span>
+        {!allDone && (
+          <button
+            onClick={handleInspectAll}
+            className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/60 text-amber-300 hover:bg-amber-500 hover:text-slate-950 text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer"
+          >
+            Identify All
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
 // ============================================================================
-// STEP 2 (Index 1): NORMAL EQUIPMENT SHUTDOWN (DECELERATION & CONTACTOR BREAK)
+// STEP 2 (Index 1): INTERACTIVE MOTOR SHUTDOWN
+// User clicks the red industrial STOP button on the MCC starter.
 // ============================================================================
-function Step1MotorShutdownScene({ isCompleted }: { isCompleted: boolean }) {
+function Step1InteractiveMotor({ onComplete }: { onComplete: () => void }) {
+  const [stopped, setStopped] = useState(false);
   const [rpm, setRpm] = useState(1750);
   const [amps, setAmps] = useState(68);
-  const [stopped, setStopped] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setStopped(true);
-      const interval = setInterval(() => {
-        setRpm(r => {
-          if (r <= 50) { clearInterval(interval); return 0; }
-          return Math.floor(r * 0.75);
-        });
-        setAmps(a => {
-          if (a <= 3) return 0;
-          return Math.floor(a * 0.7);
-        });
-      }, 150);
-      return () => clearInterval(interval);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, []);
+  const handleStopPress = () => {
+    if (stopped) return;
+    setStopped(true);
+    lotoAudio.playSwitchClack();
+
+    const interval = setInterval(() => {
+      setRpm(r => {
+        if (r <= 40) {
+          clearInterval(interval);
+          assessmentAudio.playCorrectChime();
+          onComplete();
+          return 0;
+        }
+        return Math.floor(r * 0.72);
+      });
+      setAmps(a => (a <= 2 ? 0 : Math.floor(a * 0.65)));
+    }, 120);
+  };
 
   const rotorRotation = stopped ? 0 : 360;
 
   return (
-    <svg viewBox="0 0 320 220" className="w-full h-full max-h-[260px] object-contain">
-      <defs>
-        <radialGradient id="motorHousing" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#334155" />
-          <stop offset="100%" stopColor="#0f172a" />
-        </radialGradient>
-      </defs>
+    <div className="w-full h-full flex flex-col items-center justify-between">
+      <svg viewBox="0 0 320 205" className="w-full h-full max-h-[240px] object-contain">
+        <defs>
+          <radialGradient id="motorHousing" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#334155" />
+            <stop offset="100%" stopColor="#0f172a" />
+          </radialGradient>
+        </defs>
 
-      {/* Left: Industrial Motor Control Center (MCC) Panel */}
-      <rect x="25" y="28" width="115" height="165" rx="8" fill="#1e293b" stroke="#ef4444" strokeWidth="2" />
-      <rect x="35" y="38" width="95" height="24" rx="4" fill="#090d16" stroke="#334155" />
-      <text x="82" y="53" textAnchor="middle" fill="#ef4444" fontSize="8.5" fontWeight="black" fontFamily="monospace">
-        MCC STARTER #4
-      </text>
+        {/* Left: Industrial MCC Panel */}
+        <rect x="25" y="20" width="115" height="165" rx="8" fill="#1e293b" stroke="#ef4444" strokeWidth="2" />
+        <rect x="35" y="30" width="95" height="24" rx="4" fill="#090d16" stroke="#334155" />
+        <text x="82" y="45" textAnchor="middle" fill="#ef4444" fontSize="8.5" fontWeight="black" fontFamily="monospace">
+          MCC STARTER #4
+        </text>
 
-      {/* Push Buttons */}
-      <circle cx="58" cy="88" r="14" fill="#1e293b" stroke="#22c55e" strokeWidth="2" />
-      <circle cx="58" cy="88" r="10" fill="#15803d" />
-      <text x="58" y="112" textAnchor="middle" fill="#94a3b8" fontSize="7" fontWeight="bold">START</text>
+        {/* START Button (Inactive) */}
+        <circle cx="58" cy="80" r="14" fill="#1e293b" stroke="#22c55e" strokeWidth="2" />
+        <circle cx="58" cy="80" r="10" fill="#15803d" opacity={stopped ? 0.4 : 1} />
+        <text x="58" y="104" textAnchor="middle" fill="#94a3b8" fontSize="7" fontWeight="bold">START</text>
 
-      {/* Active STOP Push Button (Depressed) */}
-      <circle cx="106" cy="88" r="14" fill="#1e293b" stroke="#ef4444" strokeWidth="2.5" />
-      <circle cx="106" cy="88" r={stopped ? 8 : 10} fill="#dc2626">
-        {stopped && <animate attributeName="r" values="10;7;8" dur="0.3s" fill="freeze" />}
-      </circle>
-      <text x="106" y="112" textAnchor="middle" fill="#ef4444" fontSize="7" fontWeight="black">STOP</text>
-
-      {/* Digital Ammeter Display */}
-      <rect x="40" y="130" width="85" height="38" rx="5" fill="#0f172a" stroke="#475569" />
-      <text x="82" y="146" textAnchor="middle" fill={amps > 0 ? "#ef4444" : "#22c55e"} fontSize="14" fontWeight="black" fontFamily="monospace">
-        {amps.toFixed(1)} <tspan fontSize="9">A</tspan>
-      </text>
-      <text x="82" y="160" textAnchor="middle" fill="#64748b" fontSize="7" fontFamily="monospace">
-        LOAD CURRENT
-      </text>
-
-      {/* Right: 3-Phase Induction Motor Cutaway */}
-      <g transform="translate(160, 30)">
-        {/* Motor Frame */}
-        <rect x="20" y="30" width="115" height="110" rx="16" fill="url(#motorHousing)" stroke="#64748b" strokeWidth="2" />
-        
-        {/* Cooling Fins */}
-        {[38, 52, 66, 80, 94, 108, 122].map((y, i) => (
-          <line key={i} x1="14" y1={y} x2="20" y2={y} stroke="#64748b" strokeWidth="3" strokeLinecap="round" />
-        ))}
-
-        {/* Terminal Box */}
-        <rect x="55" y="14" width="45" height="18" rx="3" fill="#1e293b" stroke="#f59e0b" strokeWidth="1.5" />
-        <text x="77" y="26" textAnchor="middle" fill="#f59e0b" fontSize="7" fontWeight="bold">3~ 480V</text>
-
-        {/* Rotating Shaft & Rotor */}
-        <circle cx="77" cy="85" r="32" fill="#0f172a" stroke={rpm > 0 ? "#ef4444" : "#22c55e"} strokeWidth="2.5" />
-        <g transform={`rotate(${rotorRotation} 77 85)`}>
-          {rpm > 0 && (
-            <animateTransform attributeName="transform" type="rotate" from="0 77 85" to="360 77 85" dur="0.4s" repeatCount="indefinite" />
+        {/* INTERACTIVE STOP PUSH BUTTON */}
+        <g onClick={handleStopPress} className="cursor-pointer group">
+          <circle cx="106" cy="80" r="16" fill="#1e293b" stroke="#ef4444" strokeWidth={stopped ? 2 : 3} className="group-hover:scale-105 transition-transform" />
+          <circle cx="106" cy="80" r={stopped ? 8 : 12} fill="#dc2626" className="transition-all" />
+          {!stopped && (
+            <circle cx="106" cy="80" r="18" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3 2" className="animate-spin" />
           )}
-          <line x1="77" y1="58" x2="77" y2="112" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" />
-          <line x1="50" y1="85" x2="104" y2="85" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" />
-          <circle cx="77" cy="85" r="8" fill="#475569" />
+          <text x="106" y="104" textAnchor="middle" fill="#ef4444" fontSize="7" fontWeight="black">
+            {stopped ? "STOPPED" : "CLICK STOP"}
+          </text>
         </g>
 
-        {/* Live RPM Readout */}
-        <rect x="35" y="150" width="85" height="24" rx="4" fill="#0f172a" stroke="#334155" />
-        <text x="77" y="165" textAnchor="middle" fill={rpm > 0 ? "#ef4444" : "#22c55e"} fontSize="10" fontWeight="black" fontFamily="monospace">
-          {rpm} <tspan fontSize="7">RPM</tspan> {rpm === 0 ? "● AT REST" : "● ROTATING"}
+        {/* Digital Ammeter */}
+        <rect x="40" y="122" width="85" height="38" rx="5" fill="#0f172a" stroke="#475569" />
+        <text x="82" y="138" textAnchor="middle" fill={amps > 0 ? "#ef4444" : "#22c55e"} fontSize="14" fontWeight="black" fontFamily="monospace">
+          {amps.toFixed(1)} <tspan fontSize="9">A</tspan>
         </text>
-      </g>
+        <text x="82" y="152" textAnchor="middle" fill="#64748b" fontSize="7" fontFamily="monospace">
+          LOAD CURRENT
+        </text>
 
-      {/* Safety Directive Banner */}
-      <rect x="25" y="200" width="270" height="16" rx="4" fill="#450a0a" stroke="#ef4444" strokeWidth="0.8" />
-      <text x="160" y="211" textAnchor="middle" fill="#fca5a5" fontSize="7.5" fontWeight="bold" fontFamily="monospace">
-        {stopped && rpm === 0 ? "✓ MOTION ARRESTED — PROCEED TO POSITIVE ENERGY ISOLATION" : "⚠ WAITING FOR MECHANICAL INERTIA TO DISSIPATE..."}
-      </text>
-    </svg>
+        {/* Right: 3-Phase Induction Motor Cutaway */}
+        <g transform="translate(160, 22)">
+          <rect x="20" y="30" width="115" height="110" rx="16" fill="url(#motorHousing)" stroke="#64748b" strokeWidth="2" />
+          {[38, 52, 66, 80, 94, 108, 122].map((y, i) => (
+            <line key={i} x1="14" y1={y} x2="20" y2={y} stroke="#64748b" strokeWidth="3" strokeLinecap="round" />
+          ))}
+          <rect x="55" y="14" width="45" height="18" rx="3" fill="#1e293b" stroke="#f59e0b" strokeWidth="1.5" />
+          <text x="77" y="26" textAnchor="middle" fill="#f59e0b" fontSize="7" fontWeight="bold">3~ 480V</text>
+
+          {/* Rotor */}
+          <circle cx="77" cy="85" r="32" fill="#0f172a" stroke={rpm > 0 ? "#ef4444" : "#22c55e"} strokeWidth="2.5" />
+          <g transform={`rotate(${rotorRotation} 77 85)`}>
+            {rpm > 0 && (
+              <animateTransform attributeName="transform" type="rotate" from="0 77 85" to="360 77 85" dur="0.4s" repeatCount="indefinite" />
+            )}
+            <line x1="77" y1="58" x2="77" y2="112" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" />
+            <line x1="50" y1="85" x2="104" y2="85" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" />
+            <circle cx="77" cy="85" r="8" fill="#475569" />
+          </g>
+
+          <rect x="35" y="148" width="85" height="24" rx="4" fill="#0f172a" stroke="#334155" />
+          <text x="77" y="163" textAnchor="middle" fill={rpm > 0 ? "#ef4444" : "#22c55e"} fontSize="10" fontWeight="black" fontFamily="monospace">
+            {rpm} RPM {rpm === 0 ? "● AT REST" : "● RUNNING"}
+          </text>
+        </g>
+      </svg>
+
+      {/* Interactive Guidance Bar */}
+      <div className="w-full flex items-center justify-between px-3 py-1 bg-slate-950/90 border-t border-slate-800 rounded-b-lg">
+        <span className="text-[10px] text-red-300 font-mono font-bold flex items-center gap-1">
+          <span>👉</span> {stopped && rpm === 0 ? "✓ Motor completely stopped! Ready for positive isolation." : "Click the red STOP button on MCC Starter #4"}
+        </span>
+        {!stopped && (
+          <button
+            onClick={handleStopPress}
+            className="px-2 py-0.5 rounded bg-red-500 hover:bg-red-400 text-slate-950 text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer"
+          >
+            Press STOP
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
 // ============================================================================
-// STEP 3 (Index 2): ENERGY ISOLATION (400A DISCONNECT & PNEUMATIC BALL VALVE)
+// STEP 3 (Index 2): INTERACTIVE ENERGY ISOLATION
+// User pulls the 400A knife switch handle & turns the pneumatic valve 90°.
 // ============================================================================
-function Step2PhysicalIsolationScene({ isCompleted }: { isCompleted: boolean }) {
-  const [isolated, setIsolated] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setIsolated(true), 700);
-    return () => clearTimeout(t);
-  }, []);
+function Step2InteractiveIsolation({ onComplete }: { onComplete: () => void }) {
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const [valveClosed, setValveClosed] = useState(false);
+
+  const toggleSwitch = () => {
+    lotoAudio.playSwitchClack();
+    const next = !switchOpen;
+    setSwitchOpen(next);
+    if (next && valveClosed) {
+      assessmentAudio.playCorrectChime();
+      onComplete();
+    }
+  };
+
+  const toggleValve = () => {
+    lotoAudio.playAirHiss();
+    const next = !valveClosed;
+    setValveClosed(next);
+    if (switchOpen && next) {
+      assessmentAudio.playCorrectChime();
+      onComplete();
+    }
+  };
+
+  const handleIsolateAll = () => {
+    lotoAudio.playSwitchClack();
+    setSwitchOpen(true);
+    setValveClosed(true);
+    assessmentAudio.playCorrectChime();
+    onComplete();
+  };
+
+  const allIsolated = switchOpen && valveClosed;
 
   return (
-    <svg viewBox="0 0 320 220" className="w-full h-full max-h-[260px] object-contain">
-      <defs>
-        <filter id="arcGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="3" result="blur" />
-          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-        </filter>
-      </defs>
+    <div className="w-full h-full flex flex-col items-center justify-between">
+      <svg viewBox="0 0 320 205" className="w-full h-full max-h-[240px] object-contain">
+        {/* Left: 400A Disconnect Knife Switch */}
+        <g transform="translate(20, 15)">
+          <rect x="0" y="0" width="130" height="170" rx="10" fill="#1e293b" stroke="#8b5cf6" strokeWidth="2" />
+          <text x="65" y="18" textAnchor="middle" fill="#8b5cf6" fontSize="8.5" fontWeight="black" fontFamily="monospace">
+            400A MAIN DISCONNECT
+          </text>
 
-      {/* Left: 400A 3-Phase Rotary Knife Switch Disconnect */}
-      <g transform="translate(20, 20)">
-        <rect x="0" y="0" width="130" height="175" rx="10" fill="#1e293b" stroke="#8b5cf6" strokeWidth="2" />
-        <text x="65" y="20" textAnchor="middle" fill="#8b5cf6" fontSize="8.5" fontWeight="black" fontFamily="monospace">
-          400A MAIN DISCONNECT
-        </text>
+          {/* Line Busbars */}
+          {[30, 65, 100].map((x, i) => (
+            <g key={i}>
+              <rect x={x - 4} y="28" width="8" height="26" fill="#ef4444" rx="2" />
+              <circle cx={x} cy="54" r="5" fill="#1e293b" stroke="#ef4444" strokeWidth="2" />
+            </g>
+          ))}
 
-        {/* Incoming Line Busbars (Energized Red) */}
-        {[30, 65, 100].map((x, i) => (
-          <g key={i}>
-            <rect x={x - 4} y="32" width="8" height="28" fill="#ef4444" rx="2" />
-            <circle cx={x} cy="60" r="5" fill="#1e293b" stroke="#ef4444" strokeWidth="2" />
-          </g>
-        ))}
-
-        {/* Movable Knife Switch Blades (Animated Opening) */}
-        {[30, 65, 100].map((x, i) => {
-          const bladeAngle = isolated ? -48 : 0;
-          return (
-            <g key={i} transform={`translate(${x}, 60)`}>
+          {/* Interactive Knife Switch Blades */}
+          {[30, 65, 100].map((x, i) => (
+            <g key={i} transform={`translate(${x}, 54)`}>
               <line
                 x1="0"
                 y1="0"
                 x2="0"
                 y2="42"
-                stroke={isolated ? "#a78bfa" : "#ef4444"}
+                stroke={switchOpen ? "#a78bfa" : "#ef4444"}
                 strokeWidth="4"
                 strokeLinecap="round"
-                transform={`rotate(${bladeAngle})`}
-                style={{ transition: "transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.4s" }}
+                transform={`rotate(${switchOpen ? -48 : 0})`}
+                style={{ transition: "transform 0.4s ease, stroke 0.3s" }}
               />
             </g>
-          );
-        })}
+          ))}
 
-        {/* Outgoing Load Contacts */}
-        {[30, 65, 100].map((x, i) => (
-          <g key={i}>
-            <circle cx={x} cy="102" r="5" fill="#1e293b" stroke={isolated ? "#475569" : "#ef4444"} strokeWidth="2" />
-            <rect x={x - 4} y="107" width="8" height="25" fill={isolated ? "#334155" : "#ef4444"} rx="2" />
-          </g>
-        ))}
+          {/* Load Contacts */}
+          {[30, 65, 100].map((x, i) => (
+            <g key={i}>
+              <circle cx={x} cy="96" r="5" fill="#1e293b" stroke={switchOpen ? "#475569" : "#ef4444"} strokeWidth="2" />
+              <rect x={x - 4} y="101" width="8" height="24" fill={switchOpen ? "#334155" : "#ef4444"} rx="2" />
+            </g>
+          ))}
 
-        {/* Dielectric Air Gap Indicator */}
-        {isolated && (
-          <g>
-            <rect x="20" y="138" width="90" height="24" rx="4" fill="#0f172a" stroke="#22c55e" strokeWidth="1" />
-            <text x="65" y="153" textAnchor="middle" fill="#22c55e" fontSize="7.5" fontWeight="bold" fontFamily="monospace">
-              ✓ PHYSICAL AIR GAP
+          {/* Interactive Handle Trigger Button */}
+          <g onClick={toggleSwitch} className="cursor-pointer group">
+            <rect x="15" y="132" width="100" height="26" rx="5" fill={switchOpen ? "#064e3b" : "#450a0a"} stroke={switchOpen ? "#22c55e" : "#ef4444"} strokeWidth="1.5" className="group-hover:opacity-90" />
+            <text x="65" y="148" textAnchor="middle" fill={switchOpen ? "#a7f3d0" : "#fca5a5"} fontSize="8" fontWeight="black" fontFamily="monospace">
+              {switchOpen ? "✓ DISCONNECTED (OPEN)" : "👉 PULL TO DISCONNECT"}
             </text>
           </g>
-        )}
-      </g>
-
-      {/* Right: Pneumatic Quarter-Turn Ball Valve */}
-      <g transform="translate(170, 20)">
-        <rect x="0" y="0" width="130" height="175" rx="10" fill="#1e293b" stroke="#06b6d4" strokeWidth="2" />
-        <text x="65" y="20" textAnchor="middle" fill="#06b6d4" fontSize="8.5" fontWeight="black" fontFamily="monospace">
-          MAIN PNEUMATIC ISOLATION
-        </text>
-
-        {/* High-Pressure Pipe */}
-        <rect x="15" y="75" width="100" height="26" rx="4" fill="#0f172a" stroke="#334155" strokeWidth="2" />
-        <text x="32" y="91" fill="#06b6d4" fontSize="8" fontWeight="bold">120 PSI IN</text>
-
-        {/* Ball Valve Body */}
-        <circle cx="65" cy="88" r="22" fill="#1e293b" stroke="#06b6d4" strokeWidth="3" />
-        
-        {/* Quarter-Turn Handle (Rotates 90 deg from Parallel to Perpendicular) */}
-        <g transform={`translate(65, 88) rotate(${isolated ? 90 : 0})`} style={{ transition: "transform 0.6s ease" }}>
-          <rect x="-6" y="-38" width="12" height="42" rx="4" fill="#ef4444" stroke="#fca5a5" strokeWidth="1.5" />
-          <circle cx="0" cy="-30" r="3" fill="#ffffff" />
         </g>
 
-        {/* Valve Status Readout */}
-        <rect x="15" y="138" width="100" height="24" rx="4" fill="#0f172a" stroke={isolated ? "#22c55e" : "#ef4444"} strokeWidth="1" />
-        <text x="65" y="153" textAnchor="middle" fill={isolated ? "#22c55e" : "#ef4444"} fontSize="8" fontWeight="bold" fontFamily="monospace">
-          {isolated ? "CLOSED (OFF) 90°" : "OPEN (FLOWING)"}
-        </text>
-      </g>
+        {/* Right: Quarter-Turn Pneumatic Ball Valve */}
+        <g transform="translate(170, 15)">
+          <rect x="0" y="0" width="130" height="170" rx="10" fill="#1e293b" stroke="#06b6d4" strokeWidth="2" />
+          <text x="65" y="18" textAnchor="middle" fill="#06b6d4" fontSize="8.5" fontWeight="black" fontFamily="monospace">
+            PNEUMATIC ISOLATION
+          </text>
 
-      {/* Positive Verification Banner */}
-      <rect x="20" y="200" width="280" height="16" rx="4" fill={isolated ? "#064e3b" : "#450a0a"} stroke={isolated ? "#10b981" : "#ef4444"} strokeWidth="0.8" />
-      <text x="160" y="211" textAnchor="middle" fill={isolated ? "#a7f3d0" : "#fca5a5"} fontSize="7.5" fontWeight="bold" fontFamily="monospace">
-        {isolated ? "✓ MULTI-ENERGY POSITIVE DISCONNECTION COMPLETE" : "OPERATING ISOLATING DEVICES..."}
-      </text>
-    </svg>
+          <rect x="15" y="70" width="100" height="26" rx="4" fill="#0f172a" stroke="#334155" strokeWidth="2" />
+          <text x="32" y="86" fill="#06b6d4" fontSize="8" fontWeight="bold">120 PSI IN</text>
+
+          <circle cx="65" cy="83" r="22" fill="#1e293b" stroke="#06b6d4" strokeWidth="3" />
+          <g transform={`translate(65, 83) rotate(${valveClosed ? 90 : 0})`} style={{ transition: "transform 0.4s ease" }}>
+            <rect x="-6" y="-36" width="12" height="40" rx="4" fill="#ef4444" stroke="#fca5a5" strokeWidth="1.5" />
+            <circle cx="0" cy="-28" r="3" fill="#ffffff" />
+          </g>
+
+          {/* Interactive Valve Trigger */}
+          <g onClick={toggleValve} className="cursor-pointer group">
+            <rect x="15" y="132" width="100" height="26" rx="5" fill={valveClosed ? "#064e3b" : "#450a0a"} stroke={valveClosed ? "#22c55e" : "#ef4444"} strokeWidth="1.5" className="group-hover:opacity-90" />
+            <text x="65" y="148" textAnchor="middle" fill={valveClosed ? "#a7f3d0" : "#fca5a5"} fontSize="8" fontWeight="black" fontFamily="monospace">
+              {valveClosed ? "✓ VALVE CLOSED (90°)" : "👉 TURN VALVE 90°"}
+            </text>
+          </g>
+        </g>
+      </svg>
+
+      {/* Interactive Guidance Bar */}
+      <div className="w-full flex items-center justify-between px-3 py-1 bg-slate-950/90 border-t border-slate-800 rounded-b-lg">
+        <span className="text-[10px] text-violet-300 font-mono font-bold flex items-center gap-1">
+          <span>👉</span> {allIsolated ? "✓ Electrical & Pneumatic Isolation Complete!" : "Pull disconnect switch and turn pneumatic valve to positive OFF"}
+        </span>
+        {!allIsolated && (
+          <button
+            onClick={handleIsolateAll}
+            className="px-2 py-0.5 rounded bg-violet-500 hover:bg-violet-400 text-slate-950 text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer"
+          >
+            Isolate Both
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
 // ============================================================================
-// STEP 4 (Index 3): LOCKOUT / TAGOUT (MASTER LOCK PADLOCK & OSHA DANGER TAG)
+// STEP 4 (Index 3): INTERACTIVE LOCKOUT / TAGOUT
+// User equips hasp, snaps padlock, and attaches danger tag.
 // ============================================================================
-function Step3LockoutTagoutScene({ isCompleted }: { isCompleted: boolean }) {
-  const [locked, setLocked] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setLocked(true), 650);
-    return () => clearTimeout(t);
-  }, []);
+function Step3InteractiveLockoutTagout({ onComplete }: { onComplete: () => void }) {
+  const [haspApplied, setHaspApplied] = useState(false);
+  const [padlockApplied, setPadlockApplied] = useState(false);
+  const [tagApplied, setTagApplied] = useState(false);
+
+  const handleApplyHasp = () => {
+    lotoAudio.playSwitchClack();
+    setHaspApplied(true);
+  };
+
+  const handleApplyPadlock = () => {
+    lotoAudio.playPadlockSnap();
+    setPadlockApplied(true);
+    if (tagApplied) {
+      assessmentAudio.playCorrectChime();
+      onComplete();
+    }
+  };
+
+  const handleApplyTag = () => {
+    lotoAudio.playClick();
+    setTagApplied(true);
+    if (padlockApplied) {
+      assessmentAudio.playCorrectChime();
+      onComplete();
+    }
+  };
+
+  const handleApplyAll = () => {
+    lotoAudio.playPadlockSnap();
+    setHaspApplied(true);
+    setPadlockApplied(true);
+    setTagApplied(true);
+    assessmentAudio.playCorrectChime();
+    onComplete();
+  };
+
+  const allLocked = haspApplied && padlockApplied && tagApplied;
 
   return (
-    <svg viewBox="0 0 320 220" className="w-full h-full max-h-[260px] object-contain">
-      <defs>
-        <linearGradient id="brassKey" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#fef08a" />
-          <stop offset="100%" stopColor="#ca8a04" />
-        </linearGradient>
-        <linearGradient id="padlockBody" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#ef4444" />
-          <stop offset="100%" stopColor="#991b1b" />
-        </linearGradient>
-        <filter id="metalSheen" x="-10%" y="-10%" width="120%" height="120%">
-          <feDropShadow dx="2" dy="2" stdDeviation="3" floodColor="#000000" floodOpacity="0.6" />
-        </filter>
-      </defs>
+    <div className="w-full h-full flex flex-col items-center justify-between">
+      <svg viewBox="0 0 320 205" className="w-full h-full max-h-[240px] object-contain">
+        <defs>
+          <linearGradient id="padlockBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#ef4444" />
+            <stop offset="100%" stopColor="#991b1b" />
+          </linearGradient>
+        </defs>
 
-      {/* Disconnect Switch Handle Fixture (Background) */}
-      <rect x="35" y="45" width="80" height="135" rx="8" fill="#1e293b" stroke="#475569" strokeWidth="2" />
-      <rect x="55" y="70" width="40" height="75" rx="4" fill="#0f172a" stroke="#334155" />
-      <text x="75" y="62" textAnchor="middle" fill="#94a3b8" fontSize="8" fontWeight="bold" fontFamily="monospace">
-        HASP MOUNT
-      </text>
-
-      {/* 6-Hole Heavy-Duty Steel Lockout Hasp */}
-      <g transform="translate(68, 75)">
-        <path d="M 0 0 C 15 -20, 30 -20, 45 0 L 45 60 C 30 80, 15 80, 0 60 Z" fill="#94a3b8" stroke="#cbd5e1" strokeWidth="2" />
-        <circle cx="22" cy="15" r="5" fill="#0f172a" />
-        <circle cx="22" cy="30" r="5" fill="#0f172a" />
-        <circle cx="22" cy="45" r="5" fill="#0f172a" />
-      </g>
-
-      {/* Master Lock 410 Dielectric Red Safety Padlock (Snaps into Hasp) */}
-      <g 
-        transform={`translate(75, ${locked ? 115 : 65})`} 
-        filter="url(#metalSheen)"
-        style={{ transition: "transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)" }}
-      >
-        {/* Hardened Steel Shackle */}
-        <path 
-          d="M 12 0 L 12 -28 C 12 -42, 38 -42, 38 -28 L 38 0" 
-          fill="none" 
-          stroke="#cbd5e1" 
-          strokeWidth="6" 
-          strokeLinecap="round" 
-        />
-        {/* Red Padlock Xenoy Body */}
-        <rect x="0" y="0" width="50" height="60" rx="8" fill="url(#padlockBody)" stroke="#fca5a5" strokeWidth="1.5" />
-        {/* Keyhole and Engravings */}
-        <circle cx="25" cy="24" r="8" fill="#450a0a" />
-        <path d="M 23 24 L 27 24 L 28 36 L 22 36 Z" fill="#450a0a" />
-        <text x="25" y="50" textAnchor="middle" fill="#ffffff" fontSize="6" fontWeight="black" fontFamily="sans-serif">
-          MASTER LOCK
-        </text>
-      </g>
-
-      {/* OSHA 1910.147 Compliant Danger Tag */}
-      <g 
-        transform="translate(165, 30)" 
-        filter="url(#metalSheen)"
-        style={{ opacity: locked ? 1 : 0.2, transition: "opacity 0.6s ease" }}
-      >
-        {/* Eyelet Cord */}
-        <path d="M -15 35 Q 0 20, 15 25" fill="none" stroke="#f97316" strokeWidth="2.5" />
-        {/* Tag Body */}
-        <path d="M 15 25 L 30 10 L 125 10 L 125 160 L 15 160 Z" fill="#ffffff" stroke="#e2e8f0" strokeWidth="2" />
-        <circle cx="30" cy="25" r="4" fill="#0f172a" stroke="#cbd5e1" strokeWidth="1.5" />
-
-        {/* DANGER Header Strip */}
-        <path d="M 30 10 L 125 10 L 125 50 L 15 50 L 15 25 Z" fill="#dc2626" />
-        <ellipse cx="70" cy="30" rx="35" ry="12" fill="#ffffff" />
-        <text x="70" y="34" textAnchor="middle" fill="#dc2626" fontSize="10" fontWeight="black" fontFamily="sans-serif">
-          DANGER
+        {/* Disconnect Switch Fixture */}
+        <rect x="35" y="35" width="80" height="145" rx="8" fill="#1e293b" stroke="#475569" strokeWidth="2" />
+        <rect x="55" y="60" width="40" height="75" rx="4" fill="#0f172a" stroke="#334155" />
+        <text x="75" y="52" textAnchor="middle" fill="#94a3b8" fontSize="8" fontWeight="bold" fontFamily="monospace">
+          LOTO HASP
         </text>
 
-        {/* Tag Directives */}
-        <text x="70" y="65" textAnchor="middle" fill="#0f172a" fontSize="8" fontWeight="black" fontFamily="sans-serif">
-          DO NOT OPERATE
-        </text>
-        <line x1="25" y1="72" x2="115" y2="72" stroke="#dc2626" strokeWidth="1.5" />
+        {/* 6-Hole Steel Hasp */}
+        {haspApplied ? (
+          <g transform="translate(68, 65)">
+            <path d="M 0 0 C 15 -20, 30 -20, 45 0 L 45 60 C 30 80, 15 80, 0 60 Z" fill="#94a3b8" stroke="#cbd5e1" strokeWidth="2" />
+            <circle cx="22" cy="15" r="5" fill="#0f172a" />
+            <circle cx="22" cy="30" r="5" fill="#0f172a" />
+            <circle cx="22" cy="45" r="5" fill="#0f172a" />
+          </g>
+        ) : (
+          <g onClick={handleApplyHasp} className="cursor-pointer">
+            <rect x="58" y="75" width="35" height="50" rx="6" fill="#0f172a" stroke="#f97316" strokeWidth="1.5" strokeDasharray="3 2" />
+            <text x="75" y="104" textAnchor="middle" fill="#f97316" fontSize="7" fontWeight="black">SNAP HASP</text>
+          </g>
+        )}
 
-        {/* Form Fields */}
-        <text x="25" y="85" fill="#475569" fontSize="6.5" fontWeight="bold">EQUIPMENT: #4 FEEDER</text>
-        <text x="25" y="100" fill="#475569" fontSize="6.5" fontWeight="bold">LOCKED BY: A. SHARMA</text>
-        <text x="25" y="115" fill="#475569" fontSize="6.5" fontWeight="bold">DEPT: ELECTRICAL SAFE</text>
-        <text x="25" y="130" fill="#475569" fontSize="6.5" fontWeight="bold">DATE: 2026-09-06</text>
+        {/* Red Padlock */}
+        {padlockApplied ? (
+          <g transform="translate(75, 105)">
+            <path d="M 12 0 L 12 -28 C 12 -42, 38 -42, 38 -28 L 38 0" fill="none" stroke="#cbd5e1" strokeWidth="6" strokeLinecap="round" />
+            <rect x="0" y="0" width="50" height="58" rx="8" fill="url(#padlockBodyGrad)" stroke="#fca5a5" strokeWidth="1.5" />
+            <circle cx="25" cy="24" r="8" fill="#450a0a" />
+            <path d="M 23 24 L 27 24 L 28 36 L 22 36 Z" fill="#450a0a" />
+            <text x="25" y="48" textAnchor="middle" fill="#ffffff" fontSize="6" fontWeight="black">MASTER LOCK</text>
+          </g>
+        ) : haspApplied ? (
+          <g onClick={handleApplyPadlock} className="cursor-pointer">
+            <rect x="75" y="105" width="48" height="52" rx="6" fill="#0f172a" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3 2" />
+            <text x="99" y="134" textAnchor="middle" fill="#ef4444" fontSize="7" fontWeight="black">SNAP LOCK</text>
+          </g>
+        ) : null}
 
-        {/* Bottom Warning */}
-        <rect x="20" y="140" width="100" height="15" fill="#0f172a" rx="2" />
-        <text x="70" y="151" textAnchor="middle" fill="#fca5a5" fontSize="6" fontWeight="bold">
-          DO NOT REMOVE THIS TAG
-        </text>
-      </g>
+        {/* OSHA Danger Tag */}
+        {tagApplied ? (
+          <g transform="translate(165, 25)">
+            <path d="M -15 35 Q 0 20, 15 25" fill="none" stroke="#f97316" strokeWidth="2.5" />
+            <path d="M 15 25 L 30 10 L 125 10 L 125 155 L 15 155 Z" fill="#ffffff" stroke="#e2e8f0" strokeWidth="2" />
+            <path d="M 30 10 L 125 10 L 125 48 L 15 48 L 15 25 Z" fill="#dc2626" />
+            <ellipse cx="70" cy="28" rx="35" ry="12" fill="#ffffff" />
+            <text x="70" y="32" textAnchor="middle" fill="#dc2626" fontSize="10" fontWeight="black">DANGER</text>
+            <text x="70" y="62" textAnchor="middle" fill="#0f172a" fontSize="8" fontWeight="black">DO NOT OPERATE</text>
+            <line x1="25" y1="68" x2="115" y2="68" stroke="#dc2626" strokeWidth="1.5" />
+            <text x="25" y="82" fill="#475569" fontSize="6.5" fontWeight="bold">EQUIP: #4 FEEDER</text>
+            <text x="25" y="96" fill="#475569" fontSize="6.5" fontWeight="bold">TECH: A. SHARMA</text>
+            <text x="25" y="110" fill="#475569" fontSize="6.5" fontWeight="bold">DATE: 2026-09-06</text>
+            <rect x="20" y="125" width="100" height="18" fill="#0f172a" rx="2" />
+            <text x="70" y="137" textAnchor="middle" fill="#86efac" fontSize="6.5" fontWeight="bold">✓ SIGNED & ATTACHED</text>
+          </g>
+        ) : (
+          <g onClick={handleApplyTag} className="cursor-pointer">
+            <rect x="165" y="25" width="110" height="145" rx="6" fill="#0f172a" stroke="#f97316" strokeWidth="1.5" strokeDasharray="4 3" />
+            <text x="220" y="95" textAnchor="middle" fill="#f97316" fontSize="9" fontWeight="black">👉 ATTACH DANGER TAG</text>
+            <text x="220" y="110" textAnchor="middle" fill="#94a3b8" fontSize="7">Signed OSHA Warning</text>
+          </g>
+        )}
+      </svg>
 
-      {/* Bottom Status Bar */}
-      <rect x="25" y="196" width="270" height="18" rx="4" fill="#0f172a" stroke="#334155" />
-      <text x="160" y="208" textAnchor="middle" fill={locked ? "#22c55e" : "#f59e0b"} fontSize="8" fontWeight="black" fontFamily="monospace">
-        {locked ? "🔒 PERSONAL PADLOCK & DANGER TAG POSITIVELY ATTACHED" : "APPLYING LOCKOUT DEVICE..."}
-      </text>
-    </svg>
+      {/* Interactive Guidance Bar */}
+      <div className="w-full flex items-center justify-between px-3 py-1 bg-slate-950/90 border-t border-slate-800 rounded-b-lg">
+        <span className="text-[10px] text-orange-300 font-mono font-bold flex items-center gap-1">
+          <span>👉</span> {allLocked ? "✓ Personal Lock & Danger Tag Positively Attached!" : "Equip Hasp, snap Master Lock, and attach Danger Tag"}
+        </span>
+        {!allLocked && (
+          <button
+            onClick={handleApplyAll}
+            className="px-2 py-0.5 rounded bg-orange-500 hover:bg-orange-400 text-slate-950 text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer"
+          >
+            Apply All 3
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
 // ============================================================================
-// STEP 5 (Index 4): STORED ENERGY RELEASE (PNEUMATIC PLUME & VFD DC BUS BLEED)
+// STEP 5 (Index 4): INTERACTIVE STORED ENERGY RELEASE
+// User vents pneumatic valve (120->0 PSI) & discharges VFD DC bus (680->0V).
 // ============================================================================
-function Step4StoredEnergyBleedScene({ isCompleted }: { isCompleted: boolean }) {
+function Step4InteractiveStoredEnergy({ onComplete }: { onComplete: () => void }) {
   const [psi, setPsi] = useState(120);
   const [voltsDC, setVoltsDC] = useState(680);
+  const [bleedingAir, setBleedingAir] = useState(false);
+  const [dischargingDC, setDischargingDC] = useState(false);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setPsi(p => Math.max(0, p - 6));
-      setVoltsDC(v => Math.max(0, Math.floor(v * 0.88 - 4)));
-    }, 180);
-    return () => clearInterval(timer);
-  }, []);
+  const startBleedAir = () => {
+    if (bleedingAir || psi === 0) return;
+    setBleedingAir(true);
+    lotoAudio.playAirHiss();
+
+    const t = setInterval(() => {
+      setPsi(p => {
+        if (p <= 5) {
+          clearInterval(t);
+          if (voltsDC === 0) {
+            assessmentAudio.playCorrectChime();
+            onComplete();
+          }
+          return 0;
+        }
+        return p - 10;
+      });
+    }, 120);
+  };
+
+  const startDischargeDC = () => {
+    if (dischargingDC || voltsDC === 0) return;
+    setDischargingDC(true);
+    lotoAudio.playSwitchClack();
+
+    const t = setInterval(() => {
+      setVoltsDC(v => {
+        if (v <= 20) {
+          clearInterval(t);
+          if (psi === 0) {
+            assessmentAudio.playCorrectChime();
+            onComplete();
+          }
+          return 0;
+        }
+        return Math.floor(v * 0.75 - 5);
+      });
+    }, 120);
+  };
+
+  const handleBleedAll = () => {
+    startBleedAir();
+    startDischargeDC();
+  };
 
   const needleAngle = -135 + (psi / 120) * 270;
-  const isBled = psi === 0 && voltsDC === 0;
+  const allBled = psi === 0 && voltsDC === 0;
 
   return (
-    <svg viewBox="0 0 320 220" className="w-full h-full max-h-[260px] object-contain">
-      <defs>
-        <linearGradient id="gaugeFace" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#1e293b" />
-          <stop offset="100%" stopColor="#0f172a" />
-        </linearGradient>
-      </defs>
+    <div className="w-full h-full flex flex-col items-center justify-between">
+      <svg viewBox="0 0 320 205" className="w-full h-full max-h-[240px] object-contain">
+        {/* Left: Pneumatic Accumulator */}
+        <g transform="translate(20, 15)">
+          <rect x="0" y="0" width="130" height="170" rx="8" fill="#1e293b" stroke="#06b6d4" strokeWidth="2" />
+          <text x="65" y="18" textAnchor="middle" fill="#06b6d4" fontSize="8" fontWeight="black" fontFamily="monospace">
+            PRESSURE BLEED
+          </text>
 
-      {/* Left: Pneumatic Accumulator Exhaust & Pressure Gauge */}
-      <g transform="translate(20, 20)">
-        <rect x="0" y="0" width="130" height="170" rx="8" fill="#1e293b" stroke="#06b6d4" strokeWidth="2" />
-        <text x="65" y="18" textAnchor="middle" fill="#06b6d4" fontSize="8" fontWeight="black" fontFamily="monospace">
-          PRESSURE BLEED VALVE
-        </text>
-
-        {/* Circular Glycerine Pressure Gauge */}
-        <circle cx="65" cy="72" r="42" fill="url(#gaugeFace)" stroke="#334155" strokeWidth="3" />
-        {/* Scale Arc */}
-        <path d="M 35 95 A 35 35 0 1 1 95 95" fill="none" stroke="#475569" strokeWidth="4" />
-        {/* Needle */}
-        <g transform={`translate(65, 72) rotate(${needleAngle})`}>
-          <line x1="0" y1="0" x2="0" y2="-32" stroke={psi > 10 ? "#ef4444" : "#22c55e"} strokeWidth="2.5" strokeLinecap="round" />
-          <circle cx="0" cy="0" r="4" fill="#ffffff" />
-        </g>
-        {/* Digital Value */}
-        <text x="65" y="100" textAnchor="middle" fill={psi > 10 ? "#ef4444" : "#22c55e"} fontSize="12" fontWeight="black" fontFamily="monospace">
-          {psi} <tspan fontSize="7">PSI</tspan>
-        </text>
-
-        {/* Venting Valve with Animated Exhaust Plume Particles */}
-        <rect x="45" y="122" width="40" height="18" rx="3" fill="#0f172a" stroke="#06b6d4" />
-        <text x="65" y="134" textAnchor="middle" fill="#06b6d4" fontSize="7" fontWeight="bold">
-          VENT VALVE
-        </text>
-        {psi > 0 && (
-          <g opacity="0.8">
-            <line x1="65" y1="140" x2="65" y2="160" stroke="#06b6d4" strokeWidth="3" strokeDasharray="3 2">
-              <animate attributeName="stroke-dashoffset" from="0" to="10" dur="0.2s" repeatCount="indefinite" />
-            </line>
-            <circle cx="60" cy="155" r="3" fill="#06b6d4" opacity="0.5" />
-            <circle cx="70" cy="150" r="2.5" fill="#06b6d4" opacity="0.6" />
+          <circle cx="65" cy="68" r="38" fill="#0f172a" stroke="#334155" strokeWidth="3" />
+          <path d="M 38 90 A 30 30 0 1 1 92 90" fill="none" stroke="#475569" strokeWidth="4" />
+          <g transform={`translate(65, 68) rotate(${needleAngle})`}>
+            <line x1="0" y1="0" x2="0" y2="-28" stroke={psi > 10 ? "#ef4444" : "#22c55e"} strokeWidth="2.5" strokeLinecap="round" />
+            <circle cx="0" cy="0" r="3.5" fill="#ffffff" />
           </g>
+          <text x="65" y="96" textAnchor="middle" fill={psi > 10 ? "#ef4444" : "#22c55e"} fontSize="12" fontWeight="black" fontFamily="monospace">
+            {psi} PSI
+          </text>
+
+          {/* Interactive Bleed Button */}
+          <g onClick={startBleedAir} className="cursor-pointer group">
+            <rect x="15" y="128" width="100" height="28" rx="4" fill={psi === 0 ? "#064e3b" : "#0f172a"} stroke={psi === 0 ? "#22c55e" : "#06b6d4"} strokeWidth="1.5" />
+            <text x="65" y="145" textAnchor="middle" fill={psi === 0 ? "#a7f3d0" : "#06b6d4"} fontSize="8" fontWeight="black" fontFamily="monospace">
+              {psi === 0 ? "✓ PRESSURE BLED" : bleedingAir ? "VENTING..." : "👉 VENT AIR VALVE"}
+            </text>
+          </g>
+        </g>
+
+        {/* Right: VFD DC Bus Stored Capacitor */}
+        <g transform="translate(170, 15)">
+          <rect x="0" y="0" width="130" height="170" rx="8" fill="#1e293b" stroke="#f59e0b" strokeWidth="2" />
+          <text x="65" y="18" textAnchor="middle" fill="#f59e0b" fontSize="8" fontWeight="black" fontFamily="monospace">
+            VFD DC CAPACITOR
+          </text>
+
+          <rect x="25" y="30" width="35" height="45" rx="5" fill="#0f172a" stroke="#f59e0b" strokeWidth="1.5" />
+          <rect x="70" y="30" width="35" height="45" rx="5" fill="#0f172a" stroke="#f59e0b" strokeWidth="1.5" />
+          <text x="42" y="56" textAnchor="middle" fill="#f59e0b" fontSize="14">⚡</text>
+          <text x="87" y="56" textAnchor="middle" fill="#f59e0b" fontSize="14">⚡</text>
+
+          <rect x="18" y="85" width="94" height="30" rx="4" fill="#090d16" stroke="#475569" />
+          <text x="65" y="100" textAnchor="middle" fill={voltsDC > 15 ? "#ef4444" : "#22c55e"} fontSize="12" fontWeight="black" fontFamily="monospace">
+            {voltsDC} V DC
+          </text>
+          <text x="65" y="111" textAnchor="middle" fill="#94a3b8" fontSize="6.5" fontFamily="monospace">
+            STORED CHARGE
+          </text>
+
+          {/* Interactive Discharge Button */}
+          <g onClick={startDischargeDC} className="cursor-pointer group">
+            <rect x="15" y="128" width="100" height="28" rx="4" fill={voltsDC === 0 ? "#064e3b" : "#0f172a"} stroke={voltsDC === 0 ? "#22c55e" : "#f59e0b"} strokeWidth="1.5" />
+            <text x="65" y="145" textAnchor="middle" fill={voltsDC === 0 ? "#a7f3d0" : "#f59e0b"} fontSize="8" fontWeight="black" fontFamily="monospace">
+              {voltsDC === 0 ? "✓ 0V SAFE GROUND" : dischargingDC ? "DISCHARGING..." : "👉 ENGAGE BLEEDER"}
+            </text>
+          </g>
+        </g>
+      </svg>
+
+      {/* Interactive Guidance Bar */}
+      <div className="w-full flex items-center justify-between px-3 py-1 bg-slate-950/90 border-t border-slate-800 rounded-b-lg">
+        <span className="text-[10px] text-cyan-300 font-mono font-bold flex items-center gap-1">
+          <span>👉</span> {allBled ? "✓ Stored pneumatic & electrical energy safely dissipated!" : "Vent air pressure to 0 PSI and discharge capacitor to 0V"}
+        </span>
+        {!allBled && (
+          <button
+            onClick={handleBleedAll}
+            className="px-2 py-0.5 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer"
+          >
+            Purge Both
+          </button>
         )}
-      </g>
-
-      {/* Right: VFD DC Bus Stored Capacitance Bleed */}
-      <g transform="translate(170, 20)">
-        <rect x="0" y="0" width="130" height="170" rx="8" fill="#1e293b" stroke="#f59e0b" strokeWidth="2" />
-        <text x="65" y="18" textAnchor="middle" fill="#f59e0b" fontSize="8" fontWeight="black" fontFamily="monospace">
-          VFD DC BUS CAPACITOR
-        </text>
-
-        {/* High Voltage Capacitors */}
-        <rect x="25" y="32" width="35" height="50" rx="5" fill="#0f172a" stroke="#f59e0b" strokeWidth="1.5" />
-        <rect x="70" y="32" width="35" height="50" rx="5" fill="#0f172a" stroke="#f59e0b" strokeWidth="1.5" />
-        <text x="42" y="58" textAnchor="middle" fill="#f59e0b" fontSize="14">⚡</text>
-        <text x="87" y="58" textAnchor="middle" fill="#f59e0b" fontSize="14">⚡</text>
-
-        {/* Residual Voltage Display */}
-        <rect x="18" y="92" width="94" height="32" rx="4" fill="#090d16" stroke="#475569" />
-        <text x="65" y="108" textAnchor="middle" fill={voltsDC > 15 ? "#ef4444" : "#22c55e"} fontSize="13" fontWeight="black" fontFamily="monospace">
-          {voltsDC} <tspan fontSize="8">V DC</tspan>
-        </text>
-        <text x="65" y="120" textAnchor="middle" fill="#94a3b8" fontSize="6.5" fontFamily="monospace">
-          STORED CHARGE
-        </text>
-
-        {/* Discharge Resistor & Grounding Clamp */}
-        <rect x="25" y="132" width="80" height="25" rx="4" fill="#0f172a" stroke="#22c55e" strokeWidth="1" />
-        <text x="65" y="145" textAnchor="middle" fill="#22c55e" fontSize="7" fontWeight="bold">
-          BLEEDER RESISTOR
-        </text>
-        <text x="65" y="153" textAnchor="middle" fill="#86efac" fontSize="6" fontFamily="monospace">
-          {voltsDC === 0 ? "✓ 0V SAFE GROUND" : "DISSIPATING..."}
-        </text>
-      </g>
-
-      {/* Status Directive Banner */}
-      <rect x="20" y="196" width="280" height="18" rx="4" fill={isBled ? "#064e3b" : "#450a0a"} stroke={isBled ? "#10b981" : "#ef4444"} strokeWidth="0.8" />
-      <text x="160" y="208" textAnchor="middle" fill={isBled ? "#a7f3d0" : "#fca5a5"} fontSize="7.5" fontWeight="bold" fontFamily="monospace">
-        {isBled ? "✓ ALL STORED MECHANICAL & RESIDUAL ELECTRICAL ENERGY VENTED" : "⚠ PURGING STORED ENERGY (WAIT UNTIL PRESSURE & VOLTAGE = 0)"}
-      </text>
-    </svg>
+      </div>
+    </div>
   );
 }
 
 // ============================================================================
-// STEP 6 (Index 5): ZERO-ENERGY VERIFICATION ("LIVE-DEAD-LIVE" & TRY-STEP)
+// STEP 6 (Index 5): NFPA 70E "LIVE-DEAD-LIVE" THREE-POINT TEST & TRY STEP
+// User probes: 1. Live (230V) -> 2. Dead (0.00V) -> 3. Re-test Live (230V) -> 4. TRY
 // ============================================================================
-function Step5ZeroEnergyVerifyScene({ isCompleted }: { isCompleted: boolean }) {
-  const [reading, setReading] = useState(240);
-  const [tried, setTried] = useState(false);
+function Step5InteractiveZeroVerify({ onComplete }: { onComplete: () => void }) {
+  const [testPhase, setTestPhase] = useState<0 | 1 | 2 | 3 | 4>(0);
+  // 0 = Idle, 1 = Live1 (230V), 2 = Dead (0.00V), 3 = Live2 (230V), 4 = Tried
+  const [voltage, setVoltage] = useState(0);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setReading(v => Math.max(0, v - 15));
-    }, 180);
-    const tryTimer = setTimeout(() => setTried(true), 1200);
-    return () => { clearInterval(timer); clearTimeout(tryTimer); };
-  }, []);
+  const probeLive1 = () => {
+    lotoAudio.playMeterBeep();
+    setVoltage(230.4);
+    setTestPhase(1);
+  };
 
-  const isSafe = reading === 0;
+  const probeDead = () => {
+    lotoAudio.playMeterBeep();
+    setVoltage(0.0);
+    setTestPhase(2);
+  };
+
+  const probeLive2 = () => {
+    lotoAudio.playMeterBeep();
+    setVoltage(230.1);
+    setTestPhase(3);
+  };
+
+  const pressTry = () => {
+    lotoAudio.playSwitchClack();
+    setTestPhase(4);
+    assessmentAudio.playCorrectChime();
+    onComplete();
+  };
 
   return (
-    <svg viewBox="0 0 320 220" className="w-full h-full max-h-[260px] object-contain">
-      <defs>
-        <filter id="greenGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="4" result="blur" />
-          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-        </filter>
-      </defs>
+    <div className="w-full h-full flex flex-col items-center justify-between">
+      <svg viewBox="0 0 320 205" className="w-full h-full max-h-[240px] object-contain">
+        {/* Left: Multimeter */}
+        <g transform="translate(20, 15)">
+          <rect x="0" y="0" width="115" height="155" rx="10" fill="#1e293b" stroke="#eab308" strokeWidth="2.5" />
+          <rect x="10" y="12" width="95" height="52" rx="4" fill="#090d16" stroke="#475569" strokeWidth="1.5" />
+          <text x="57" y="44" textAnchor="middle" fill={testPhase === 2 ? "#22c55e" : testPhase === 0 ? "#475569" : "#ef4444"} fontSize="17" fontWeight="black" fontFamily="monospace">
+            {voltage.toFixed(1)}
+          </text>
+          <text x="57" y="58" textAnchor="middle" fill="#94a3b8" fontSize="8" fontFamily="monospace">
+            {testPhase === 2 ? "VOLTS AC (ZERO ENERGY)" : "VOLTS AC"}
+          </text>
 
-      {/* Green Dielectric Zero-Energy Protective Aura */}
-      {isSafe && (
-        <rect x="15" y="15" width="290" height="175" rx="14" fill="none" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 3" filter="url(#greenGlow)">
-          <animate attributeName="stroke-dashoffset" from="0" to="36" dur="3s" repeatCount="indefinite" />
-        </rect>
-      )}
+          <circle cx="57" cy="92" r="16" fill="#0f172a" stroke="#cbd5e1" strokeWidth="1.5" />
+          <line x1="57" y1="92" x2="57" y2="80" stroke="#eab308" strokeWidth="3" strokeLinecap="round" />
 
-      {/* Left: Calibrated Industrial Digital Multimeter */}
-      <g transform="translate(25, 25)">
-        {/* Multimeter Body (Rugged Yellow/Dark Grey Fluke Style) */}
-        <rect x="0" y="0" width="110" height="155" rx="10" fill="#1e293b" stroke="#eab308" strokeWidth="2.5" />
-        <rect x="10" y="12" width="90" height="52" rx="4" fill="#090d16" stroke="#475569" strokeWidth="1.5" />
-        
-        {/* LCD Display */}
-        <text x="55" y="44" textAnchor="middle" fill={isSafe ? "#22c55e" : "#ef4444"} fontSize="18" fontWeight="black" fontFamily="monospace">
-          {reading.toFixed(1)}
-        </text>
-        <text x="55" y="58" textAnchor="middle" fill="#94a3b8" fontSize="8" fontFamily="monospace">
-          VOLTS AC (L1-L2)
-        </text>
+          <circle cx="40" cy="130" r="5" fill="#ef4444" />
+          <circle cx="74" cy="130" r="5" fill="#0f172a" stroke="#cbd5e1" strokeWidth="1" />
+        </g>
 
-        {/* Rotary Function Dial */}
-        <circle cx="55" cy="92" r="16" fill="#0f172a" stroke="#cbd5e1" strokeWidth="1.5" />
-        <line x1="55" y1="92" x2="55" y2="80" stroke="#eab308" strokeWidth="3" strokeLinecap="round" />
-
-        {/* Jack Terminals */}
-        <circle cx="38" cy="130" r="5" fill="#ef4444" stroke="#fca5a5" strokeWidth="1" />
-        <circle cx="72" cy="130" r="5" fill="#0f172a" stroke="#cbd5e1" strokeWidth="1" />
-      </g>
-
-      {/* Multimeter Probes Touching 3-Phase Terminals */}
-      <g transform="translate(155, 25)">
-        <rect x="0" y="0" width="135" height="95" rx="8" fill="#1e293b" stroke="#334155" strokeWidth="2" />
-        <text x="67" y="18" textAnchor="middle" fill="#94a3b8" fontSize="8" fontWeight="bold" fontFamily="monospace">
-          ISOLATED LOAD BUSBARS
-        </text>
-
-        {/* L1, L2, L3 Copper Lugs */}
-        {[{ name: "L1", x: 25 }, { name: "L2", x: 67 }, { name: "L3", x: 110 }].map((lug, i) => (
-          <g key={i}>
-            <rect x={lug.x - 8} y="28" width="16" height="35" rx="2" fill="#ca8a04" stroke="#fef08a" strokeWidth="1" />
-            <text x={lug.x} y="48" textAnchor="middle" fill="#0f172a" fontSize="8" fontWeight="black">{lug.name}</text>
+        {/* Right: Live-Dead-Live Probing Panel */}
+        <g transform="translate(150, 15)">
+          {/* Phase 1: Known Live Source Socket */}
+          <g onClick={testPhase === 0 ? probeLive1 : undefined} className={testPhase === 0 ? "cursor-pointer" : ""}>
+            <rect x="0" y="0" width="150" height="36" rx="6" fill={testPhase >= 1 ? "#064e3b" : "#1e293b"} stroke={testPhase === 0 ? "#ef4444" : testPhase >= 1 ? "#22c55e" : "#475569"} strokeWidth={testPhase === 0 ? 2 : 1} />
+            <text x="15" y="22" fill={testPhase >= 1 ? "#86efac" : "#ffffff"} fontSize="8" fontWeight="bold">
+              1. KNOWN LIVE SOURCE (230V)
+            </text>
+            <text x="135" y="22" textAnchor="end" fill={testPhase >= 1 ? "#22c55e" : "#ef4444"} fontSize="9" fontWeight="black">
+              {testPhase >= 1 ? "✓ OK" : "TEST"}
+            </text>
           </g>
-        ))}
 
-        {/* Red Probe touching L1 */}
-        <path d="M -15 130 Q -5 90, 25 55" fill="none" stroke="#ef4444" strokeWidth="2.5" />
-        <line x1="25" y1="55" x2="25" y2="40" stroke="#ef4444" strokeWidth="4" strokeLinecap="round" />
-        <circle cx="25" cy="38" r="2.5" fill="#ffffff" />
+          {/* Phase 2: De-Energized Equipment Terminals */}
+          <g onClick={testPhase === 1 ? probeDead : undefined} className={testPhase === 1 ? "cursor-pointer" : ""}>
+            <rect x="0" y="44" width="150" height="36" rx="6" fill={testPhase >= 2 ? "#064e3b" : "#1e293b"} stroke={testPhase === 1 ? "#22c55e" : testPhase >= 2 ? "#22c55e" : "#475569"} strokeWidth={testPhase === 1 ? 2 : 1} />
+            <text x="15" y="66" fill={testPhase >= 2 ? "#86efac" : "#ffffff"} fontSize="8" fontWeight="bold">
+              2. MACHINE TERMINALS (L1-L2)
+            </text>
+            <text x="135" y="66" textAnchor="end" fill={testPhase >= 2 ? "#22c55e" : "#f59e0b"} fontSize="9" fontWeight="black">
+              {testPhase >= 2 ? "✓ 0.0V" : testPhase === 1 ? "TEST" : "LOCK"}
+            </text>
+          </g>
 
-        {/* Black Probe touching L2 */}
-        <path d="M 20 130 Q 35 90, 67 55" fill="none" stroke="#1e293b" strokeWidth="2.5" />
-        <line x1="67" y1="55" x2="67" y2="40" stroke="#475569" strokeWidth="4" strokeLinecap="round" />
-        <circle cx="67" cy="38" r="2.5" fill="#ffffff" />
+          {/* Phase 3: Re-Verify Known Live Source */}
+          <g onClick={testPhase === 2 ? probeLive2 : undefined} className={testPhase === 2 ? "cursor-pointer" : ""}>
+            <rect x="0" y="88" width="150" height="36" rx="6" fill={testPhase >= 3 ? "#064e3b" : "#1e293b"} stroke={testPhase === 2 ? "#ef4444" : testPhase >= 3 ? "#22c55e" : "#475569"} strokeWidth={testPhase === 2 ? 2 : 1} />
+            <text x="15" y="110" fill={testPhase >= 3 ? "#86efac" : "#ffffff"} fontSize="8" fontWeight="bold">
+              3. RE-VERIFY LIVE SOURCE
+            </text>
+            <text x="135" y="110" textAnchor="end" fill={testPhase >= 3 ? "#22c55e" : "#ef4444"} fontSize="9" fontWeight="black">
+              {testPhase >= 3 ? "✓ 230V" : testPhase === 2 ? "TEST" : "LOCK"}
+            </text>
+          </g>
 
-        {/* Safe Verification Badge */}
-        <rect x="15" y="70" width="105" height="18" rx="3" fill="#0f172a" stroke={isSafe ? "#22c55e" : "#ef4444"} strokeWidth="1" />
-        <text x="67" y="82" textAnchor="middle" fill={isSafe ? "#22c55e" : "#ef4444"} fontSize="7" fontWeight="black" fontFamily="monospace">
-          {isSafe ? "✓ 0.00V TEST-BEFORE-TOUCH" : "TESTING VOLTAGE..."}
-        </text>
-      </g>
+          {/* Phase 4: Physical TRY Bump Test */}
+          <g onClick={testPhase === 3 ? pressTry : undefined} className={testPhase === 3 ? "cursor-pointer" : ""}>
+            <rect x="0" y="132" width="150" height="36" rx="6" fill={testPhase === 4 ? "#064e3b" : "#1e293b"} stroke={testPhase === 3 ? "#22c55e" : testPhase === 4 ? "#22c55e" : "#475569"} strokeWidth={testPhase === 3 ? 2 : 1} />
+            <circle cx="20" cy="150" r="10" fill="#15803d" />
+            <text x="20" y="153" textAnchor="middle" fill="#ffffff" fontSize="7" fontWeight="black">TRY</text>
+            <text x="40" y="153" fill={testPhase === 4 ? "#86efac" : "#ffffff"} fontSize="8" fontWeight="bold">
+              4. PRESS TRY (0 RPM)
+            </text>
+            <text x="135" y="153" textAnchor="end" fill={testPhase === 4 ? "#22c55e" : "#22c55e"} fontSize="9" fontWeight="black">
+              {testPhase === 4 ? "✓ 0A" : testPhase === 3 ? "TRY" : "LOCK"}
+            </text>
+          </g>
+        </g>
+      </svg>
 
-      {/* "TRY" Bump Test Button (Attempt to Restart) */}
-      <g transform="translate(155, 130)">
-        <rect x="0" y="0" width="135" height="50" rx="6" fill="#1e293b" stroke="#22c55e" strokeWidth="1.5" />
-        <circle cx="30" cy="25" r="14" fill="#0f172a" stroke="#22c55e" strokeWidth="2" />
-        <circle cx="30" cy="25" r="10" fill="#15803d" />
-        <text x="30" y="28" textAnchor="middle" fill="#ffffff" fontSize="7" fontWeight="bold">TRY</text>
-
-        <text x="82" y="20" textAnchor="middle" fill="#ffffff" fontSize="7.5" fontWeight="bold" fontFamily="monospace">
-          START ATTEMPT
-        </text>
-        <text x="82" y="34" textAnchor="middle" fill="#22c55e" fontSize="7" fontWeight="black" fontFamily="monospace">
-          {tried ? "● ZERO PICKUP (0A)" : "DEPRESSING..."}
-        </text>
-      </g>
-
-      {/* Bottom Summary Bar */}
-      <rect x="20" y="196" width="280" height="18" rx="4" fill={isSafe ? "#064e3b" : "#450a0a"} stroke={isSafe ? "#10b981" : "#ef4444"} strokeWidth="0.8" />
-      <text x="160" y="208" textAnchor="middle" fill={isSafe ? "#a7f3d0" : "#fca5a5"} fontSize="7.5" fontWeight="bold" fontFamily="monospace">
-        {isSafe ? "✓ ZERO ENERGY CONDITION VERIFIED · SAFE FOR SERVICING" : "⚠ NEVER TOUCH EQUIPMENT BEFORE PROVING ZERO VOLTAGE"}
-      </text>
-    </svg>
+      {/* Interactive Guidance Bar */}
+      <div className="w-full flex items-center justify-between px-3 py-1 bg-slate-950/90 border-t border-slate-800 rounded-b-lg">
+        <span className="text-[10px] text-emerald-300 font-mono font-bold flex items-center gap-1">
+          <span>👉</span>
+          {testPhase === 0 && "Step 1: Probe Known Live Source (Confirm meter is working)"}
+          {testPhase === 1 && "Step 2: Probe Locked-Out Load Terminals (Verify 0.00V)"}
+          {testPhase === 2 && "Step 3: Re-probe Live Source (Prove meter did not fail in dead test)"}
+          {testPhase === 3 && "Step 4: Press green TRY push-button (Prove machine cannot restart)"}
+          {testPhase === 4 && "✓ Zero energy verified & try test passed! Equipment 100% safe."}
+        </span>
+        {testPhase < 4 && (
+          <button
+            onClick={() => {
+              if (testPhase === 0) probeLive1();
+              else if (testPhase === 1) probeDead();
+              else if (testPhase === 2) probeLive2();
+              else if (testPhase === 3) pressTry();
+            }}
+            className="px-2 py-0.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer"
+          >
+            Execute Next Test
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
