@@ -24,14 +24,14 @@ import { SimulationType, UserConfig } from './types';
 import { applyRouteSEO, resolveModuleFromPath, SEO_ROUTES } from './utils/seoData';
 import { parseSimulationUrlParams } from './utils/shareableState';
 
-class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: any, errorInfo: any) {
@@ -41,11 +41,17 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-900 rounded-2xl border border-red-500/40">
+        <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-900 rounded-2xl border border-red-500/40 overflow-auto">
           <h2 className="text-lg font-black text-red-400 uppercase tracking-widest mb-2">SIMULATOR MODULE RECOVERY</h2>
-          <p className="text-xs text-slate-300 mb-4">A temporary rendering issue occurred. Click below to reload simulator state.</p>
+          <p className="text-xs text-slate-300 mb-2">A temporary rendering issue occurred. Click below to reload simulator state.</p>
+          {this.state.error && (
+            <pre className="p-3 my-2 text-[11px] font-mono text-red-300 bg-black/60 rounded border border-red-500/30 max-w-2xl text-left whitespace-pre-wrap overflow-auto max-h-48">
+              {this.state.error?.toString() || 'Unknown error'}
+              {this.state.error?.stack ? `\n\n${this.state.error.stack}` : ''}
+            </pre>
+          )}
           <button 
-            onClick={() => this.setState({ hasError: false })}
+            onClick={() => this.setState({ hasError: false, error: null })}
             className="px-6 py-2.5 bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs uppercase tracking-widest rounded-xl shadow-lg transition-all focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:outline-none min-h-[44px]"
           >
             Reload Module

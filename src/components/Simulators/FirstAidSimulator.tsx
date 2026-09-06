@@ -4,7 +4,7 @@ import {
   ChevronLeft, RotateCcw, Shield, Activity, Brain, Thermometer,
   PhoneCall, Eye, Wind, Hand, Radio, BookOpen, Target,
   Volume2, VolumeX, Sparkles, Flame, Gauge, Layers, Droplets,
-  Keyboard
+  Keyboard, Award, ShieldCheck
 } from 'lucide-react';
 import { UserConfig } from '@/src/types';
 import { cn } from '@/src/lib/utils';
