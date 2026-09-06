@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { HelpCircle, Award, CheckCircle2, AlertTriangle, RotateCcw, BookOpen, ShieldCheck, Zap, ArrowRight } from 'lucide-react';
+import { HelpCircle, Award, CheckCircle2, AlertTriangle, RotateCcw, BookOpen, ShieldCheck, Zap, ArrowRight, Printer } from 'lucide-react';
 import { UserConfig } from '../types';
 import { cn } from '@/src/lib/utils';
+import { SafetyCertificateModal } from './SafetyCertificateModal';
 
 interface SafetyQuizPageProps {
   config?: UserConfig;
@@ -68,6 +69,7 @@ export const SafetyQuizPage: React.FC<SafetyQuizPageProps> = ({ config, onBackTo
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: number }>({});
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [finalScore, setFinalScore] = useState<number>(0);
+  const [showCertModal, setShowCertModal] = useState<boolean>(false);
 
   const currentQ = QUIZ_QUESTIONS[currentQuestionIndex];
 
@@ -250,7 +252,7 @@ export const SafetyQuizPage: React.FC<SafetyQuizPageProps> = ({ config, onBackTo
               })}
             </div>
 
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
               <button
                 type="button"
                 onClick={handleRestartQuiz}
@@ -260,11 +262,20 @@ export const SafetyQuizPage: React.FC<SafetyQuizPageProps> = ({ config, onBackTo
                 <span>RETRY QUIZ</span>
               </button>
 
+              <button
+                type="button"
+                onClick={() => setShowCertModal(true)}
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-amber-500/20 cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                <Award className="w-4 h-4" />
+                <span>CLAIM CERTIFICATE</span>
+              </button>
+
               {onBackToSimulator && (
                 <button
                   type="button"
                   onClick={onBackToSimulator}
-                  className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 font-black text-xs uppercase tracking-widest rounded-xl shadow-lg cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+                  className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 font-black text-xs uppercase tracking-widest rounded-xl shadow-lg cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
                 >
                   <span>RETURN TO SIMULATOR</span>
                   <Zap className="w-4 h-4" />
@@ -273,6 +284,15 @@ export const SafetyQuizPage: React.FC<SafetyQuizPageProps> = ({ config, onBackTo
             </div>
           </div>
         )}
+
+        {/* Verifiable Certificate Modal */}
+        <SafetyCertificateModal
+          isOpen={showCertModal}
+          onClose={() => setShowCertModal(false)}
+          defaultStudentName={config?.profile ? `${config.profile.toUpperCase()} SPECIALIST` : "Safety Practitioner"}
+          defaultScore={Math.round((finalScore / QUIZ_QUESTIONS.length) * 100)}
+          completedModulesCount={QUIZ_QUESTIONS.length}
+        />
       </div>
     </div>
   );

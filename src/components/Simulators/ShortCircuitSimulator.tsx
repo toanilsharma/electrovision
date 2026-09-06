@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Zap, AlertTriangle, Clock, TrendingUp, Cpu, Sliders, Settings, 
   Play, RotateCcw, Flame, ShieldAlert, Activity, BookOpen, ShieldCheck, Square, Info,
-  ChevronDown, ChevronUp, Layers, HelpCircle, CheckCircle2, XCircle, Gauge
+  ChevronDown, ChevronUp, Layers, HelpCircle, CheckCircle2, XCircle, Gauge, Camera
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -19,6 +19,7 @@ import {
 import { IndustrialGridDiagram } from './IndustrialGridDiagram';
 import { EventTimelineScrubber } from './EventTimelineScrubber';
 import { CoordinationChartCard } from './CoordinationChartCard';
+import { DisasterReplayModal } from '../DisasterReplayModal';
 
 export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
   // Primary UI Controls (Default 3 Relay Modes & 2 Fault Types)
@@ -45,6 +46,7 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
   const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(false);
   const [hasSimulated, setHasSimulated] = useState<boolean>(false);
   const [isPPESafe, setIsPPESafe] = useState<boolean>(false);
+  const [isDisasterReplayOpen, setIsDisasterReplayOpen] = useState<boolean>(false);
 
   const { playArcBlast } = useAudioHaptics();
   const lastTimeRef = useRef(0);
@@ -336,6 +338,14 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
               className="px-4 py-3 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm focus-visible:ring-2 focus-visible:ring-cyan-400 min-h-[44px]"
             >
               <RotateCcw className="w-4 h-4 text-cyan-400" /> RESET SCENARIO
+            </button>
+
+            <button
+              onClick={() => setIsDisasterReplayOpen(true)}
+              className="px-4 py-3 bg-red-950/80 border border-red-500/70 hover:bg-red-900 text-red-200 font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-[0_0_12px_rgba(239,68,68,0.4)] transition-all focus-visible:ring-2 focus-visible:ring-red-400 min-h-[44px] active:scale-95"
+              title="Super-Slow-Motion 1,000 FPS Disaster Replay (Phantom Camera View)"
+            >
+              <Camera className="w-4 h-4 text-red-400 animate-pulse" /> 1000 FPS REPLAY
             </button>
           </div>
         </div>
@@ -793,6 +803,15 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
         hazardType="short_circuit"
         dangerLevel={letThroughEnergy > (iecResults.withstandEnergy_kA2s || 3.4) ? "critical" : "warning"}
         magnitude={`${(faultCurrent/1000).toFixed(1)} kA TRANSIENT FAULT (${faultType === 'three_phase' ? '3-Phase' : 'Line-Ground'})`}
+      />
+
+      {/* 1,000 FPS Disaster Replay Modal */}
+      <DisasterReplayModal
+        isOpen={isDisasterReplayOpen}
+        onClose={() => setIsDisasterReplayOpen(false)}
+        initialVoltage={systemVoltage}
+        initialCurrentKA={Number((prospectiveFaultCurrent / 1000).toFixed(1))}
+        faultType="mcb_short_circuit"
       />
 
     </div>

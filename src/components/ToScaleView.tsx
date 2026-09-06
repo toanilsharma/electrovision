@@ -2,8 +2,9 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { ElectrodeConfig, calculateIEEE1584_2018 } from '../utils/ieee1584-2018';
-import { ShieldAlert, Zap, Radio, CheckCircle, Flame, Volume2, VolumeX, Maximize2, Layers, Footprints, AlertTriangle, Eye, FlameKindling, Thermometer, Shield } from 'lucide-react';
+import { ShieldAlert, Zap, Radio, CheckCircle, Flame, Volume2, VolumeX, Maximize2, Layers, Footprints, AlertTriangle, Eye, FlameKindling, Thermometer, Shield, Camera } from 'lucide-react';
 import { useAudioHaptics } from './useAudioHaptics';
+import { DisasterReplayModal } from './DisasterReplayModal';
 
 export type ScaleMode = 'auto' | '10m' | '60m';
 export type ViewMode = 'normal' | 'thermal';
@@ -38,6 +39,7 @@ export function ToScaleView({
   const [scaleMode, setScaleMode] = useState<ScaleMode>('auto');
   const [viewMode, setViewMode] = useState<ViewMode>('normal');
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isDisasterReplayOpen, setIsDisasterReplayOpen] = useState<boolean>(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(false);
   const [pressureWaveDistM, setPressureWaveDistM] = useState<number>(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -293,6 +295,15 @@ export function ToScaleView({
               </button>
             ))}
           </div>
+
+          <button
+            onClick={() => setIsDisasterReplayOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/70 text-red-300 font-bold text-[10px] uppercase transition-all cursor-pointer min-h-[32px] shadow-sm hover:shadow-[0_0_10px_rgba(239,68,68,0.3)] active:scale-95"
+            title="Open 1,000 FPS Super-Slow-Motion Disaster Replay (Phantom Camera View)"
+          >
+            <Camera className="w-3.5 h-3.5 text-red-400 animate-pulse" />
+            <span className="hidden sm:inline">1000 FPS</span>
+          </button>
 
           <button
             onClick={() => setIsMuted(m => !m)}
@@ -696,6 +707,14 @@ export function ToScaleView({
         </div>
       </div>
 
+      {/* Disaster Replay 1000 FPS Modal */}
+      <DisasterReplayModal
+        isOpen={isDisasterReplayOpen}
+        onClose={() => setIsDisasterReplayOpen(false)}
+        initialVoltage={480}
+        initialCurrentKA={30}
+        faultType="arc_flash"
+      />
     </div>
   );
 }

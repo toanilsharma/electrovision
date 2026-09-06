@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ShieldAlert, Zap, ShieldCheck, Battery, Activity, Shield, ActivitySquare, ChevronDown, LayoutGrid, X, Check, Home, Factory, RotateCcw, HelpCircle } from 'lucide-react';
+import { ShieldAlert, Zap, ShieldCheck, Battery, Activity, Shield, ActivitySquare, ChevronDown, LayoutGrid, X, Check, Home, Factory, RotateCcw, HelpCircle, Camera, Share2, Award } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { SimulationType, UserConfig } from '@/src/types';
 import { TrainerToolbar } from './TrainerToolbar';
@@ -11,6 +11,10 @@ interface TopNavProps {
   userConfig?: UserConfig;
   onReconfigure?: () => void;
   onResetSimulator?: () => void;
+  onOpenDisasterReplay?: () => void;
+  onOpenRescueScenarios?: () => void;
+  onOpenShareEmbed?: () => void;
+  onOpenCertificate?: () => void;
 }
 
 const modules: { id: SimulationType; label: string; icon: React.ElementType; tag?: string }[] = [
@@ -29,7 +33,17 @@ const modules: { id: SimulationType; label: string; icon: React.ElementType; tag
 
 const RESIDENTIAL_MODULE_IDS: SimulationType[] = ['ac_shock', 'earth_fault', 'short_circuit', 'first_aid', 'mcb_simulator', 'assessment', 'safety_quiz'];
 
-export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigure, onResetSimulator }: TopNavProps) {
+export function TopNavigation({ 
+  activeModule, 
+  onSelect, 
+  userConfig, 
+  onReconfigure, 
+  onResetSimulator,
+  onOpenDisasterReplay,
+  onOpenRescueScenarios,
+  onOpenShareEmbed,
+  onOpenCertificate
+}: TopNavProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const visibleModules = useMemo(() => {
@@ -65,7 +79,59 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
           </div>
         </div>
         
-        <div className="flex items-center gap-2 md:gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* 1000 FPS Disaster Replay Trigger */}
+          {onOpenDisasterReplay && (
+            <button
+              type="button"
+              onClick={onOpenDisasterReplay}
+              className="flex items-center gap-1 px-2 py-0.5 bg-red-950/80 hover:bg-red-900 border border-red-500/70 rounded-full text-[9px] font-mono font-black text-red-200 uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-sm"
+              title="1,000 FPS Super-Slow-Motion Phantom Camera Replay"
+            >
+              <Camera className="w-2.5 h-2.5 text-red-400 animate-pulse" />
+              <span className="hidden xs:inline">1000 FPS</span>
+            </button>
+          )}
+
+          {/* Hazard Rescue Scenarios */}
+          {onOpenRescueScenarios && (
+            <button
+              type="button"
+              onClick={onOpenRescueScenarios}
+              className="flex items-center gap-1 px-2 py-0.5 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/70 rounded-full text-[9px] font-mono font-black text-cyan-200 uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-sm"
+              title="Interactive High-Voltage Hazard Spotter & Rescue Mini-Scenarios"
+            >
+              <ShieldAlert className="w-2.5 h-2.5 text-cyan-400" />
+              <span className="hidden sm:inline">Scenarios</span>
+            </button>
+          )}
+
+          {/* Share & Embed */}
+          {onOpenShareEmbed && (
+            <button
+              type="button"
+              onClick={onOpenShareEmbed}
+              className="hidden sm:flex items-center gap-1 px-2 py-0.5 bg-sky-950/80 hover:bg-sky-900 border border-sky-500/70 rounded-full text-[9px] font-mono font-black text-sky-200 uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-sm"
+              title="Deep-link share, Mobile QR, or LMS embed code"
+            >
+              <Share2 className="w-2.5 h-2.5 text-sky-400" />
+              <span>Share</span>
+            </button>
+          )}
+
+          {/* Certificate */}
+          {onOpenCertificate && (
+            <button
+              type="button"
+              onClick={onOpenCertificate}
+              className="flex items-center gap-1 px-2 py-0.5 bg-amber-950/80 hover:bg-amber-900 border border-amber-500/70 rounded-full text-[9px] font-mono font-black text-amber-200 uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-sm"
+              title="Official Verifiable Safety Competency Certificate"
+            >
+              <Award className="w-2.5 h-2.5 text-amber-400" />
+              <span className="hidden xs:inline">Certificate</span>
+            </button>
+          )}
+
           {/* Global Reset Simulator Button */}
           <button
             type="button"
@@ -74,7 +140,7 @@ export function TopNavigation({ activeModule, onSelect, userConfig, onReconfigur
             title="Reset active simulator parameters & state back to defaults"
           >
             <RotateCcw className="w-2.5 h-2.5 text-rose-400 stroke-[3]" />
-            <span>Reset</span>
+            <span className="hidden xs:inline">Reset</span>
           </button>
 
           {/* Domain Filter Indicator Badge */}

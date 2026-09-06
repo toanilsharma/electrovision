@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Zap } from 'lucide-react';
 import { DisclaimerModal } from './components/DisclaimerModal';
 import { GameOnboarding } from './components/GameOnboarding';
 import { TopNavigation } from './components/TopNavigation';
@@ -15,8 +16,13 @@ import { FirstAidSimulator } from './components/Simulators/FirstAidSimulator';
 import { AssessmentModule } from './components/AssessmentModule';
 import { MCBLayoutShell } from './components/mcb/MCBLayoutShell';
 import { SafetyQuizPage } from './components/SafetyQuizPage';
+import { DisasterReplayModal } from './components/DisasterReplayModal';
+import { HazardRescueScenarios } from './components/HazardRescueScenarios';
+import { ShareEmbedModal } from './components/ShareEmbedModal';
+import { SafetyCertificateModal } from './components/SafetyCertificateModal';
 import { SimulationType, UserConfig } from './types';
 import { applyRouteSEO, resolveModuleFromPath, SEO_ROUTES } from './utils/seoData';
+import { parseSimulationUrlParams } from './utils/shareableState';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {
@@ -52,13 +58,38 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 }
 
 export default function App() {
-  const [showDisclaimer, setShowDisclaimer] = useState(true);
-  const [userConfig, setUserConfig] = useState<UserConfig | null>(null);
+  const initialUrlParams = useMemo(() => parseSimulationUrlParams(), []);
+  const isEmbedMode = Boolean(initialUrlParams.embed);
+
+  const [showDisclaimer, setShowDisclaimer] = useState(() => !isEmbedMode);
+  const [userConfig, setUserConfig] = useState<UserConfig | null>(() => {
+    if (isEmbedMode) {
+      return {
+        environment: 'industrial',
+        profile: 'engineer',
+        name: 'Student Trainee'
+      };
+    }
+    return null;
+  });
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [activeModule, setActiveModule] = useState<SimulationType>(() => {
+    if (initialUrlParams.sim) {
+      return initialUrlParams.sim as SimulationType;
+    }
     return typeof window !== 'undefined' ? resolveModuleFromPath(window.location.pathname) : 'ac_shock';
   });
   const [resetKey, setResetKey] = useState<number>(0);
+
+  // Modal states for Recommendations 18, 19, 20
+  const [showDisasterReplay, setShowDisasterReplay] = useState(false);
+  const [showRescueScenarios, setShowRescueScenarios] = useState(false);
+  const [showShareEmbed, setShowShareEmbed] = useState(false);
+  const [showCertificate, setShowCertificate] = useState(false);
+  const [certData, setCertData] = useState<{ name: string; score: number }>({
+    name: 'Safety Practitioner',
+    score: 95
+  });
 
   // Sync Dynamic SEO Metadata, OpenGraph & JSON-LD when activeModule changes
   useEffect(() => {
@@ -131,6 +162,39 @@ export default function App() {
     }
   };
 
+  if (isEmbedMode) {
+    return (
+      <div className="flex flex-col h-[100dvh] overflow-hidden bg-[#0f172a] text-slate-100 font-mono">
+        <main className="flex-1 overflow-y-auto lg:overflow-hidden bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_#0f172a_100%)] relative flex flex-col p-1.5 sm:p-2">
+          <ErrorBoundary>
+            {renderModule()}
+          </ErrorBoundary>
+        </main>
+        
+        {/* Sleek Embedded LMS Footer Bar */}
+        <div className="bg-slate-950/95 border-t border-slate-800 px-3 py-1.5 flex items-center justify-between text-[11px] shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-orange-500 flex items-center justify-center transform rotate-45 shrink-0">
+              <Zap className="w-2.5 h-2.5 text-slate-950 -rotate-45" />
+            </div>
+            <span className="font-black text-white uppercase tracking-wider text-[10px] sm:text-xs">
+              ELECTROLIVE™ INTERACTIVE SIMULATOR WIDGET
+            </span>
+          </div>
+
+          <a
+            href={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?sim=${activeModule}` : '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] sm:text-xs font-bold text-amber-400 hover:text-amber-300 underline flex items-center gap-1"
+          >
+            Open Full Experience ↗
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-[100dvh] overflow-hidden bg-[#0f172a] text-slate-100">
       <MobileSectionNav />
@@ -140,6 +204,10 @@ export default function App() {
         userConfig={userConfig}
         onReconfigure={() => setShowConfigModal(true)}
         onResetSimulator={handleResetSimulator}
+        onOpenDisasterReplay={() => setShowDisasterReplay(true)}
+        onOpenRescueScenarios={() => setShowRescueScenarios(true)}
+        onOpenShareEmbed={() => setShowShareEmbed(true)}
+        onOpenCertificate={() => setShowCertificate(true)}
       />
       
       {showConfigModal && userConfig && (
@@ -184,6 +252,46 @@ export default function App() {
           </a>
         </div>
       </footer>
+
+      {/* Rec 18: 1000 FPS Camera Disaster Replay Modal */}
+      <DisasterReplayModal 
+        isOpen={showDisasterReplay}
+        onClose={() => setShowDisasterReplay(false)}
+      />
+
+      {/* Rec 19: Gamified Hazard Spotter & Rescue Incident Scenarios */}
+      <HazardRescueScenarios
+        isOpen={showRescueScenarios}
+        onClose={() => setShowRescueScenarios(false)}
+        onOpenCertificate={(name, score) => {
+          setCertData({ name, score });
+          setShowCertificate(true);
+        }}
+      />
+
+      {/* Rec 20: Institutional Sharing, Classroom QR & Embed Modal */}
+      <ShareEmbedModal
+        isOpen={showShareEmbed}
+        onClose={() => setShowShareEmbed(false)}
+        currentParams={{
+          sim: activeModule,
+          v: initialUrlParams.v,
+          skin: initialUrlParams.skin,
+          ppe: initialUrlParams.ppe,
+          rcd: initialUrlParams.rcd,
+          cur: initialUrlParams.cur,
+          time: initialUrlParams.time,
+          dist: initialUrlParams.dist
+        }}
+      />
+
+      {/* Rec 20: Verifiable Certificate of Safety Competency */}
+      <SafetyCertificateModal
+        isOpen={showCertificate}
+        onClose={() => setShowCertificate(false)}
+        defaultStudentName={certData.name}
+        defaultScore={certData.score}
+      />
     </div>
   );
 }
