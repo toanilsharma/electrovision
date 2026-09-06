@@ -35,6 +35,7 @@ import { ResuscitationExamModal } from './ResuscitationExamModal';
 import { HazardRescueScenarios } from '../HazardRescueScenarios';
 import { SafetyCertificateModal } from '../SafetyCertificateModal';
 import { ExamScorecard } from '@/src/utils/cprExamTelemetry';
+import { ProtocolVisualEngine } from './ProtocolVisualEngine';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TabId = 'protocol' | 'cpr' | 'exam' | 'scenarios' | 'triage' | 'quiz';
@@ -416,136 +417,6 @@ const QUIZ_SCENARIOS = [
   },
 ];
 
-// ─── Utility: Protocol Scene SVG ─────────────────────────────────────────────
-function SceneSVG({ scene, pulse }: { scene: string; pulse: boolean }) {
-  if (scene === 'danger') return (
-    <svg viewBox="0 0 200 200" className="max-w-full max-h-full aspect-square">
-      <rect x="0" y="180" width="200" height="20" fill="#0f172a" />
-      <ellipse cx="100" cy="130" rx="60" ry="18" fill="#1e3a6e" stroke="#3b82f6" strokeWidth="1.5" opacity="0.9" />
-      <circle cx="155" cy="118" r="16" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
-      <polygon points="95,15 105,15 100,35 112,35 88,65 96,40 82,40" fill="#ef4444" opacity="0.9" />
-      {pulse && <>
-        <circle cx="120" cy="130" r="3" fill="#fbbf24" opacity="0.9"><animate attributeName="opacity" values="0;1;0" dur="0.4s" repeatCount="indefinite" /></circle>
-        <circle cx="128" cy="122" r="2" fill="#ef4444" opacity="0.8"><animate attributeName="opacity" values="0;1;0" dur="0.3s" repeatCount="indefinite" /></circle>
-      </>}
-      <text x="100" y="192" textAnchor="middle" fill="#ef4444" fontSize="9" fontWeight="bold" fontFamily="monospace">DO NOT TOUCH — ISOLATE FIRST</text>
-    </svg>
-  );
-
-  if (scene === 'isolate') return (
-    <svg viewBox="0 0 200 200" className="max-w-full max-h-full aspect-square">
-      <rect x="0" y="180" width="200" height="20" fill="#0f172a" />
-      <rect x="10" y="30" width="40" height="70" rx="4" fill="#1e293b" stroke="#f97316" strokeWidth="2" />
-      <rect x="22" y="60" width="16" height="28" rx="3" fill="#22c55e" stroke="#86efac" strokeWidth="1" />
-      <text x="30" y="78" textAnchor="middle" fill="white" fontSize="8" fontFamily="monospace">OFF</text>
-      <circle cx="80" cy="60" r="14" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
-      <rect x="66" y="74" width="28" height="40" rx="6" fill="#1e40af" stroke="#3b82f6" strokeWidth="1.5" />
-      <line x1="66" y1="88" x2="38" y2="75" stroke="#1e40af" strokeWidth="10" strokeLinecap="round" />
-      {pulse && <circle cx="30" cy="74" r="8" fill="none" stroke="#22c55e" strokeWidth="2"><animate attributeName="r" values="8;14;8" dur="1s" repeatCount="indefinite" /><animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite" /></circle>}
-      <text x="100" y="192" textAnchor="middle" fill="#22c55e" fontSize="8" fontFamily="monospace">POWER ISOLATED SAFELY</text>
-    </svg>
-  );
-
-  if (scene === 'call') return (
-    <svg viewBox="0 0 200 200" className="max-w-full max-h-full aspect-square">
-      <rect x="0" y="180" width="200" height="20" fill="#0f172a" />
-      <rect x="82" y="20" width="36" height="60" rx="6" fill="#1e293b" stroke="#facc15" strokeWidth="2" />
-      <circle cx="100" cy="72" r="4" fill="#facc15" opacity="0.8" />
-      <text x="100" y="52" textAnchor="middle" fill="#facc15" fontSize="18">📞</text>
-      {pulse && <>
-        <path d="M 122 35 Q 135 50 122 65" fill="none" stroke="#facc15" strokeWidth="2"><animate attributeName="opacity" values="0.9;0;0.9" dur="1.2s" repeatCount="indefinite" /></path>
-        <path d="M 130 26 Q 150 50 130 74" fill="none" stroke="#facc15" strokeWidth="2"><animate attributeName="opacity" values="0.7;0;0.7" dur="1.2s" begin="0.3s" repeatCount="indefinite" /></path>
-      </>}
-      <circle cx="70" cy="130" r="15" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
-      <rect x="56" y="145" width="28" height="30" rx="6" fill="#1e40af" stroke="#3b82f6" strokeWidth="1.5" />
-      <text x="100" y="192" textAnchor="middle" fill="#facc15" fontSize="8" fontFamily="monospace">CALL EMERGENCY SERVICES NOW</text>
-    </svg>
-  );
-
-  if (scene === 'airway') return (
-    <svg viewBox="0 0 200 200" className="max-w-full max-h-full aspect-square">
-      <rect x="0" y="180" width="200" height="20" fill="#0f172a" />
-      <ellipse cx="100" cy="130" rx="60" ry="20" fill="#1e40af" stroke="#3b82f6" strokeWidth="1.5" opacity="0.9" />
-      <circle cx="160" cy="118" r="16" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
-      <path d="M 158 118 Q 166 118 170 124" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" />
-      {pulse && <>
-        <line x1="172" y1="113" x2="188" y2="106" stroke="#7dd3fc" strokeWidth="2"><animate attributeName="opacity" values="0;1;0" dur="1.5s" repeatCount="indefinite" /></line>
-        <line x1="175" y1="120" x2="192" y2="118" stroke="#7dd3fc" strokeWidth="2"><animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="0.4s" repeatCount="indefinite" /></line>
-      </>}
-      <text x="100" y="192" textAnchor="middle" fill="#7dd3fc" fontSize="8" fontFamily="monospace">HEAD-TILT CHIN-LIFT — MAX 10s</text>
-    </svg>
-  );
-
-  if (scene === 'cpr') return (
-    <svg viewBox="0 0 200 200" className="max-w-full max-h-full aspect-square">
-      <rect x="0" y="180" width="200" height="20" fill="#0f172a" />
-      <ellipse cx="110" cy="120" rx="55" ry="18" fill="#1e3a6e" stroke="#3b82f6" strokeWidth="1.5" opacity="0.9" />
-      <circle cx="162" cy="108" r="15" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
-      <circle cx="55" cy="88" r="14" fill="#f97316" stroke="#fb923c" strokeWidth="1.5" />
-      <rect x="45" y="102" width="20" height="25" rx="4" fill="#f97316" />
-      <line x1="60" y1="114" x2="108" y2={pulse ? '117' : '120'} stroke="#f97316" strokeWidth="10" strokeLinecap="round" />
-      {pulse && <ellipse cx="108" cy="120" rx="20" ry="6" fill="none" stroke="#ef4444" strokeWidth="1.5"><animate attributeName="rx" values="20;36;20" dur="0.5s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.8;0;0.8" dur="0.5s" repeatCount="indefinite" /></ellipse>}
-      <text x="30" y="170" fill="#ef4444" fontSize="22">♥</text>
-      <text x="100" y="192" textAnchor="middle" fill="#ef4444" fontSize="8" fontFamily="monospace">30 COMPRESSIONS : 2 BREATHS</text>
-    </svg>
-  );
-
-  if (scene === 'aed') return (
-    <svg viewBox="0 0 200 200" className="max-w-full max-h-full aspect-square">
-      <rect x="0" y="180" width="200" height="20" fill="#0f172a" />
-      <rect x="10" y="30" width="55" height="70" rx="6" fill="#1e293b" stroke="#22c55e" strokeWidth="2" />
-      <text x="37" y="55" textAnchor="middle" fill="#22c55e" fontSize="11" fontWeight="bold" fontFamily="monospace">AED</text>
-      <rect x="18" y="60" width="38" height="16" rx="3" fill="#22c55e" opacity="0.8" />
-      <text x="37" y="72" textAnchor="middle" fill="#0f172a" fontSize="8" fontWeight="bold" fontFamily="monospace">SHOCK</text>
-      <line x1="65" y1="55" x2="112" y2="92" stroke="#22c55e" strokeWidth="1.5" strokeDasharray="4,2" />
-      <line x1="65" y1="75" x2="112" y2="130" stroke="#22c55e" strokeWidth="1.5" strokeDasharray="4,2" />
-      <rect x="102" y="82" width="22" height="18" rx="3" fill="#22c55e" opacity="0.8" />
-      <rect x="102" y="122" width="22" height="18" rx="3" fill="#22c55e" opacity="0.8" />
-      <ellipse cx="132" cy="120" rx="45" ry="16" fill="#1e3a6e" stroke="#3b82f6" strokeWidth="1.5" opacity="0.9" />
-      {pulse && <polygon points="120,100 128,100 123,113 132,113 115,135 122,116 112,116" fill="#facc15" opacity="0.9"><animate attributeName="opacity" values="0.9;0;0.9" dur="0.6s" repeatCount="indefinite" /></polygon>}
-      <text x="100" y="192" textAnchor="middle" fill="#22c55e" fontSize="8" fontFamily="monospace">STAND CLEAR — ANALYSING</text>
-    </svg>
-  );
-
-  if (scene === 'recovery') return (
-    <svg viewBox="0 0 200 200" className="max-w-full max-h-full aspect-square">
-      <rect x="0" y="180" width="200" height="20" fill="#0f172a" />
-      <ellipse cx="100" cy="135" rx="55" ry="15" fill="#1e40af" stroke="#3b82f6" strokeWidth="1.5" opacity="0.9" />
-      <circle cx="155" cy="122" r="15" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
-      <circle cx="40" cy="60" r="20" fill="#14532d" stroke="#22c55e" strokeWidth="2" />
-      <polyline points="30,60 38,70 55,48" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" />
-      {pulse && <ellipse cx="172" cy="115" rx="5" ry="3" fill="#7dd3fc" opacity="0.8"><animate attributeName="rx" values="5;9;5" dur="3s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.8;0.2;0.8" dur="3s" repeatCount="indefinite" /></ellipse>}
-      <text x="100" y="192" textAnchor="middle" fill="#22c55e" fontSize="8" fontFamily="monospace">BREATHING — RECOVERY POSITION</text>
-    </svg>
-  );
-
-  if (scene === 'handover') return (
-    <svg viewBox="0 0 200 200" className="max-w-full max-h-full aspect-square">
-      <rect x="0" y="180" width="200" height="20" fill="#0f172a" />
-      <rect x="10" y="90" width="80" height="50" rx="5" fill="#1e293b" stroke="#3b82f6" strokeWidth="2" />
-      <text x="50" y="125" textAnchor="middle" fill="white" fontSize="22">🚑</text>
-      <circle cx="25" cy="143" r="7" fill="#334155" stroke="#64748b" strokeWidth="2" />
-      <circle cx="75" cy="143" r="7" fill="#334155" stroke="#64748b" strokeWidth="2" />
-      <rect x="130" y="40" width="50" height="80" rx="6" fill="#1e293b" stroke="#3b82f6" strokeWidth="2" />
-      <rect x="147" y="52" width="16" height="40" rx="2" fill="#ef4444" opacity="0.8" />
-      <rect x="135" y="64" width="40" height="16" rx="2" fill="#ef4444" opacity="0.8" />
-      {pulse && <line x1="92" y1="120" x2="130" y2="90" stroke="#facc15" strokeWidth="2" strokeDasharray="5,3"><animate attributeName="strokeDashoffset" values="0;-16" dur="0.8s" repeatCount="indefinite" /></line>}
-      <text x="100" y="192" textAnchor="middle" fill="#a78bfa" fontSize="8" fontFamily="monospace">HOSPITAL — 24hr CARDIAC MONITORING</text>
-    </svg>
-  );
-
-  return (
-    <svg viewBox="0 0 200 200" className="max-w-full max-h-full aspect-square">
-      <rect x="0" y="180" width="200" height="20" fill="#0f172a" />
-      <ellipse cx="100" cy="130" rx="60" ry="18" fill="#1e3a6e" stroke="#3b82f6" strokeWidth="1.5" opacity="0.9" />
-      <circle cx="155" cy="118" r="16" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
-      <circle cx="55" cy="90" r="14" fill="#f97316" stroke="#fb923c" strokeWidth="1.5" />
-      {pulse && <circle cx="100" cy="120" r="8" fill="none" stroke="#facc15" strokeWidth="2"><animate attributeName="r" values="8;18;8" dur="1s" repeatCount="indefinite" /><animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite" /></circle>}
-      <text x="100" y="192" textAnchor="middle" fill="#facc15" fontSize="8" fontFamily="monospace">SHOUT — TAP — ASSESS RESPONSE</text>
-    </svg>
-  );
-}
-
 function ProtocolModule() {
   const [step, setStep] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -562,6 +433,19 @@ function ProtocolModule() {
     return () => clearInterval(t);
   }, []);
 
+  // Keyboard navigation: Left & Right arrow keys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') {
+        setStep(s => Math.min(PROTOCOL_STEPS.length - 1, s + 1));
+      } else if (e.key === 'ArrowLeft') {
+        setStep(s => Math.max(0, s - 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const s = PROTOCOL_STEPS[step];
   const StepIcon = ICON_MAP[s.icon] || Shield;
   const totalTime = 4 * 60;
@@ -571,78 +455,172 @@ function ProtocolModule() {
   const isCritical = s.urgency === 'CRITICAL';
 
   return (
-    <div className="flex flex-col gap-4 h-full">
-      <div className={`rounded-lg p-3 border flex flex-wrap items-center justify-between gap-2 ${isCritical ? 'border-red-500/50 bg-red-500/10' : 'border-slate-700 bg-slate-800/60'}`}>
+    <div className="flex flex-col h-full min-h-0 justify-between gap-2 overflow-hidden select-none">
+      {/* 1. Sleek Compact Header Status Strip */}
+      <div className={cn(
+        "flex items-center justify-between px-3 py-1.5 rounded-xl border text-xs shrink-0",
+        isCritical ? "border-red-500/40 bg-red-950/20" : "border-slate-800 bg-slate-900/60"
+      )}>
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isCritical ? 'bg-red-400' : 'bg-orange-400'} transition-opacity`} style={{ opacity: pulse ? 1 : 0.1 }} />
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">
-            Step {step + 1} of {PROTOCOL_STEPS.length} — {s.urgency}
+          <span className={cn(
+            "w-2.5 h-2.5 rounded-full",
+            isCritical ? "bg-red-500 shadow-[0_0_8px_#ef4444]" : "bg-orange-500 shadow-[0_0_8px_#f97316]"
+          )} style={{ opacity: pulse ? 1 : 0.2 }} />
+          <span className="text-xs font-black uppercase tracking-wider text-white">
+            STEP {step + 1} OF {PROTOCOL_STEPS.length}: {s.title.toUpperCase()}
+          </span>
+          <span className={cn(
+            "px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider",
+            isCritical ? "bg-red-600 text-white shadow-sm shadow-red-600/30" : "bg-orange-500 text-slate-950"
+          )}>
+            {s.urgency}
           </span>
         </div>
-        {step < 6 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 font-mono">Brain safe window</span>
-            <span className={`font-mono font-black text-sm ${brainTimer < 60 ? 'text-red-400' : brainTimer < 120 ? 'text-orange-400' : 'text-green-400'}`}>{mm}:{ss}</span>
-          </div>
-        )}
+
+        <div className="flex items-center gap-3 font-mono">
+          <span className="text-[10px] text-slate-500 hidden sm:inline uppercase">{s.standard}</span>
+          {step < 6 && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-950 border border-slate-800">
+              <span className="text-[10px] text-slate-400">BRAIN SAFE WINDOW:</span>
+              <span className={cn(
+                "font-black text-xs tabular-nums",
+                brainTimer < 60 ? "text-red-400 animate-pulse" : brainTimer < 120 ? "text-amber-400" : "text-emerald-400"
+              )}>
+                {mm}:{ss}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0 overflow-y-auto lg:overflow-y-hidden">
-        <div className={`rounded-xl border ${s.borderColor} ${s.bgColor} flex items-center justify-center p-2 lg:p-4 min-h-[140px] lg:min-h-[200px] h-[160px] lg:h-auto overflow-hidden`}>
+      {/* 2. Main Visual & Directive Stage (2 Columns: 46% Visual Canvas, 54% Clinical Actions) */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 flex-1 min-h-0 overflow-hidden">
+        {/* Left Column: Premium Interactive Vector Canvas */}
+        <div className={cn(
+          "md:col-span-6 rounded-xl border flex flex-col items-center justify-center p-2 relative overflow-hidden shadow-2xl min-h-0 h-full",
+          s.borderColor,
+          s.bgColor
+        )}>
           <div className="w-full h-full flex items-center justify-center min-h-0 overflow-hidden">
-            <SceneSVG scene={s.scene} pulse={pulse} />
+            <ProtocolVisualEngine scene={s.scene} pulse={pulse} />
+          </div>
+          <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-slate-950/80 border border-slate-800 text-[9px] font-mono text-slate-400 backdrop-blur-sm">
+            {s.scene.toUpperCase()} · IEC &amp; AHA 2024
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 lg:overflow-y-auto lg:min-h-0">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <StepIcon className={`w-5 h-5 ${s.color}`} />
-              <span className={`text-xs font-black tracking-widest uppercase font-mono ${s.color}`}>Step {s.id}</span>
-            </div>
-            <h3 className="text-lg font-black text-white tracking-wide">{s.title}</h3>
-            <span className="text-[10px] font-mono text-slate-500 uppercase">{s.standard}</span>
-          </div>
-          <p className="text-sm text-slate-300 leading-relaxed">{s.instruction}</p>
-          <div className={`rounded-lg border ${s.borderColor} p-3 space-y-1.5`}>
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Action Checklist</span>
-            {s.actions.map((a, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <CheckCircle2 className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${s.color}`} />
-                <span className="text-xs text-slate-300 leading-relaxed">{a}</span>
+        {/* Right Column: Clinical Action Terminal (Zero-scroll, fits all viewports) */}
+        <div className="md:col-span-6 flex flex-col justify-between gap-2 min-h-0 h-full overflow-hidden">
+          {/* Top: Directive Instruction */}
+          <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col gap-1 shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <StepIcon className={cn("w-4 h-4", s.color)} />
+                <span className="text-xs font-black uppercase text-white tracking-wide">
+                  Clinical Action Directive
+                </span>
               </div>
-            ))}
-          </div>
-          <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3">
-            <div className="flex items-center gap-1.5 mb-1">
-              <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-red-400">Fatal Mistake</span>
+              <span className="text-[9px] font-mono text-slate-400 uppercase bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                {s.standard}
+              </span>
             </div>
-            <p className="text-xs text-red-300 leading-relaxed">{s.fatal_mistake}</p>
+            <p className="text-xs text-slate-200 leading-snug">
+              {s.instruction}
+            </p>
+          </div>
+
+          {/* Middle: 2-Column Micro-Grid for Action Checklist & Fatal Mistake */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 flex-1 min-h-0 overflow-hidden">
+            {/* Action Checklist (7 cols) */}
+            <div className="sm:col-span-7 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between overflow-hidden min-h-0">
+              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block mb-1">
+                Mandatory Action Protocol
+              </span>
+              <div className="space-y-0.5 overflow-y-auto pr-1" style={{ scrollbarWidth: 'none' }}>
+                {s.actions.map((a, i) => (
+                  <div key={i} className="flex items-start gap-1.5">
+                    <CheckCircle2 className={cn("w-3 h-3 mt-0.5 shrink-0", s.color)} />
+                    <span className="text-[10.5px] text-slate-200 leading-tight">{a}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Fatal Mistake Alert (5 cols) */}
+            <div className="sm:col-span-5 p-2.5 rounded-xl border border-red-500/40 bg-red-950/30 flex flex-col justify-between overflow-hidden min-h-0">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1 text-red-400">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">Fatal Mistake</span>
+                </div>
+                <p className="text-[11px] text-red-200 leading-tight">
+                  {s.fatal_mistake}
+                </p>
+              </div>
+
+              <div className="pt-1.5 border-t border-red-500/20 text-[9px] font-mono text-red-400/80 flex items-center justify-between">
+                <span>AHA/ERC Standard</span>
+                <span className="text-[8px] bg-red-950 px-1 py-0.2 rounded border border-red-800 text-red-300">CRITICAL</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <button onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-sm font-bold">
-          <ChevronLeft className="w-4 h-4" /> Prev
+      {/* 3. Sleek Stepper Navigation Bar */}
+      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80 shrink-0">
+        <button
+          onClick={() => setStep(Math.max(0, step - 1))}
+          disabled={step === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-xs font-bold cursor-pointer shrink-0"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+          <span>PREV</span>
         </button>
-        <div className="flex-1 flex items-center justify-center gap-1.5 overflow-x-auto">
-          {PROTOCOL_STEPS.map((_, i) => (
-            <button key={i} onClick={() => setStep(i)}
-              className={`rounded-full transition-all flex-shrink-0 ${i === step ? 'bg-orange-500 w-5 h-2' : 'bg-slate-600 hover:bg-slate-500 w-2 h-2'}`} />
-          ))}
+
+        {/* 9 Numbered Step Pills */}
+        <div className="flex-1 flex items-center justify-center gap-1 overflow-x-auto py-0.5">
+          {PROTOCOL_STEPS.map((stepItem, i) => {
+            const isCurrent = i === step;
+            const isPast = i < step;
+            return (
+              <button
+                key={i}
+                onClick={() => setStep(i)}
+                title={`Step ${i + 1}: ${stepItem.title}`}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 border shrink-0",
+                  isCurrent
+                    ? "bg-orange-500 border-orange-400 text-slate-950 shadow-md shadow-orange-500/30 scale-105"
+                    : isPast
+                    ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60"
+                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                )}
+              >
+                <span>{i + 1}</span>
+                <span className="hidden xl:inline text-[9px] opacity-90 font-mono">
+                  {stepItem.title.split('—')[0].trim()}
+                </span>
+              </button>
+            );
+          })}
         </div>
+
         {step < PROTOCOL_STEPS.length - 1 ? (
-          <button onClick={() => setStep(step + 1)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-sm transition-all shadow-orange-500/30 shadow-lg">
-            Next <ChevronRight className="w-4 h-4" />
+          <button
+            onClick={() => setStep(step + 1)}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs transition-all shadow-md shadow-orange-500/30 cursor-pointer shrink-0"
+          >
+            <span>NEXT</span>
+            <ChevronRight className="w-3.5 h-3.5" />
           </button>
         ) : (
-          <button onClick={() => setStep(0)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-green-600 hover:bg-green-500 text-white font-black text-sm transition-all">
-            <RotateCcw className="w-4 h-4" /> Restart
+          <button
+            onClick={() => setStep(0)}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition-all shadow-md shadow-emerald-600/30 cursor-pointer shrink-0"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>RESTART</span>
           </button>
         )}
       </div>
@@ -1882,46 +1860,46 @@ export function FirstAidSimulator({ config }: { config?: UserConfig }) {
 
   return (
     <div className="flex flex-col h-full bg-slate-950 overflow-hidden">
-      <div className="flex-shrink-0 px-4 pt-4 pb-2 border-b border-slate-800">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-500/50 flex items-center justify-center flex-shrink-0">
-              <HeartPulse className="w-5 h-5 text-red-400" />
+      <div className="flex-shrink-0 px-3 pt-2 pb-1.5 border-b border-slate-800">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-red-500/20 border border-red-500/50 flex items-center justify-center shrink-0">
+              <HeartPulse className="w-4 h-4 text-red-400" />
             </div>
             <div>
-              <h2 className="text-base md:text-lg font-black uppercase tracking-wider text-white leading-none">First Aid & Emergency Response</h2>
-              <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest mt-0.5">Electrical Injury Protocol — AHA BLS 2024 · ERC 2021 · IEC 60479-1</p>
+              <h2 className="text-sm md:text-base font-black uppercase tracking-wider text-white leading-none">First Aid & Emergency Response</h2>
+              <p className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mt-0.5">Electrical Injury Protocol — AHA BLS 2024 · ERC 2021 · IEC 60479-1</p>
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-1.5">
             <button
               onClick={() => setIsExamModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-red-600/30 flex items-center gap-1.5 cursor-pointer"
+              className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-red-600/30 flex items-center gap-1.5 cursor-pointer"
             >
-              <Award className="w-4 h-4" />
+              <Award className="w-3.5 h-3.5" />
               <span>AHA/ERC EXAM</span>
             </button>
             <button
               onClick={() => setIsHazardScenariosOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-amber-600/30 flex items-center gap-1.5 cursor-pointer"
+              className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-amber-600/30 flex items-center gap-1.5 cursor-pointer"
             >
-              <Zap className="w-4 h-4" />
+              <Zap className="w-3.5 h-3.5" />
               <span>RESCUE SCENARIOS</span>
             </button>
           </div>
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
           {TABS.map(tab => {
             const isActive = activeTab === tab.id;
             return (
               <button key={tab.id} onClick={() => handleTabSelect(tab.id)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left flex-shrink-0 transition-all cursor-pointer ${isActive ? `${tab.activeBg} text-white` : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700/80 hover:text-slate-200'}`}>
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-left flex-shrink-0 transition-all cursor-pointer ${isActive ? `${tab.activeBg} text-white` : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700/80 hover:text-slate-200'}`}>
                 <tab.icon className="w-3.5 h-3.5 flex-shrink-0" />
                 <div>
                   <div className="text-xs font-black uppercase tracking-wide leading-none">{tab.label}</div>
-                  <div className={`text-[9px] font-mono leading-none mt-0.5 ${isActive ? 'text-white/70' : 'text-slate-600'}`}>{tab.sublabel}</div>
+                  <div className={`text-[8.5px] font-mono leading-none mt-0.5 ${isActive ? 'text-white/70' : 'text-slate-600'}`}>{tab.sublabel}</div>
                 </div>
               </button>
             );
@@ -1929,7 +1907,7 @@ export function FirstAidSimulator({ config }: { config?: UserConfig }) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden p-3 md:p-4 min-h-0 flex flex-col">
+      <div className="flex-1 overflow-hidden p-2 sm:p-2.5 min-h-0 flex flex-col">
         {activeTab === 'protocol' && <ProtocolModule />}
         {activeTab === 'cpr' && (
           <CPRTrainer
