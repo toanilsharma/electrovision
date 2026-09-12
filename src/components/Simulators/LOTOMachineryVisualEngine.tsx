@@ -173,21 +173,78 @@ class LOTOSoundEngine {
 
 export const lotoAudio = new LOTOSoundEngine();
 
-interface LOTOMachineryVisualEngineProps {
+export interface LOTOMachineryState {
+  inspectedSources: Set<string>;
+  motorStopped: boolean;
+  motorRpm: number;
+  motorAmps: number;
+  knifeSwitchOpen: boolean;
+  pneumaticValveClosed: boolean;
+  haspApplied: boolean;
+  padlockApplied: boolean;
+  dangerTagApplied: boolean;
+  airPressurePsi: number;
+  dcCapacitorVolts: number;
+  isBleedingAir: boolean;
+  isDischargingDC: boolean;
+  zeroVerifyPhase: 0 | 1 | 2 | 3 | 4;
+  probeVoltage: number;
+  tryButtonPressed: boolean;
+}
+
+export interface LOTOMachineryVisualEngineProps {
   step: number; // 0 to 5
   isCompleted: boolean;
   color: string;
   onStepAccomplished?: (stepIndex: number) => void;
+  machineryState?: LOTOMachineryState;
+  onInspectSource?: (id: string) => void;
+  onInspectAllSources?: () => void;
+  onStopMotor?: () => void;
+  onToggleKnifeSwitch?: () => void;
+  onToggleAirValve?: () => void;
+  onIsolateAll?: () => void;
+  onApplyHasp?: () => void;
+  onApplyPadlock?: () => void;
+  onApplyTag?: () => void;
+  onApplyAllLOTO?: () => void;
+  onBleedAir?: () => void;
+  onDischargeDC?: () => void;
+  onBleedAllEnergy?: () => void;
+  onProbeLive1?: () => void;
+  onProbeDead?: () => void;
+  onProbeLive2?: () => void;
+  onPressTry?: () => void;
+  onExecuteNextZeroTest?: () => void;
 }
 
 export function LOTOMachineryVisualEngine({
   step,
   isCompleted,
   color,
-  onStepAccomplished
+  onStepAccomplished,
+  machineryState,
+  onInspectSource,
+  onInspectAllSources,
+  onStopMotor,
+  onToggleKnifeSwitch,
+  onToggleAirValve,
+  onIsolateAll,
+  onApplyHasp,
+  onApplyPadlock,
+  onApplyTag,
+  onApplyAllLOTO,
+  onBleedAir,
+  onDischargeDC,
+  onBleedAllEnergy,
+  onProbeLive1,
+  onProbeDead,
+  onProbeLive2,
+  onPressTry,
+  onExecuteNextZeroTest,
 }: LOTOMachineryVisualEngineProps) {
   return (
-    <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-between select-none bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-xl p-2.5 shadow-inner">
+    <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-between select-none bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-xl p-1.5 sm:p-2 shadow-inner">
       {/* Precision Grid Overlay */}
       <div 
         className="absolute inset-0 opacity-20 pointer-events-none"
@@ -198,7 +255,7 @@ export function LOTOMachineryVisualEngine({
       />
 
       {/* Persistent Industrial HUD Bar */}
-      <div className="w-full shrink-0 flex items-center justify-between px-3 py-1.5 z-20 pointer-events-none">
+      <div className="w-full shrink-0 flex items-center justify-between px-2.5 py-1 z-20 pointer-events-none">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full animate-ping" style={{ backgroundColor: color }} />
           <span className="text-[10px] md:text-xs font-mono font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-slate-950/90 border border-slate-700/80 text-slate-200 backdrop-blur-sm shadow-sm">
@@ -207,20 +264,77 @@ export function LOTOMachineryVisualEngine({
         </div>
 
         {isCompleted && (
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/80 text-emerald-300 font-mono text-[10px] md:text-xs font-black uppercase tracking-wider backdrop-blur-sm shadow-[0_0_12px_rgba(16,185,129,0.4)]">
+          <div className="flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/80 text-emerald-300 font-mono text-[10px] md:text-xs font-black uppercase tracking-wider backdrop-blur-sm shadow-[0_0_12px_rgba(16,185,129,0.4)]">
             <span>✓ VERIFIED COMPLETE</span>
           </div>
         )}
       </div>
 
       {/* Main Interactive Canvas */}
-      <div className="flex-1 w-full min-h-0 flex items-center justify-center relative overflow-hidden z-10 px-1 py-1">
-        {step === 0 && <Step0InteractivePlant onComplete={() => onStepAccomplished?.(0)} />}
-        {step === 1 && <Step1InteractiveMotor onComplete={() => onStepAccomplished?.(1)} />}
-        {step === 2 && <Step2InteractiveIsolation onComplete={() => onStepAccomplished?.(2)} />}
-        {step === 3 && <Step3InteractiveLockoutTagout onComplete={() => onStepAccomplished?.(3)} />}
-        {step === 4 && <Step4InteractiveStoredEnergy onComplete={() => onStepAccomplished?.(4)} />}
-        {step === 5 && <Step5InteractiveZeroVerify onComplete={() => onStepAccomplished?.(5)} />}
+      <div className="flex-1 w-full min-h-0 flex items-center justify-center relative overflow-hidden z-10 px-0.5 py-0.5">
+        {step === 0 && (
+          <Step0InteractivePlant
+            inspectedSources={machineryState?.inspectedSources}
+            onInspect={onInspectSource}
+            onInspectAll={onInspectAllSources}
+            onComplete={() => onStepAccomplished?.(0)}
+          />
+        )}
+        {step === 1 && (
+          <Step1InteractiveMotor
+            stopped={machineryState?.motorStopped}
+            rpm={machineryState?.motorRpm}
+            amps={machineryState?.motorAmps}
+            onStopPress={onStopMotor}
+            onComplete={() => onStepAccomplished?.(1)}
+          />
+        )}
+        {step === 2 && (
+          <Step2InteractiveIsolation
+            switchOpen={machineryState?.knifeSwitchOpen}
+            valveClosed={machineryState?.pneumaticValveClosed}
+            onToggleSwitch={onToggleKnifeSwitch}
+            onToggleValve={onToggleAirValve}
+            onIsolateAll={onIsolateAll}
+            onComplete={() => onStepAccomplished?.(2)}
+          />
+        )}
+        {step === 3 && (
+          <Step3InteractiveLockoutTagout
+            haspApplied={machineryState?.haspApplied}
+            padlockApplied={machineryState?.padlockApplied}
+            tagApplied={machineryState?.dangerTagApplied}
+            onApplyHasp={onApplyHasp}
+            onApplyPadlock={onApplyPadlock}
+            onApplyTag={onApplyTag}
+            onApplyAll={onApplyAllLOTO}
+            onComplete={() => onStepAccomplished?.(3)}
+          />
+        )}
+        {step === 4 && (
+          <Step4InteractiveStoredEnergy
+            psi={machineryState?.airPressurePsi}
+            voltsDC={machineryState?.dcCapacitorVolts}
+            bleedingAir={machineryState?.isBleedingAir}
+            dischargingDC={machineryState?.isDischargingDC}
+            onBleedAir={onBleedAir}
+            onDischargeDC={onDischargeDC}
+            onBleedAll={onBleedAllEnergy}
+            onComplete={() => onStepAccomplished?.(4)}
+          />
+        )}
+        {step === 5 && (
+          <Step5InteractiveZeroVerify
+            testPhase={machineryState?.zeroVerifyPhase}
+            voltage={machineryState?.probeVoltage}
+            onProbeLive1={onProbeLive1}
+            onProbeDead={onProbeDead}
+            onProbeLive2={onProbeLive2}
+            onPressTry={onPressTry}
+            onExecuteNext={onExecuteNextZeroTest}
+            onComplete={() => onStepAccomplished?.(5)}
+          />
+        )}
       </div>
     </div>
   );
@@ -230,8 +344,19 @@ export function LOTOMachineryVisualEngine({
 // STEP 1 (Index 0): INTERACTIVE PLANT ENERGY MAPPING
 // User clicks each of the 6 energy sources to inspect and acknowledge them.
 // ============================================================================
-function Step0InteractivePlant({ onComplete }: { onComplete: () => void }) {
-  const [inspected, setInspected] = useState<Set<string>>(new Set());
+function Step0InteractivePlant({
+  inspectedSources,
+  onInspect,
+  onInspectAll,
+  onComplete
+}: {
+  inspectedSources?: Set<string>;
+  onInspect?: (id: string) => void;
+  onInspectAll?: () => void;
+  onComplete: () => void;
+}) {
+  const [localInspected, setLocalInspected] = useState<Set<string>>(new Set());
+  const inspected = inspectedSources ?? localInspected;
 
   const energySources = [
     { id: "ELEC", name: "480V 3-Phase", val: "ACTIVE 68A", color: "#f59e0b", icon: "⚡", x: 95, y: 75 },
@@ -244,22 +369,30 @@ function Step0InteractivePlant({ onComplete }: { onComplete: () => void }) {
 
   const handleInspect = (id: string) => {
     lotoAudio.playClick();
-    setInspected(prev => {
-      const next = new Set([...prev, id]);
-      if (next.size === energySources.length) {
-        assessmentAudio.playCorrectChime();
-        onComplete();
-      }
-      return next;
-    });
+    if (onInspect) {
+      onInspect(id);
+    } else {
+      setLocalInspected(prev => {
+        const next = new Set([...prev, id]);
+        if (next.size === energySources.length) {
+          assessmentAudio.playCorrectChime();
+          onComplete();
+        }
+        return next;
+      });
+    }
   };
 
   const handleInspectAll = () => {
     lotoAudio.playClick();
-    const all = new Set(energySources.map(e => e.id));
-    setInspected(all);
-    assessmentAudio.playCorrectChime();
-    onComplete();
+    if (onInspectAll) {
+      onInspectAll();
+    } else {
+      const all = new Set(energySources.map(e => e.id));
+      setLocalInspected(all);
+      assessmentAudio.playCorrectChime();
+      onComplete();
+    }
   };
 
   const allDone = inspected.size === energySources.length;
@@ -367,28 +500,47 @@ function Step0InteractivePlant({ onComplete }: { onComplete: () => void }) {
 // STEP 2 (Index 1): INTERACTIVE MOTOR SHUTDOWN
 // User clicks the red industrial STOP button on the MCC starter.
 // ============================================================================
-function Step1InteractiveMotor({ onComplete }: { onComplete: () => void }) {
-  const [stopped, setStopped] = useState(false);
-  const [rpm, setRpm] = useState(1750);
-  const [amps, setAmps] = useState(68);
+function Step1InteractiveMotor({
+  stopped: propStopped,
+  rpm: propRpm,
+  amps: propAmps,
+  onStopPress: propOnStopPress,
+  onComplete
+}: {
+  stopped?: boolean;
+  rpm?: number;
+  amps?: number;
+  onStopPress?: () => void;
+  onComplete: () => void;
+}) {
+  const [localStopped, setLocalStopped] = useState(false);
+  const [localRpm, setLocalRpm] = useState(1750);
+  const [localAmps, setLocalAmps] = useState(68);
+
+  const stopped = propStopped !== undefined ? propStopped : localStopped;
+  const rpm = propRpm !== undefined ? propRpm : localRpm;
+  const amps = propAmps !== undefined ? propAmps : localAmps;
 
   const handleStopPress = () => {
     if (stopped) return;
-    setStopped(true);
-    lotoAudio.playSwitchClack();
-
-    const interval = setInterval(() => {
-      setRpm(r => {
-        if (r <= 40) {
-          clearInterval(interval);
-          assessmentAudio.playCorrectChime();
-          onComplete();
-          return 0;
-        }
-        return Math.floor(r * 0.72);
-      });
-      setAmps(a => (a <= 2 ? 0 : Math.floor(a * 0.65)));
-    }, 120);
+    if (propOnStopPress) {
+      propOnStopPress();
+    } else {
+      setLocalStopped(true);
+      lotoAudio.playSwitchClack();
+      const interval = setInterval(() => {
+        setLocalRpm(r => {
+          if (r <= 40) {
+            clearInterval(interval);
+            assessmentAudio.playCorrectChime();
+            onComplete();
+            return 0;
+          }
+          return Math.floor(r * 0.72);
+        });
+        setLocalAmps(a => (a <= 2 ? 0 : Math.floor(a * 0.65)));
+      }, 120);
+    }
   };
 
   const rotorRotation = stopped ? 0 : 360;
@@ -493,36 +645,65 @@ function Step1InteractiveMotor({ onComplete }: { onComplete: () => void }) {
 // STEP 3 (Index 2): INTERACTIVE ENERGY ISOLATION
 // User pulls the 400A knife switch handle & turns the pneumatic valve 90°.
 // ============================================================================
-function Step2InteractiveIsolation({ onComplete }: { onComplete: () => void }) {
-  const [switchOpen, setSwitchOpen] = useState(false);
-  const [valveClosed, setValveClosed] = useState(false);
+function Step2InteractiveIsolation({
+  switchOpen: propSwitchOpen,
+  valveClosed: propValveClosed,
+  onToggleSwitch: propOnToggleSwitch,
+  onToggleValve: propOnToggleValve,
+  onIsolateAll: propOnIsolateAll,
+  onComplete
+}: {
+  switchOpen?: boolean;
+  valveClosed?: boolean;
+  onToggleSwitch?: () => void;
+  onToggleValve?: () => void;
+  onIsolateAll?: () => void;
+  onComplete: () => void;
+}) {
+  const [localSwitchOpen, setLocalSwitchOpen] = useState(false);
+  const [localValveClosed, setLocalValveClosed] = useState(false);
+
+  const switchOpen = propSwitchOpen !== undefined ? propSwitchOpen : localSwitchOpen;
+  const valveClosed = propValveClosed !== undefined ? propValveClosed : localValveClosed;
 
   const toggleSwitch = () => {
     lotoAudio.playSwitchClack();
-    const next = !switchOpen;
-    setSwitchOpen(next);
-    if (next && valveClosed) {
-      assessmentAudio.playCorrectChime();
-      onComplete();
+    if (propOnToggleSwitch) {
+      propOnToggleSwitch();
+    } else {
+      const next = !switchOpen;
+      setLocalSwitchOpen(next);
+      if (next && valveClosed) {
+        assessmentAudio.playCorrectChime();
+        onComplete();
+      }
     }
   };
 
   const toggleValve = () => {
     lotoAudio.playAirHiss();
-    const next = !valveClosed;
-    setValveClosed(next);
-    if (switchOpen && next) {
-      assessmentAudio.playCorrectChime();
-      onComplete();
+    if (propOnToggleValve) {
+      propOnToggleValve();
+    } else {
+      const next = !valveClosed;
+      setLocalValveClosed(next);
+      if (switchOpen && next) {
+        assessmentAudio.playCorrectChime();
+        onComplete();
+      }
     }
   };
 
   const handleIsolateAll = () => {
     lotoAudio.playSwitchClack();
-    setSwitchOpen(true);
-    setValveClosed(true);
-    assessmentAudio.playCorrectChime();
-    onComplete();
+    if (propOnIsolateAll) {
+      propOnIsolateAll();
+    } else {
+      setLocalSwitchOpen(true);
+      setLocalValveClosed(true);
+      assessmentAudio.playCorrectChime();
+      onComplete();
+    }
   };
 
   const allIsolated = switchOpen && valveClosed;
@@ -641,41 +822,76 @@ function Step2InteractiveIsolation({ onComplete }: { onComplete: () => void }) {
 // STEP 4 (Index 3): INTERACTIVE LOCKOUT / TAGOUT
 // User equips hasp, snaps padlock, and attaches danger tag.
 // ============================================================================
-function Step3InteractiveLockoutTagout({ onComplete }: { onComplete: () => void }) {
-  const [haspApplied, setHaspApplied] = useState(false);
-  const [padlockApplied, setPadlockApplied] = useState(false);
-  const [tagApplied, setTagApplied] = useState(false);
+function Step3InteractiveLockoutTagout({
+  haspApplied: propHaspApplied,
+  padlockApplied: propPadlockApplied,
+  tagApplied: propTagApplied,
+  onApplyHasp: propOnApplyHasp,
+  onApplyPadlock: propOnApplyPadlock,
+  onApplyTag: propOnApplyTag,
+  onApplyAll: propOnApplyAll,
+  onComplete
+}: {
+  haspApplied?: boolean;
+  padlockApplied?: boolean;
+  tagApplied?: boolean;
+  onApplyHasp?: () => void;
+  onApplyPadlock?: () => void;
+  onApplyTag?: () => void;
+  onApplyAll?: () => void;
+  onComplete: () => void;
+}) {
+  const [localHaspApplied, setLocalHaspApplied] = useState(false);
+  const [localPadlockApplied, setLocalPadlockApplied] = useState(false);
+  const [localTagApplied, setLocalTagApplied] = useState(false);
+
+  const haspApplied = propHaspApplied !== undefined ? propHaspApplied : localHaspApplied;
+  const padlockApplied = propPadlockApplied !== undefined ? propPadlockApplied : localPadlockApplied;
+  const tagApplied = propTagApplied !== undefined ? propTagApplied : localTagApplied;
 
   const handleApplyHasp = () => {
     lotoAudio.playSwitchClack();
-    setHaspApplied(true);
+    if (propOnApplyHasp) propOnApplyHasp();
+    else setLocalHaspApplied(true);
   };
 
   const handleApplyPadlock = () => {
     lotoAudio.playPadlockSnap();
-    setPadlockApplied(true);
-    if (tagApplied) {
-      assessmentAudio.playCorrectChime();
-      onComplete();
+    if (propOnApplyPadlock) {
+      propOnApplyPadlock();
+    } else {
+      setLocalPadlockApplied(true);
+      if (tagApplied) {
+        assessmentAudio.playCorrectChime();
+        onComplete();
+      }
     }
   };
 
   const handleApplyTag = () => {
     lotoAudio.playClick();
-    setTagApplied(true);
-    if (padlockApplied) {
-      assessmentAudio.playCorrectChime();
-      onComplete();
+    if (propOnApplyTag) {
+      propOnApplyTag();
+    } else {
+      setLocalTagApplied(true);
+      if (padlockApplied) {
+        assessmentAudio.playCorrectChime();
+        onComplete();
+      }
     }
   };
 
   const handleApplyAll = () => {
     lotoAudio.playPadlockSnap();
-    setHaspApplied(true);
-    setPadlockApplied(true);
-    setTagApplied(true);
-    assessmentAudio.playCorrectChime();
-    onComplete();
+    if (propOnApplyAll) {
+      propOnApplyAll();
+    } else {
+      setLocalHaspApplied(true);
+      setLocalPadlockApplied(true);
+      setLocalTagApplied(true);
+      assessmentAudio.playCorrectChime();
+      onComplete();
+    }
   };
 
   const allLocked = haspApplied && padlockApplied && tagApplied;
@@ -813,55 +1029,88 @@ function Step3InteractiveLockoutTagout({ onComplete }: { onComplete: () => void 
 // STEP 5 (Index 4): INTERACTIVE STORED ENERGY RELEASE
 // User vents pneumatic valve (120->0 PSI) & discharges VFD DC bus (680->0V).
 // ============================================================================
-function Step4InteractiveStoredEnergy({ onComplete }: { onComplete: () => void }) {
-  const [psi, setPsi] = useState(120);
-  const [voltsDC, setVoltsDC] = useState(680);
-  const [bleedingAir, setBleedingAir] = useState(false);
-  const [dischargingDC, setDischargingDC] = useState(false);
+function Step4InteractiveStoredEnergy({
+  psi: propPsi,
+  voltsDC: propVoltsDC,
+  bleedingAir: propBleedingAir,
+  dischargingDC: propDischargingDC,
+  onBleedAir: propOnBleedAir,
+  onDischargeDC: propOnDischargeDC,
+  onBleedAll: propOnBleedAll,
+  onComplete
+}: {
+  psi?: number;
+  voltsDC?: number;
+  bleedingAir?: boolean;
+  dischargingDC?: boolean;
+  onBleedAir?: () => void;
+  onDischargeDC?: () => void;
+  onBleedAll?: () => void;
+  onComplete: () => void;
+}) {
+  const [localPsi, setLocalPsi] = useState(120);
+  const [localVoltsDC, setLocalVoltsDC] = useState(680);
+  const [localBleedingAir, setLocalBleedingAir] = useState(false);
+  const [localDischargingDC, setLocalDischargingDC] = useState(false);
+
+  const psi = propPsi !== undefined ? propPsi : localPsi;
+  const voltsDC = propVoltsDC !== undefined ? propVoltsDC : localVoltsDC;
+  const bleedingAir = propBleedingAir !== undefined ? propBleedingAir : localBleedingAir;
+  const dischargingDC = propDischargingDC !== undefined ? propDischargingDC : localDischargingDC;
 
   const startBleedAir = () => {
     if (bleedingAir || psi === 0) return;
-    setBleedingAir(true);
-    lotoAudio.playAirHiss();
-
-    const t = setInterval(() => {
-      setPsi(p => {
-        if (p <= 5) {
-          clearInterval(t);
-          if (voltsDC === 0) {
-            assessmentAudio.playCorrectChime();
-            onComplete();
+    if (propOnBleedAir) {
+      propOnBleedAir();
+    } else {
+      setLocalBleedingAir(true);
+      lotoAudio.playAirHiss();
+      const t = setInterval(() => {
+        setLocalPsi(p => {
+          if (p <= 5) {
+            clearInterval(t);
+            if (voltsDC === 0) {
+              assessmentAudio.playCorrectChime();
+              onComplete();
+            }
+            return 0;
           }
-          return 0;
-        }
-        return p - 10;
-      });
-    }, 120);
+          return p - 10;
+        });
+      }, 120);
+    }
   };
 
   const startDischargeDC = () => {
     if (dischargingDC || voltsDC === 0) return;
-    setDischargingDC(true);
-    lotoAudio.playSwitchClack();
-
-    const t = setInterval(() => {
-      setVoltsDC(v => {
-        if (v <= 20) {
-          clearInterval(t);
-          if (psi === 0) {
-            assessmentAudio.playCorrectChime();
-            onComplete();
+    if (propOnDischargeDC) {
+      propOnDischargeDC();
+    } else {
+      setLocalDischargingDC(true);
+      lotoAudio.playSwitchClack();
+      const t = setInterval(() => {
+        setLocalVoltsDC(v => {
+          if (v <= 20) {
+            clearInterval(t);
+            if (psi === 0) {
+              assessmentAudio.playCorrectChime();
+              onComplete();
+            }
+            return 0;
           }
-          return 0;
-        }
-        return Math.floor(v * 0.75 - 5);
-      });
-    }, 120);
+          return Math.floor(v * 0.75 - 5);
+        });
+      }, 120);
+    }
   };
 
   const handleBleedAll = () => {
-    startBleedAir();
-    startDischargeDC();
+    if (propOnBleedAll) {
+      propOnBleedAll();
+    } else {
+      startBleedAir();
+      startDischargeDC();
+    }
   };
 
   const needleAngle = -135 + (psi / 120) * 270;
@@ -955,34 +1204,67 @@ function Step4InteractiveStoredEnergy({ onComplete }: { onComplete: () => void }
 // STEP 6 (Index 5): NFPA 70E "LIVE-DEAD-LIVE" THREE-POINT TEST & TRY STEP
 // User probes: 1. Live (230V) -> 2. Dead (0.00V) -> 3. Re-test Live (230V) -> 4. TRY
 // ============================================================================
-function Step5InteractiveZeroVerify({ onComplete }: { onComplete: () => void }) {
-  const [testPhase, setTestPhase] = useState<0 | 1 | 2 | 3 | 4>(0);
-  // 0 = Idle, 1 = Live1 (230V), 2 = Dead (0.00V), 3 = Live2 (230V), 4 = Tried
-  const [voltage, setVoltage] = useState(0);
+function Step5InteractiveZeroVerify({
+  testPhase: propTestPhase,
+  voltage: propVoltage,
+  onProbeLive1: propOnProbeLive1,
+  onProbeDead: propOnProbeDead,
+  onProbeLive2: propOnProbeLive2,
+  onPressTry: propOnPressTry,
+  onExecuteNext: propOnExecuteNext,
+  onComplete
+}: {
+  testPhase?: 0 | 1 | 2 | 3 | 4;
+  voltage?: number;
+  onProbeLive1?: () => void;
+  onProbeDead?: () => void;
+  onProbeLive2?: () => void;
+  onPressTry?: () => void;
+  onExecuteNext?: () => void;
+  onComplete: () => void;
+}) {
+  const [localTestPhase, setLocalTestPhase] = useState<0 | 1 | 2 | 3 | 4>(0);
+  const [localVoltage, setLocalVoltage] = useState(0);
+
+  const testPhase = propTestPhase !== undefined ? propTestPhase : localTestPhase;
+  const voltage = propVoltage !== undefined ? propVoltage : localVoltage;
 
   const probeLive1 = () => {
     lotoAudio.playMeterBeep();
-    setVoltage(230.4);
-    setTestPhase(1);
+    if (propOnProbeLive1) propOnProbeLive1();
+    else {
+      setLocalVoltage(230.4);
+      setLocalTestPhase(1);
+    }
   };
 
   const probeDead = () => {
     lotoAudio.playMeterBeep();
-    setVoltage(0.0);
-    setTestPhase(2);
+    if (propOnProbeDead) propOnProbeDead();
+    else {
+      setLocalVoltage(0.0);
+      setLocalTestPhase(2);
+    }
   };
 
   const probeLive2 = () => {
     lotoAudio.playMeterBeep();
-    setVoltage(230.1);
-    setTestPhase(3);
+    if (propOnProbeLive2) propOnProbeLive2();
+    else {
+      setLocalVoltage(230.1);
+      setLocalTestPhase(3);
+    }
   };
 
   const pressTry = () => {
     lotoAudio.playSwitchClack();
-    setTestPhase(4);
-    assessmentAudio.playCorrectChime();
-    onComplete();
+    if (propOnPressTry) {
+      propOnPressTry();
+    } else {
+      setLocalTestPhase(4);
+      assessmentAudio.playCorrectChime();
+      onComplete();
+    }
   };
 
   return (
@@ -1093,10 +1375,14 @@ function Step5InteractiveZeroVerify({ onComplete }: { onComplete: () => void }) 
         {testPhase < 4 && (
           <button
             onClick={() => {
-              if (testPhase === 0) probeLive1();
-              else if (testPhase === 1) probeDead();
-              else if (testPhase === 2) probeLive2();
-              else if (testPhase === 3) pressTry();
+              if (propOnExecuteNext) {
+                propOnExecuteNext();
+              } else {
+                if (testPhase === 0) probeLive1();
+                else if (testPhase === 1) probeDead();
+                else if (testPhase === 2) probeLive2();
+                else if (testPhase === 3) pressTry();
+              }
             }}
             className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95"
           >

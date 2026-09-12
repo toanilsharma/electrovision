@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronLeft, RotateCcw, Zap, Eye, BookOpen,
   ClipboardList, HelpCircle, CheckCircle2, XCircle, Power,
   Unlock, Info, Award, ArrowRight, Sparkles, Filter, RefreshCw, Skull,
-  Volume2, VolumeX, FileText, Timer, Printer
+  Volume2, VolumeX, FileText, Timer, Printer, Activity, Gauge
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
@@ -15,6 +15,7 @@ import { LOTOFailureConsequenceModal } from "./LOTOFailureConsequenceModal";
 import { LOTOPermitModal } from "./LOTOPermitModal";
 import { LOTOPracticalExamModal } from "./LOTOPracticalExamModal";
 import { LOTOCertificateModal } from "./LOTOCertificateModal";
+import { LOTOMachineryVisualEngine, LOTOMachineryState, lotoAudio } from "./LOTOMachineryVisualEngine";
 
 type TabId = "procedure" | "learn" | "checklist" | "quiz";
 
@@ -22,25 +23,103 @@ interface PreparedQuizQuestion {
   id: number;
   question: string;
   options: string[];
-  correctAnswer: number; // index in shuffled options
+  correctAnswer: number;
   explanation: string;
   category: string;
 }
 
 const LOTO_STEPS = [
-  { id: 1, title: "Preparation", shortTitle: "Prepare", color: "#f59e0b", bgClass: "bg-amber-500/25 border-amber-500/60", textClass: "text-amber-300", icon: Eye, hazardLevel: "High", desc: "Identify ALL energy sources — electrical, hydraulic, pneumatic, mechanical, thermal, and chemical. Study equipment diagrams, review LOTO procedures, notify affected employees, and gather required locks and tags.", keyPoints: ["Identify every energy source", "Review lockout procedure document", "Notify all affected workers", "Gather locks, tags, and tools"], regulation: "OSHA 29 CFR 1910.147", warning: "Missing even one energy source can be fatal." },
-  { id: 2, title: "Equipment Shutdown", shortTitle: "Shutdown", color: "#ef4444", bgClass: "bg-red-500/25 border-red-500/60", textClass: "text-red-300", icon: Power, hazardLevel: "Critical", desc: "Follow the normal stopping procedure to turn off the equipment. Use the designated shutdown controls — do not simply disconnect power without following the prescribed sequence.", keyPoints: ["Use normal stop procedure", "Follow equipment-specific sequence", "Confirm all moving parts have stopped", "Verify production is halted"], regulation: "OSHA 29 CFR 1910.147(d)(2)", warning: "Never assume equipment is off — verify with instruments." },
-  { id: 3, title: "Energy Isolation", shortTitle: "Isolate", color: "#8b5cf6", bgClass: "bg-violet-500/25 border-violet-500/60", textClass: "text-violet-300", icon: Shield, hazardLevel: "Critical", desc: "Physically isolate the equipment from ALL energy sources by operating switches, valves, and other isolating devices. Ensure isolation is positive and complete — partial isolation is not acceptable.", keyPoints: ["Disconnect all electrical circuits", "Close all pneumatic/hydraulic valves", "Block mechanical motion hazards", "Verify isolation is positive and physical"], regulation: "OSHA 29 CFR 1910.147(d)(3)", warning: "Each energy source must have its own isolation device." },
-  { id: 4, title: "Lockout / Tagout", shortTitle: "Lock & Tag", color: "#f97316", bgClass: "bg-orange-500/25 border-orange-500/60", textClass: "text-orange-300", icon: Lock, hazardLevel: "Critical", desc: "Apply your personal lock AND a danger tag to EVERY isolation device. Each authorized employee applies their OWN lock — only that person can remove it. Tags alone are not sufficient when lockout is feasible.", keyPoints: ["Apply one lock per isolation point", "Each worker uses their personal lock", "Attach a signed danger tag", "Never share or piggyback locks"], regulation: "OSHA 29 CFR 1910.147(d)(4)", warning: "A tag is a warning — only a LOCK ensures the device stays off." },
-  { id: 5, title: "Stored Energy Release", shortTitle: "Bleed Energy", color: "#06b6d4", bgClass: "bg-cyan-500/25 border-cyan-500/60", textClass: "text-cyan-300", icon: Zap, hazardLevel: "High", desc: "Release, restrain, or neutralize ALL stored or residual energy. This includes: discharge capacitors, bleed pneumatic lines, drain hydraulic pressure, block gravity-fed components, and allow thermal dissipation.", keyPoints: ["Discharge capacitors and electrical charge", "Bleed pneumatic/hydraulic pressure to zero", "Block suspended/gravity-loaded parts", "Allow hot equipment to cool down"], regulation: "OSHA 29 CFR 1910.147(d)(5)", warning: "Stored energy causes nearly 30% of LOTO-related incidents." },
-  { id: 6, title: "Verification", shortTitle: "Verify", color: "#22c55e", bgClass: "bg-green-500/25 border-green-500/60", textClass: "text-green-300", icon: CheckCircle2, hazardLevel: "Safety Check", desc: "Verify that isolation is complete by trying to start the equipment, testing with a calibrated meter, and confirming energy levels are zero. Only then is the equipment safe to work on. Document everything.", keyPoints: ["Test start button — equipment must NOT start", "Use calibrated voltage tester to confirm zero energy", "Confirm pressure gauges read zero", "Document the verification with date and signature"], regulation: "OSHA 29 CFR 1910.147(d)(6)", warning: "NEVER assume — always TEST before touching energized parts." },
+  {
+    id: 1,
+    title: "Preparation",
+    shortTitle: "1. Prepare",
+    color: "#f59e0b",
+    bgClass: "bg-amber-500/25 border-amber-500/60",
+    textClass: "text-amber-300",
+    icon: Eye,
+    hazardLevel: "High",
+    desc: "Identify ALL energy sources — electrical, hydraulic, pneumatic, mechanical, thermal, and chemical. Review equipment drawings and notify all affected employees.",
+    keyPoints: ["Identify every energy source", "Review lockout procedure document", "Notify all affected workers", "Gather locks, tags, and tools"],
+    regulation: "OSHA 29 CFR 1910.147",
+    warning: "Missing even one energy source can be fatal."
+  },
+  {
+    id: 2,
+    title: "Equipment Shutdown",
+    shortTitle: "2. Shutdown",
+    color: "#ef4444",
+    bgClass: "bg-red-500/25 border-red-500/60",
+    textClass: "text-red-300",
+    icon: Power,
+    hazardLevel: "Critical",
+    desc: "Follow the normal stopping procedure to turn off the equipment using designated pushbuttons. Do not disconnect power under load.",
+    keyPoints: ["Use normal stop procedure", "Confirm all moving parts have stopped", "Verify zero load current", "Check tachometer reads 0 RPM"],
+    regulation: "OSHA 29 CFR 1910.147(d)(2)",
+    warning: "Never assume equipment is off without visual & instrument proof."
+  },
+  {
+    id: 3,
+    title: "Energy Isolation",
+    shortTitle: "3. Isolate",
+    color: "#8b5cf6",
+    bgClass: "bg-violet-500/25 border-violet-500/60",
+    textClass: "text-violet-300",
+    icon: Shield,
+    hazardLevel: "Critical",
+    desc: "Physically isolate the equipment from ALL energy sources by pulling disconnect switches and closing pneumatic ball valves with a visible physical air gap.",
+    keyPoints: ["Open 400A knife switch", "Visually confirm physical air gap", "Close pneumatic supply ball valve", "Positive physical disconnect required"],
+    regulation: "OSHA 29 CFR 1910.147(d)(3)",
+    warning: "Each energy source must have its own positive physical isolation device."
+  },
+  {
+    id: 4,
+    title: "Lockout / Tagout",
+    shortTitle: "4. Lock & Tag",
+    color: "#f97316",
+    bgClass: "bg-orange-500/25 border-orange-500/60",
+    textClass: "text-orange-300",
+    icon: Lock,
+    hazardLevel: "Critical",
+    desc: "Apply your standardized red Master Lock 410 through a 6-hole steel hasp and attach a signed OSHA danger tag. Each authorized worker uses their own personal lock.",
+    keyPoints: ["Apply 6-hole safety hasp", "Snap personal Master Lock 410", "Attach signed OSHA Danger Tag", "One key per lock kept by technician"],
+    regulation: "OSHA 29 CFR 1910.147(d)(4)",
+    warning: "A tag alone is only a warning — only a physical LOCK prevents energization."
+  },
+  {
+    id: 5,
+    title: "Stored Energy Release",
+    shortTitle: "5. Bleed Energy",
+    color: "#06b6d4",
+    bgClass: "bg-cyan-500/25 border-cyan-500/60",
+    textClass: "text-cyan-300",
+    icon: Zap,
+    hazardLevel: "High",
+    desc: "Release, bleed, or block ALL stored residual energy: vent pneumatic accumulator pressure to 0 PSI, discharge DC capacitor banks to 0V, and block gravity loads.",
+    keyPoints: ["Discharge DC bus capacitors to 0V", "Bleed air pressure lines to 0 PSI", "Block suspended gravity loads with die block", "Allow hot surfaces to cool"],
+    regulation: "OSHA 29 CFR 1910.147(d)(5)",
+    warning: "Stored residual energy causes 30% of fatal LOTO maintenance accidents."
+  },
+  {
+    id: 6,
+    title: "Verification",
+    shortTitle: "6. Verify Zero",
+    color: "#22c55e",
+    bgClass: "bg-green-500/25 border-green-500/60",
+    textClass: "text-green-300",
+    icon: CheckCircle2,
+    hazardLevel: "Safety Check",
+    desc: "Execute the NFPA 70E 'Live-Dead-Live' test sequence using a calibrated CAT IV True-RMS meter, and press the machine TRY button to confirm zero start capability.",
+    keyPoints: ["Test meter on known live 230V source", "Test machine terminals for 0.00V", "Re-verify meter on live source", "Attempt restart with TRY button (must NOT start)"],
+    regulation: "OSHA 29 CFR 1910.147(d)(6) · NFPA 70E",
+    warning: "NEVER touch terminals without proving the meter is operating via Live-Dead-Live."
+  },
 ];
 
 const LEARN_CARDS = [
-  { title: "What is LOTO?", color: "#f59e0b", icon: Lock, content: "Lockout/Tagout (LOTO) is a safety procedure that protects workers from the unexpected energization, startup, or release of stored energy during servicing and maintenance of machines and equipment.", stat: "120 workers killed annually", statSub: "when LOTO is not followed (OSHA)" },
-  { title: "Energy Types", color: "#8b5cf6", icon: Zap, content: "LOTO must address ALL forms of hazardous energy: Electrical (most common), Pneumatic (compressed air), Hydraulic, Mechanical (springs, gravity), Thermal (heat/steam), and Chemical.", stat: "6 energy types", statSub: "must ALL be controlled" },
-  { title: "Who Is Authorized?", color: "#06b6d4", icon: Shield, content: "Authorized employees perform lockout/tagout. Affected employees operate the equipment and must be notified. Other employees must stay clear of the area during the procedure.", stat: "3 worker categories", statSub: "Authorized · Affected · Other" },
-  { title: "Release Sequence", color: "#22c55e", icon: Unlock, content: "To restore energy: Ensure equipment is reassembled, tools removed, guards replaced, and employees clear. Each authorized worker removes ONLY their own lock before the equipment is re-energized.", stat: "Reverse the LOTO steps", statSub: "only after all work is complete" },
+  { title: "What is LOTO?", color: "#f59e0b", icon: Lock, content: "Lockout/Tagout (LOTO) is a safety procedure that protects workers from unexpected energization, startup, or release of stored energy during servicing and maintenance of machinery.", stat: "120 workers killed annually", statSub: "when LOTO is bypassed (OSHA report)" },
+  { title: "Energy Types", color: "#8b5cf6", icon: Zap, content: "LOTO must address ALL 6 hazardous energy forms: Electrical, Pneumatic, Hydraulic, Mechanical (springs/flywheel/gravity), Thermal (steam/heaters), and Chemical.", stat: "6 energy types", statSub: "must ALL be completely neutralized" },
+  { title: "Who Is Authorized?", color: "#06b6d4", icon: Shield, content: "Authorized employees apply lockout/tagout. Affected employees operate equipment and must be notified. Other workers must maintain safe boundaries outside the perimeter.", stat: "3 worker roles", statSub: "Authorized · Affected · Other" },
+  { title: "Release Sequence", color: "#22c55e", icon: Unlock, content: "To restore energy: Ensure tools are removed, guards reinstalled, and workers clear. Each authorized specialist removes ONLY their own personal lock before re-energization.", stat: "Reverse steps 1 to 6", statSub: "only after all work is certified complete" },
 ];
 
 const CHECKLIST_ITEMS = [
@@ -62,48 +141,22 @@ const CHECKLIST_ITEMS = [
   { id: 16, category: "Verification", text: "All energy verification documented and signed", critical: false },
 ];
 
-import { LOTOMachineryVisualEngine, lotoAudio } from "./LOTOMachineryVisualEngine";
-
 const HARDWARE_TOOLS = [
-  [
-    { name: "Hazard Survey", icon: "📋" },
-    { name: "LOTO Permit PTW", icon: "📜" },
-    { name: "Arc Flash PPE", icon: "🦺" },
-  ],
-  [
-    { name: "Stop Pushbutton", icon: "🔴" },
-    { name: "Tachometer", icon: "⏱️" },
-    { name: "Ammeter", icon: "📟" },
-  ],
-  [
-    { name: "400A Knife Switch", icon: "🔌" },
-    { name: "Air Ball Valve", icon: "🚰" },
-    { name: "Air Gap Verification", icon: "↔️" },
-  ],
-  [
-    { name: "Master Lock 410", icon: "🔒" },
-    { name: "6-Hole Steel Hasp", icon: "⛓️" },
-    { name: "OSHA Danger Tag", icon: "🏷️" },
-  ],
-  [
-    { name: "Pneumatic Relief Valve", icon: "💨" },
-    { name: "DC Bleeder Resistor", icon: "⚡" },
-    { name: "Die Safety Block", icon: "🧱" },
-  ],
-  [
-    { name: "Fluke Multimeter", icon: "📟" },
-    { name: "CAT IV Probes", icon: "🥢" },
-    { name: "TRY Pushbutton", icon: "🔘" },
-  ],
+  [{ name: "Hazard Survey", icon: "📋" }, { name: "LOTO Permit PTW", icon: "📜" }, { name: "Arc Flash PPE", icon: "🦺" }],
+  [{ name: "Stop Pushbutton", icon: "🔴" }, { name: "Tachometer", icon: "⏱️" }, { name: "Ammeter", icon: "📟" }],
+  [{ name: "400A Knife Switch", icon: "🔌" }, { name: "Air Ball Valve", icon: "🚰" }, { name: "Air Gap Verification", icon: "↔️" }],
+  [{ name: "Master Lock 410", icon: "🔒" }, { name: "6-Hole Steel Hasp", icon: "⛓️" }, { name: "OSHA Danger Tag", icon: "🏷️" }],
+  [{ name: "Pneumatic Relief Valve", icon: "💨" }, { name: "DC Bleeder Resistor", icon: "⚡" }, { name: "Die Safety Block", icon: "🧱" }],
+  [{ name: "Fluke Multimeter", icon: "📟" }, { name: "CAT IV Probes", icon: "🥢" }, { name: "TRY Pushbutton", icon: "🔘" }],
 ];
 
-
-// === Main Component ===
 export function LOTOSimulator({ config }: { config?: UserConfig }) {
   const [activeTab, setActiveTab] = useState<TabId>("procedure");
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [learnCard, setLearnCard] = useState(0);
+
+  // Modals state
   const [showConsequenceModal, setShowConsequenceModal] = useState(false);
   const [showPermitModal, setShowPermitModal] = useState(false);
   const [showExamModal, setShowExamModal] = useState(false);
@@ -111,11 +164,52 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
   const [certScore, setCertScore] = useState(100);
   const [ambientHumEnabled, setAmbientHumEnabled] = useState(false);
 
-  // Ambient 60Hz transformer hum effect
+  // Checklist state
+  const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
+  const [checklistFilter, setChecklistFilter] = useState<string>("All");
+
+  // Quiz state
+  const [quizQuestions, setQuizQuestions] = useState<PreparedQuizQuestion[]>([]);
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(false);
+  const [screenShake, setScreenShake] = useState(false);
+  const [shortCircuitVFX, setShortCircuitVFX] = useState(false);
+  const [wrongVignette, setWrongVignette] = useState(false);
+  const [stepAnimTrigger, setStepAnimTrigger] = useState<number | null>(null);
+  const sparkCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // SHARED MACHINERY & ENERGY PHYSICS STATE
+  // Synchronized across Left Controls, Center Animations, and Right Gauges
+  // ════════════════════════════════════════════════════════════════════════════
+  const [inspectedSources, setInspectedSources] = useState<Set<string>>(new Set());
+  const [motorStopped, setMotorStopped] = useState(false);
+  const [motorRpm, setMotorRpm] = useState(1750);
+  const [motorAmps, setMotorAmps] = useState(68);
+  const [knifeSwitchOpen, setKnifeSwitchOpen] = useState(false);
+  const [pneumaticValveClosed, setPneumaticValveClosed] = useState(false);
+  const [haspApplied, setHaspApplied] = useState(false);
+  const [padlockApplied, setPadlockApplied] = useState(false);
+  const [dangerTagApplied, setDangerTagApplied] = useState(false);
+  const [airPressurePsi, setAirPressurePsi] = useState(120);
+  const [dcCapacitorVolts, setDcCapacitorVolts] = useState(680);
+  const [isBleedingAir, setIsBleedingAir] = useState(false);
+  const [isDischargingDC, setIsDischargingDC] = useState(false);
+  const [zeroVerifyPhase, setZeroVerifyPhase] = useState<0 | 1 | 2 | 3 | 4>(0);
+  const [probeVoltage, setProbeVoltage] = useState(0);
+  const [tryButtonPressed, setTryButtonPressed] = useState(false);
+
+  // Global manual interlock controls
+  const [mainsPower480V, setMainsPower480V] = useState(true);
+  const [pneumaticSupplyOpen, setPneumaticSupplyOpen] = useState(true);
+  const [gravityRamBlocked, setGravityRamBlocked] = useState(false);
+
+  // Ambient 60Hz hum audio handling
   useEffect(() => {
     if (ambientHumEnabled) {
-      // If Step 3 is completed or shutdown occurred, drop hum to silence
-      if (completedSteps.has(2)) {
+      if (knifeSwitchOpen || !mainsPower480V) {
         lotoAudio.stopAmbientHum();
       } else {
         lotoAudio.startAmbientHum();
@@ -126,47 +220,9 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
     return () => {
       lotoAudio.stopAmbientHum();
     };
-  }, [ambientHumEnabled, completedSteps]);
+  }, [ambientHumEnabled, knifeSwitchOpen, mainsPower480V]);
 
-  // View mode for Procedure: Visual Focus (70% machinery) vs Balanced (50% machinery)
-  const [viewMode, setViewMode] = useState<'visual' | 'balanced'>('visual');
-
-  // Checklist state
-  const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
-  const [checklistFilter, setChecklistFilter] = useState<string>("All");
-
-  // Quiz state (10 Questions of 10 Marks each out of 50 Question Bank)
-  const [quizQuestions, setQuizQuestions] = useState<PreparedQuizQuestion[]>([]);
-  const [quizIndex, setQuizIndex] = useState(0);
-  const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
-  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
-  const [quizSubmitted, setQuizSubmitted] = useState(false);
-  const [showExplanation, setShowExplanation] = useState(false);
-
-  // VFX State for Quiz wrong/correct answers
-  const [screenShake, setScreenShake] = useState(false);
-  const [shortCircuitVFX, setShortCircuitVFX] = useState(false);
-  const [wrongVignette, setWrongVignette] = useState(false);
-  const [correctPulse, setCorrectPulse] = useState(false);
-  const [floatingScore, setFloatingScore] = useState<string | null>(null);
-  const sparkCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // Step Completion Animation Trigger State
-  const [stepAnimTrigger, setStepAnimTrigger] = useState<number | null>(null);
-
-  const allDone = completedSteps.size >= LOTO_STEPS.length;
-  const step = LOTO_STEPS[currentStep];
-  const checkedCritical = CHECKLIST_ITEMS.filter(i => i.critical && checkedItems.has(i.id)).length;
-  const totalCritical = CHECKLIST_ITEMS.filter(i => i.critical).length;
-
-  const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
-    { id: "procedure", label: "Procedure", icon: Lock },
-    { id: "learn", label: "Learn", icon: BookOpen },
-    { id: "checklist", label: "Checklist", icon: ClipboardList },
-    { id: "quiz", label: "Quiz (100 Marks)", icon: HelpCircle },
-  ];
-
-  // Helper to initialize 10 random questions with shuffled options
+  // Initialize randomized quiz
   const initializeQuiz = useCallback(() => {
     const shuffledBank = [...LOTO_QUESTION_BANK].sort(() => 0.5 - Math.random());
     const sampled10 = shuffledBank.slice(0, 10);
@@ -174,8 +230,6 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
     const prepared: PreparedQuizQuestion[] = sampled10.map(q => {
       const originalOptions = [...q.options];
       const correctText = originalOptions[q.correctAnswer];
-      
-      // Shuffle 4 options
       const shuffledOptions = [...originalOptions].sort(() => 0.5 - Math.random());
       const newCorrectIndex = shuffledOptions.indexOf(correctText);
 
@@ -191,7 +245,6 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
 
     setQuizQuestions(prepared);
     setQuizIndex(0);
-    setSelectedQuizOption(null);
     setQuizAnswers({});
     setQuizSubmitted(false);
     setShowExplanation(false);
@@ -201,7 +254,7 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
     initializeQuiz();
   }, [initializeQuiz]);
 
-  // Keyboard navigation for LOTO steps
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (activeTab !== "procedure") return;
@@ -215,137 +268,292 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeTab]);
 
-  // Trigger Short Circuit Spark Canvas Effect on Wrong Quiz Answer
-  const triggerSparkAnimation = () => {
-    setShortCircuitVFX(true);
-    setScreenShake(true);
-    setWrongVignette(true);
-
-    const canvas = sparkCanvasRef.current;
-    if (!canvas) { setTimeout(() => { setShortCircuitVFX(false); setScreenShake(false); setWrongVignette(false); }, 500); return; }
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1);
-    canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1);
-    ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
-    const W = canvas.offsetWidth;
-    const H = canvas.offsetHeight;
-
-    let frame = 0;
-    const maxFrames = 25;
-
-    const drawLightning = () => {
-      ctx.clearRect(0, 0, W, H);
-
-      // Flash background red & white
-      if (frame < 6) {
-        ctx.fillStyle = frame % 2 === 0 ? 'rgba(239, 68, 68, 0.35)' : 'rgba(255, 255, 255, 0.15)';
-        ctx.fillRect(0, 0, W, H);
-      }
-
-      // Arcs
-      const cx = W / 2, cy = H / 2;
-      for (let i = 0; i < 7; i++) {
-        ctx.beginPath();
-        let px = cx + (Math.random() - 0.5) * 40;
-        let py = cy + (Math.random() - 0.5) * 40;
-        ctx.moveTo(px, py);
-
-        const tx = Math.random() * W;
-        const ty = Math.random() * H;
-        const segs = 5;
-        for (let j = 0; j < segs; j++) {
-          const nx = px + (tx - px) / (segs - j) + (Math.random() - 0.5) * 60;
-          const ny = py + (ty - py) / (segs - j) + (Math.random() - 0.5) * 60;
-          ctx.lineTo(nx, ny);
-          px = nx; py = ny;
-        }
-
-        ctx.strokeStyle = frame % 2 === 0 ? '#ef4444' : '#f97316';
-        ctx.lineWidth = 2 + Math.random() * 3;
-        ctx.stroke();
-      }
-
-      frame++;
-      if (frame < maxFrames) {
-        requestAnimationFrame(drawLightning);
-      } else {
-        ctx.clearRect(0, 0, W, H);
-        setShortCircuitVFX(false);
-        setScreenShake(false);
-        setTimeout(() => setWrongVignette(false), 300);
-      }
-    };
-    drawLightning();
+  // ════════════════════════════════════════════════════════════════════════════
+  // SYNCHRONIZED INTERACTIVE ACTION HANDLERS
+  // ════════════════════════════════════════════════════════════════════════════
+  const triggerStepCelebration = (stepIdx: number) => {
+    assessmentAudio.playCorrectChime();
+    setStepAnimTrigger(stepIdx);
+    setCompletedSteps(prev => new Set([...prev, stepIdx]));
+    setTimeout(() => setStepAnimTrigger(null), 500);
   };
 
-  function completeStep() {
-    assessmentAudio.playCorrectChime();
-    setStepAnimTrigger(currentStep);
-
-    setCompletedSteps(prev => {
-      const nextSet = new Set([...prev, currentStep]);
-      if (nextSet.size >= LOTO_STEPS.length) {
-        assessmentAudio.playQuizComplete();
+  // Step 1 Actions (Inspect plant energy sources)
+  const handleInspectSource = (id: string) => {
+    lotoAudio.playClick();
+    setInspectedSources(prev => {
+      const next = new Set([...prev, id]);
+      if (next.size >= 6) {
+        triggerStepCelebration(0);
       }
-      return nextSet;
+      return next;
     });
+  };
 
-    setTimeout(() => {
-      setStepAnimTrigger(null);
-      if (currentStep < LOTO_STEPS.length - 1) {
-        setCurrentStep(s => s + 1);
-      }
-    }, 450);
-  }
+  const handleInspectAllSources = () => {
+    lotoAudio.playClick();
+    setInspectedSources(new Set(["ELEC", "MECH", "PNEU", "HYDR", "CHEM", "THERM"]));
+    triggerStepCelebration(0);
+  };
 
-  function resetProcedure() {
+  // Step 2 Actions (Shutdown motor)
+  const handleStopMotor = () => {
+    if (motorStopped) return;
+    setMotorStopped(true);
+    lotoAudio.playSwitchClack();
+
+    const interval = setInterval(() => {
+      setMotorRpm(r => {
+        if (r <= 40) {
+          clearInterval(interval);
+          triggerStepCelebration(1);
+          return 0;
+        }
+        return Math.floor(r * 0.72);
+      });
+      setMotorAmps(a => (a <= 2 ? 0 : Math.floor(a * 0.65)));
+    }, 120);
+  };
+
+  // Step 3 Actions (Energy isolation)
+  const handleToggleKnifeSwitch = () => {
+    lotoAudio.playSwitchClack();
+    const next = !knifeSwitchOpen;
+    setKnifeSwitchOpen(next);
+    if (next && pneumaticValveClosed) {
+      triggerStepCelebration(2);
+    }
+  };
+
+  const handleToggleAirValve = () => {
+    lotoAudio.playAirHiss();
+    const next = !pneumaticValveClosed;
+    setPneumaticValveClosed(next);
+    if (knifeSwitchOpen && next) {
+      triggerStepCelebration(2);
+    }
+  };
+
+  const handleIsolateAll = () => {
+    lotoAudio.playSwitchClack();
+    setKnifeSwitchOpen(true);
+    setPneumaticValveClosed(true);
+    triggerStepCelebration(2);
+  };
+
+  // Step 4 Actions (Lockout / Tagout)
+  const handleApplyHasp = () => {
+    lotoAudio.playSwitchClack();
+    setHaspApplied(true);
+  };
+
+  const handleApplyPadlock = () => {
+    lotoAudio.playPadlockSnap();
+    setPadlockApplied(true);
+    if (dangerTagApplied) {
+      triggerStepCelebration(3);
+    }
+  };
+
+  const handleApplyTag = () => {
+    lotoAudio.playClick();
+    setDangerTagApplied(true);
+    if (padlockApplied) {
+      triggerStepCelebration(3);
+    }
+  };
+
+  const handleApplyAllLOTO = () => {
+    lotoAudio.playPadlockSnap();
+    setHaspApplied(true);
+    setPadlockApplied(true);
+    setDangerTagApplied(true);
+    triggerStepCelebration(3);
+  };
+
+  // Step 5 Actions (Bleed stored energy)
+  const handleBleedAir = () => {
+    if (isBleedingAir || airPressurePsi === 0) return;
+    setIsBleedingAir(true);
+    lotoAudio.playAirHiss();
+
+    const t = setInterval(() => {
+      setAirPressurePsi(p => {
+        if (p <= 5) {
+          clearInterval(t);
+          if (dcCapacitorVolts === 0) {
+            triggerStepCelebration(4);
+          }
+          return 0;
+        }
+        return p - 10;
+      });
+    }, 120);
+  };
+
+  const handleDischargeDC = () => {
+    if (isDischargingDC || dcCapacitorVolts === 0) return;
+    setIsDischargingDC(true);
+    lotoAudio.playSwitchClack();
+
+    const t = setInterval(() => {
+      setDcCapacitorVolts(v => {
+        if (v <= 20) {
+          clearInterval(t);
+          if (airPressurePsi === 0) {
+            triggerStepCelebration(4);
+          }
+          return 0;
+        }
+        return Math.floor(v * 0.75 - 5);
+      });
+    }, 120);
+  };
+
+  const handleBleedAllEnergy = () => {
+    handleBleedAir();
+    handleDischargeDC();
+  };
+
+  // Step 6 Actions (Zero energy verification Live-Dead-Live)
+  const handleProbeLive1 = () => {
+    lotoAudio.playMeterBeep();
+    setProbeVoltage(230.4);
+    setZeroVerifyPhase(1);
+  };
+
+  const handleProbeDead = () => {
+    lotoAudio.playMeterBeep();
+    setProbeVoltage(0.0);
+    setZeroVerifyPhase(2);
+  };
+
+  const handleProbeLive2 = () => {
+    lotoAudio.playMeterBeep();
+    setProbeVoltage(230.1);
+    setZeroVerifyPhase(3);
+  };
+
+  const handlePressTry = () => {
+    lotoAudio.playSwitchClack();
+    setZeroVerifyPhase(4);
+    setTryButtonPressed(true);
+    triggerStepCelebration(5);
+  };
+
+  const handleExecuteNextZeroTest = () => {
+    if (zeroVerifyPhase === 0) handleProbeLive1();
+    else if (zeroVerifyPhase === 1) handleProbeDead();
+    else if (zeroVerifyPhase === 2) handleProbeLive2();
+    else if (zeroVerifyPhase === 3) handlePressTry();
+  };
+
+  // Global reset
+  const resetProcedure = () => {
     assessmentAudio.playClick();
     setCurrentStep(0);
     setCompletedSteps(new Set());
     setStepAnimTrigger(null);
+    setInspectedSources(new Set());
+    setMotorStopped(false);
+    setMotorRpm(1750);
+    setMotorAmps(68);
+    setKnifeSwitchOpen(false);
+    setPneumaticValveClosed(false);
+    setHaspApplied(false);
+    setPadlockApplied(false);
+    setDangerTagApplied(false);
+    setAirPressurePsi(120);
+    setDcCapacitorVolts(680);
+    setIsBleedingAir(false);
+    setIsDischargingDC(false);
+    setZeroVerifyPhase(0);
+    setProbeVoltage(0);
+    setTryButtonPressed(false);
+    setMainsPower480V(true);
+    setPneumaticSupplyOpen(true);
+    setGravityRamBlocked(false);
+  };
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // COMPUTED TELEMETRY & SAFETY VERDICT
+  // ════════════════════════════════════════════════════════════════════════════
+  const liveFeederVoltage = (!mainsPower480V || knifeSwitchOpen) ? 0.0 : 480.0;
+  const liveAirPressure = pneumaticSupplyOpen ? airPressurePsi : Math.min(airPressurePsi, 0);
+  const allDone = completedSteps.size >= LOTO_STEPS.length;
+  const step = LOTO_STEPS[currentStep];
+
+  // Verdict state logic
+  const isZeroEnergyVerified = (zeroVerifyPhase === 4) && knifeSwitchOpen && padlockApplied && airPressurePsi === 0 && dcCapacitorVolts === 0;
+  const isStoredEnergyPresent = (knifeSwitchOpen || !mainsPower480V) && (airPressurePsi > 0 || dcCapacitorVolts > 0);
+  const isStoppedLive = motorStopped && liveFeederVoltage > 0;
+
+  let verdictTitle = "⚡ DANGER: HIGH HAZARD ENERGIZED";
+  let verdictSub = "480V 3-Phase & 120 PSI Active · Machine Running Under Load";
+  let verdictStyle = "bg-rose-950/70 border-rose-500/80 text-rose-100 shadow-[0_0_15px_rgba(244,63,94,0.3)]";
+
+  if (isZeroEnergyVerified) {
+    verdictTitle = "🛡️ ZERO ENERGY VERIFIED (ZVE)";
+    verdictSub = "All 6 Sources Positively Isolated & Verified · 100% Safe to Work";
+    verdictStyle = "bg-emerald-950/70 border-emerald-500/80 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.3)]";
+  } else if (haspApplied && padlockApplied && airPressurePsi === 0 && dcCapacitorVolts === 0) {
+    verdictTitle = "🔒 LOCKED & BLED (AWAITING VERIFY)";
+    verdictSub = "Locked & Depressurized · Perform Step 6 Live-Dead-Live Probing";
+    verdictStyle = "bg-cyan-950/70 border-cyan-500/80 text-cyan-100 shadow-[0_0_15px_rgba(6,182,212,0.3)]";
+  } else if (isStoredEnergyPresent) {
+    verdictTitle = "⚠️ STORED ENERGY HAZARD ACTIVE";
+    verdictSub = `Feeder Disconnected · Residual Charge: ${dcCapacitorVolts}V DC & ${airPressurePsi} PSI`;
+    verdictStyle = "bg-amber-950/70 border-amber-500/80 text-amber-100 shadow-[0_0_15px_rgba(245,158,11,0.3)]";
+  } else if (isStoppedLive) {
+    verdictTitle = "⚡ STOPPED BUT LIVE (480V AT MCC)";
+    verdictSub = "Motor Stopped via Normal Controls Only · 480V Feeder Fully Live!";
+    verdictStyle = "bg-red-950/70 border-red-500/80 text-red-100 shadow-[0_0_15px_rgba(239,68,68,0.3)]";
   }
 
+  // Quiz helper
   const handleQuizAnswerSubmit = (optionIndex: number) => {
     if (quizAnswers[quizIndex] !== undefined) return;
-
     const currentQ = quizQuestions[quizIndex];
     const isCorrect = optionIndex === currentQ.correctAnswer;
-
     setQuizAnswers(prev => ({ ...prev, [quizIndex]: optionIndex }));
     setShowExplanation(true);
 
     if (isCorrect) {
-      setCorrectPulse(true);
-      setTimeout(() => setCorrectPulse(false), 700);
-      setFloatingScore("+10 MARKS!");
-      setTimeout(() => setFloatingScore(null), 1200);
       assessmentAudio.playCorrectChime();
     } else {
       assessmentAudio.playShortCircuitZap();
-      triggerSparkAnimation();
-      setFloatingScore("⚡ WRONG (0 Marks)");
-      setTimeout(() => setFloatingScore(null), 1200);
+      setShortCircuitVFX(true);
+      setScreenShake(true);
+      setWrongVignette(true);
+      setTimeout(() => {
+        setShortCircuitVFX(false);
+        setScreenShake(false);
+        setWrongVignette(false);
+      }, 500);
     }
   };
 
-  // Calculate total marks (10 questions x 10 marks = 100 Marks max)
   const totalQuizMarks = Object.entries(quizAnswers).reduce((acc, [qi, chosenOpt]) => {
     const q = quizQuestions[+qi];
     return acc + (q && chosenOpt === q.correctAnswer ? 10 : 0);
   }, 0);
 
+  const checkedCritical = CHECKLIST_ITEMS.filter(i => i.critical && checkedItems.has(i.id)).length;
+  const totalCritical = CHECKLIST_ITEMS.filter(i => i.critical).length;
+
   return (
-    <div className="flex flex-col h-full bg-slate-950 overflow-hidden text-slate-100 relative">
-      {/* Short Circuit Spark Overlay Canvas */}
+    <div className={cn(
+      "flex flex-col h-full w-full bg-slate-950 overflow-hidden text-slate-100 relative select-none",
+      screenShake ? "animate-[shake_0.4s_ease-in-out]" : ""
+    )}>
+      {/* Short circuit flash canvas */}
       <canvas
         ref={sparkCanvasRef}
         className={cn("absolute inset-0 z-50 pointer-events-none w-full h-full", shortCircuitVFX ? "opacity-100" : "opacity-0")}
         style={{ width: '100%', height: '100%' }}
       />
 
-      {/* Wrong Answer Danger Vignette */}
+      {/* Wrong answer vignette overlay */}
       <AnimatePresence>
         {wrongVignette && (
           <motion.div
@@ -359,463 +567,839 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
         )}
       </AnimatePresence>
 
-      {/* Top Header */}
-      <div className="shrink-0 flex items-center justify-between px-3 pt-2 pb-1.5 border-b border-slate-800/80 bg-slate-900/90 z-20">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-orange-500/20 border border-orange-500/50 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(249,115,22,0.3)]">
-            <Lock className="w-4 h-4 text-orange-400" />
+      {/* ════════════════════════════════════════════════════════════════════════
+          1. COCKPIT HEADER BAR (42px)
+          Compact, high-tech, responsive header with mode pills & actions
+      ════════════════════════════════════════════════════════════════════════ */}
+      <header className="h-[42px] shrink-0 px-2 sm:px-3 border-b border-slate-800 bg-slate-900/95 flex items-center justify-between gap-1 text-xs font-bold font-mono z-30">
+        {/* Left: Brand Title & OSHA standard */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="w-6 h-6 rounded-lg bg-orange-500/20 border border-orange-500/50 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(249,115,22,0.3)]">
+            <Lock className="w-3.5 h-3.5 text-orange-400" />
           </div>
-          <div className="min-w-0">
-            <h2 className="text-xs md:text-sm font-black uppercase tracking-wider text-white leading-none truncate flex items-center gap-1.5">
-              LOTO Procedure Simulator
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-500/20 border border-orange-500/40 text-orange-300 font-mono">OSHA 1910.147</span>
-            </h2>
-            <p className="text-[9px] text-slate-400 font-mono truncate mt-0.5">Control of Hazardous Energy · High-Voltage Safety Protocol</p>
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-xs sm:text-sm font-black uppercase tracking-wider text-white flex items-center gap-1 leading-none">
+              LOTO PRO™
+              <span className="hidden sm:inline-block text-[9px] px-1.5 py-0.5 rounded bg-orange-500/20 border border-orange-500/40 text-orange-300 font-mono">
+                OSHA 1910.147 · NFPA 70E
+              </span>
+            </h1>
           </div>
         </div>
 
-        {/* Global Prominent Actions in Header */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          {/* Ambient 60Hz Sound Toggle */}
+        {/* Center: Mode Tabs */}
+        <div className="flex items-center bg-slate-950 p-0.5 rounded-xl border border-slate-800 text-[10px] sm:text-xs shrink-0">
           <button
-            onClick={() => {
-              const next = !ambientHumEnabled;
-              setAmbientHumEnabled(next);
-              if (!next) lotoAudio.stopAmbientHum();
-              else if (!completedSteps.has(2)) lotoAudio.startAmbientHum();
-            }}
+            onClick={() => setActiveTab("procedure")}
             className={cn(
-              "flex items-center gap-1 px-2 py-1.5 rounded-xl border text-[11px] font-black uppercase tracking-wider cursor-pointer shadow-md transition-all active:scale-95",
-              ambientHumEnabled
-                ? "bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
-                : "bg-slate-900 border-slate-700 text-slate-400 hover:text-white"
+              "px-2 sm:px-2.5 py-1 rounded-lg font-bold uppercase transition-all cursor-pointer flex items-center gap-1",
+              activeTab === "procedure" ? "bg-orange-500 text-slate-950 font-black shadow" : "text-slate-400 hover:text-white"
             )}
-            title="Toggle 60Hz Industrial Ambiance Hum"
           >
-            {ambientHumEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-400 animate-pulse" /> : <VolumeX className="w-3.5 h-3.5" />}
+            <Lock className="w-3 h-3" />
+            <span>Simulator</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("learn")}
+            className={cn(
+              "px-2 sm:px-2.5 py-1 rounded-lg font-bold uppercase transition-all cursor-pointer flex items-center gap-1",
+              activeTab === "learn" ? "bg-orange-500 text-slate-950 font-black shadow" : "text-slate-400 hover:text-white"
+            )}
+          >
+            <BookOpen className="w-3 h-3" />
+            <span className="hidden sm:inline">Theory</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("checklist")}
+            className={cn(
+              "px-2 sm:px-2.5 py-1 rounded-lg font-bold uppercase transition-all cursor-pointer flex items-center gap-1",
+              activeTab === "checklist" ? "bg-orange-500 text-slate-950 font-black shadow" : "text-slate-400 hover:text-white"
+            )}
+          >
+            <ClipboardList className="w-3 h-3" />
+            <span className="hidden sm:inline">Checklist</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("quiz")}
+            className={cn(
+              "px-2 sm:px-2.5 py-1 rounded-lg font-bold uppercase transition-all cursor-pointer flex items-center gap-1",
+              activeTab === "quiz" ? "bg-orange-500 text-slate-950 font-black shadow" : "text-slate-400 hover:text-white"
+            )}
+          >
+            <HelpCircle className="w-3 h-3" />
+            <span>Quiz</span>
+          </button>
+        </div>
+
+        {/* Right: Quick Tools (Sound, Reset, Cert) */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => setAmbientHumEnabled(v => !v)}
+            className={cn(
+              "px-2 py-1 rounded-lg border text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center gap-1",
+              ambientHumEnabled ? "bg-amber-500/20 border-amber-500 text-amber-300" : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
+            )}
+            title="Toggle 60Hz transformer sound"
+          >
+            {ambientHumEnabled ? <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" /> : <VolumeX className="w-3 h-3" />}
             <span className="hidden md:inline">60Hz</span>
           </button>
 
-          {/* LOTO Permit (PTW) Generator */}
-          <button
-            onClick={() => setShowPermitModal(true)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-blue-500/50 bg-blue-950/40 hover:bg-blue-900/60 text-blue-300 hover:text-white text-[11px] font-black uppercase tracking-wider cursor-pointer shadow-md transition-all active:scale-95"
-            title="Generate & View OSHA Hazardous Energy Permit-to-Work (PTW)"
-          >
-            <FileText className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden sm:inline">PTW Permit</span>
-          </button>
-
-          {/* Timed Practical Exam (120s) */}
-          <button
-            onClick={() => setShowExamModal(true)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-red-500/50 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white text-[11px] font-black uppercase tracking-wider cursor-pointer shadow-md transition-all active:scale-95"
-            title="Launch High-Stakes Timed Practical Exam (120s)"
-          >
-            <Timer className="w-3.5 h-3.5 text-red-400" />
-            <span className="hidden sm:inline">Practical Exam</span>
-          </button>
-
-          {/* Safety Certificate Button */}
-          <button
-            onClick={() => {
-              setCertScore(allDone ? 100 : Math.max(certScore, 85));
-              setShowCertModal(true);
-            }}
-            className="flex items-center gap-1 px-2 py-1.5 rounded-xl border border-amber-500/50 bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 hover:text-white text-[11px] font-black uppercase tracking-wider cursor-pointer shadow-md transition-all active:scale-95"
-            title="View Accredited OSHA 1910.147 Authorized Employee Certificate"
-          >
-            <Award className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden lg:inline">Certificate</span>
-          </button>
-
-          {/* Reset Button */}
           <button
             onClick={resetProcedure}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-red-950/40 hover:border-red-500/60 text-slate-200 hover:text-red-300 transition-all text-[11px] font-black uppercase tracking-wider cursor-pointer shadow-md active:scale-95"
-            title="Reset procedure from Step 1"
+            className="px-2 py-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-red-950/40 hover:border-red-500/60 text-slate-200 hover:text-red-300 text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center gap-1"
+            title="Reset Procedure to Step 1"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-orange-400" />
-            <span className="hidden xl:inline">Reset</span>
+            <RotateCcw className="w-3 h-3 text-orange-400" />
+            <span className="hidden lg:inline">Reset</span>
           </button>
-
-          {allDone && activeTab === "procedure" && (
-            <motion.button
-              onClick={() => {
-                setCertScore(100);
-                setShowCertModal(true);
-              }}
-              className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0 cursor-pointer hover:bg-emerald-500/30 transition-all"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              title="Claim Safety Certificate"
-            >
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-[9.5px] font-black text-emerald-300 uppercase tracking-wide">All Done!</span>
-            </motion.button>
-          )}
         </div>
-      </div>
+      </header>
 
-      {/* Tabs */}
-      <div className="shrink-0 flex border-b border-slate-800 px-1 gap-1 bg-slate-950 shadow-md z-20">
-        {TABS.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={cn("flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-[10px] md:text-xs font-black uppercase tracking-wider border border-transparent transition-all cursor-pointer flex-1 justify-center",
-              activeTab === tab.id 
-                ? "bg-gradient-to-b from-orange-500/30 to-orange-500/10 border-orange-500/70 text-orange-300 border-b-transparent shadow-lg" 
-                : "text-slate-400 hover:text-white hover:bg-slate-900 border-b-transparent")}>
-            <tab.icon className="w-3.5 h-3.5 shrink-0" />
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Content Area */}
-      <div className="flex-1 min-h-0 overflow-hidden z-20">
+      {/* ════════════════════════════════════════════════════════════════════════
+          2. MAIN CONTENT AREA (ZERO SCROLLBARS)
+      ════════════════════════════════════════════════════════════════════════ */}
+      <div className="flex-1 min-h-0 w-full h-full overflow-hidden relative">
         <AnimatePresence mode="wait">
 
-          {/* === PROCEDURE TAB (ZERO SCROLL FIT FOR MOBILE & LAPTOP) === */}
+          {/* ══════════════════════════════════════════════════════════════════
+              A. PROCEDURE TAB: STRICT 3-COLUMN WORLD-CLASS SIMULATOR
+          ══════════════════════════════════════════════════════════════════ */}
           {activeTab === "procedure" && (
-            <motion.div key="procedure" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="relative flex flex-col h-full overflow-hidden p-2 gap-2 bg-slate-950">
-
-              {/* STEP COMPLETION ANIMATED CELEBRATION OVERLAY */}
-              <AnimatePresence>
-                {stepAnimTrigger !== null && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center bg-emerald-950/20 backdrop-blur-[2px]"
-                  >
-                    <motion.div
-                      initial={{ scale: 0.5, opacity: 0 }}
-                      animate={{ scale: [0.8, 1.2, 1], opacity: 1 }}
-                      transition={{ duration: 0.4, type: "spring" }}
-                      className="flex flex-col items-center gap-2 p-6 rounded-2xl bg-slate-900/90 border-2 border-emerald-500 shadow-[0_0_40px_rgba(16,185,129,0.5)]"
-                    >
-                      <div className="w-16 h-16 rounded-full bg-emerald-500 flex items-center justify-center text-slate-950 shadow-lg">
-                        <CheckCircle className="w-10 h-10" />
-                      </div>
-                      <span className="text-lg font-black text-emerald-300 uppercase tracking-widest">
-                        Step {stepAnimTrigger + 1} Verified & Completed!
-                      </span>
-                      <span className="text-xs text-slate-300 font-mono">
-                        {LOTO_STEPS[stepAnimTrigger].title}
-                      </span>
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* TOP STEPPER BAR (STEPS 1 TO 6) */}
-              <div className="shrink-0 bg-slate-900/90 border border-slate-800 rounded-xl p-2 shadow-md">
-                <div className="flex items-center justify-between mb-1.5 text-[10px] md:text-xs font-mono">
-                  <span className="font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-                    Step {currentStep + 1} of 6: <span className="underline decoration-2" style={{ color: step.color }}>{step.title}</span>
-                  </span>
-                  <span className="font-black text-orange-400 bg-orange-950/40 px-2 py-0.5 rounded border border-orange-500/30">
-                    {completedSteps.size}/6 Completed
-                  </span>
-                </div>
-
-                {/* Step Pills Row */}
-                <div className="grid grid-cols-6 gap-1.5">
-                  {LOTO_STEPS.map((s, i) => {
-                    const isActive = i === currentStep;
-                    const isDone = completedSteps.has(i);
-                    const isJustDone = stepAnimTrigger === i;
-
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => setCurrentStep(i)}
-                        className={cn(
-                          "flex flex-col items-center justify-center py-1.5 px-1 rounded-xl border text-center transition-all cursor-pointer relative overflow-hidden active:scale-95",
-                          isActive
-                            ? "bg-slate-800 border-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.35)] ring-1 ring-orange-400/50"
-                            : isDone
-                              ? "bg-emerald-950/40 border-emerald-500/60 text-emerald-300"
-                              : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-600 hover:text-white"
-                        )}
-                      >
-                        {isJustDone && (
-                          <motion.div
-                            className="absolute inset-0 bg-emerald-500/30"
-                            initial={{ opacity: 1 }}
-                            animate={{ opacity: 0 }}
-                            transition={{ duration: 0.5 }}
-                          />
-                        )}
-                        <div className="flex items-center gap-1">
-                          {isDone ? (
-                            <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          ) : (
-                            <span className="text-xs font-black font-mono" style={{ color: isActive ? s.color : "#cbd5e1" }}>{i + 1}</span>
-                          )}
-                          <span className="hidden sm:inline text-[9.5px] font-black truncate max-w-[60px]" style={{ color: isActive ? s.color : isDone ? "#86efac" : "#e2e8f0" }}>
-                            {s.shortTitle}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* MAIN ACTIVE STEP VIEWPORT */}
-              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2 overflow-hidden">
-                {/* SVG ANIMATED INTERACTIVE SCENE PANEL */}
-                <div className={cn(
-                  "flex flex-col min-h-0 overflow-hidden bg-slate-900/80 border border-slate-800 rounded-xl p-2 shadow-md transition-all duration-300",
-                  viewMode === 'visual' ? "lg:col-span-8 xl:col-span-8" : "lg:col-span-6"
-                )}>
-                  <div className="flex items-center justify-between shrink-0 mb-1 px-0.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border truncate"
-                        style={{ color: step.color, borderColor: step.color + "90", backgroundColor: step.color + "25" }}>
-                        Diagram · Step {currentStep + 1}: {step.shortTitle}
-                      </span>
-                      <span className={cn("text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider border shadow-sm shrink-0",
-                        step.hazardLevel === "Critical" ? "text-red-300 border-red-500/60 bg-red-950/60" : step.hazardLevel === "High" ? "text-amber-300 border-amber-500/60 bg-amber-950/60" : "text-emerald-300 border-emerald-500/60 bg-emerald-950/60")}>
-                        {step.hazardLevel} Hazard
-                      </span>
-                    </div>
-
-                    {/* View Mode Toggle: Visual Focus (70%) vs Balanced (50%) */}
-                    <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800 shrink-0">
-                      <button
-                        onClick={() => setViewMode('visual')}
-                        className={cn(
-                          "px-2 py-0.5 rounded text-[9.5px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer",
-                          viewMode === 'visual'
-                            ? "bg-orange-500 text-slate-950 shadow-sm"
-                            : "text-slate-400 hover:text-white"
-                        )}
-                        title="Visual Simulator Mode (Expanded High-Definition Machinery Focus)"
-                      >
-                        📺 Visual Focus (70%)
-                      </button>
-                      <button
-                        onClick={() => setViewMode('balanced')}
-                        className={cn(
-                          "px-2 py-0.5 rounded text-[9.5px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer",
-                          viewMode === 'balanced'
-                            ? "bg-orange-500 text-slate-950 shadow-sm"
-                            : "text-slate-400 hover:text-white"
-                        )}
-                        title="Balanced Mode (50% Machinery / 50% Protocol Specs)"
-                      >
-                        ⚖ Balanced
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 min-h-0 bg-slate-950 border border-slate-800 rounded-lg relative flex flex-col items-center justify-center overflow-hidden">
-                    <LOTOMachineryVisualEngine
-                      step={currentStep}
-                      isCompleted={completedSteps.has(currentStep)}
-                      color={step.color}
-                      onStepAccomplished={(idx) => {
-                        setCompletedSteps(prev => new Set([...prev, idx]));
-                      }}
-                    />
-                  </div>
-
-                  {/* Hardware Tool Dock Bar (Interactive) */}
-                  <div className="shrink-0 mt-1 pt-1 border-t border-slate-800/80 flex items-center justify-between gap-1.5 px-2 py-0.5 bg-slate-950/70 rounded-lg">
-                    <span className="text-[9px] font-mono font-black uppercase text-slate-400 shrink-0 hidden sm:inline">
-                      Hardware Dock:
+            <motion.div
+              key="procedure"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="w-full h-full flex flex-col lg:flex-row overflow-hidden select-none"
+            >
+              {/* ────────────────────────────────────────────────────────────
+                  LEFT COLUMN: INPUTS & CONTROLS (ZERO SCROLLBARS)
+              ──────────────────────────────────────────────────────────── */}
+              <aside className="w-full lg:w-72 xl:w-76 shrink-0 h-full overflow-hidden p-2 bg-slate-900/95 border-r border-slate-800 flex flex-col justify-between select-none">
+                
+                {/* Section 1: 6 LOTO Steps Selector */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                      1. LOTO 6-STEP PROTOCOL
                     </span>
-                    <div className="flex-1 flex items-center justify-end gap-1.5 overflow-x-auto no-scrollbar">
-                      {HARDWARE_TOOLS[currentStep]?.map((t, ti) => (
+                    <span className="text-[9px] font-bold text-orange-400 font-mono">
+                      {completedSteps.size}/6 DONE
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 lg:grid-cols-1 gap-1">
+                    {LOTO_STEPS.map((s, idx) => {
+                      const isActive = idx === currentStep;
+                      const isDone = completedSteps.has(idx);
+                      const StepIcon = s.icon;
+
+                      return (
                         <button
-                          key={ti}
-                          onClick={() => {
-                            assessmentAudio.playClick();
-                            completeStep();
-                          }}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 hover:bg-orange-950/60 border border-slate-700/80 hover:border-orange-500/60 text-[9.5px] font-bold text-slate-200 hover:text-orange-300 shadow-sm whitespace-nowrap cursor-pointer transition-all active:scale-95"
-                          title={`Equip and apply ${t.name}`}
+                          key={s.id}
+                          onClick={() => setCurrentStep(idx)}
+                          className={cn(
+                            "w-full text-left p-1.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-1.5 relative overflow-hidden",
+                            isActive
+                              ? "bg-slate-850 border-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.3)] ring-1 ring-orange-400/60"
+                              : isDone
+                              ? "bg-emerald-950/40 border-emerald-500/50 text-emerald-300"
+                              : "bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300"
+                          )}
                         >
-                          <span>{t.icon}</span>
-                          <span>{t.name}</span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div
+                              className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 shadow-sm"
+                              style={{ backgroundColor: s.color + "25", border: `1px solid ${s.color}60` }}
+                            >
+                              <StepIcon className="w-3 h-3" style={{ color: s.color }} />
+                            </div>
+                            <div className="min-w-0 leading-tight">
+                              <div className="text-[10px] font-bold truncate text-white">
+                                {s.shortTitle}
+                              </div>
+                              <div className="text-[8px] text-slate-400 font-sans truncate">
+                                {s.title}
+                              </div>
+                            </div>
+                          </div>
+
+                          {isDone ? (
+                            <span className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black flex items-center justify-center shrink-0">
+                              ✓
+                            </span>
+                          ) : (
+                            <span className="text-[8px] font-mono text-slate-400 font-bold">
+                              P{idx + 1}
+                            </span>
+                          )}
                         </button>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
                 </div>
 
-                {/* FOCUSED STEP DETAILS PANEL (ZERO-SCROLL BALANCED LAYOUT) */}
-                <div className={cn(
-                  "flex flex-col justify-between min-h-0 overflow-hidden bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 gap-2 shadow-md transition-all duration-300",
-                  viewMode === 'visual' ? "lg:col-span-4 xl:col-span-4" : "lg:col-span-6"
-                )}>
-                  
-                  {/* Top: Step Directive Header */}
-                  <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col gap-1 shrink-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ backgroundColor: step.color }} />
-                        <span className="text-xs font-black uppercase text-white tracking-wide truncate">
-                          Step {step.id}: {step.title} Directive
-                        </span>
-                      </div>
-                      <span className="text-[9px] font-mono text-orange-400 uppercase bg-orange-950/60 px-1.5 py-0.5 rounded border border-orange-500/30 shrink-0">
-                        {step.regulation}
-                      </span>
-                    </div>
-                    <p className="text-[10.5px] text-slate-200 leading-snug font-sans">
-                      {step.desc}
-                    </p>
+                {/* Section 2: Active Step Direct Action Controls */}
+                <div className="pt-1.5 border-t border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                      <span>⚡</span> ACTIVE STEP {currentStep + 1} CONTROLS
+                    </span>
+                    <span className="text-[8px] font-mono text-slate-400 uppercase">
+                      {step.regulation}
+                    </span>
                   </div>
 
-                  {/* Middle: Adaptive Protocol Checklist and Fatal Mistake Alert */}
-                  <div className={cn(
-                    "flex-1 min-h-0 overflow-hidden gap-2",
-                    viewMode === 'visual' ? "flex flex-col justify-between" : "grid grid-cols-1 sm:grid-cols-12"
-                  )}>
-                    {/* Mandatory Safety Actions */}
-                    <div className={cn(
-                      "p-2 rounded-xl bg-slate-950/90 border border-slate-800 flex flex-col justify-between overflow-hidden min-h-0",
-                      viewMode === 'visual' ? "flex-1" : "sm:col-span-7"
-                    )}>
-                      <div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block mb-1">
-                          Mandatory Safety Protocol
-                        </span>
-                        <div className="space-y-1 overflow-y-auto pr-1 no-scrollbar" style={{ maxHeight: viewMode === 'visual' ? '120px' : '150px' }}>
-                          {step.keyPoints.map((pt, i) => (
-                            <div key={i} className="flex items-start gap-1.5">
-                              <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-emerald-400" />
-                              <span className="text-[10.5px] text-slate-200 leading-tight">{pt}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="pt-1 border-t border-slate-800/80 text-[8.5px] font-mono text-slate-400 flex items-center justify-between shrink-0">
-                        <span>Zero-Energy Verified</span>
-                        <span className="text-emerald-400 font-bold">REQUIRED</span>
-                      </div>
-                    </div>
-
-                    {/* Fatal Mistake Alert */}
-                    <div className={cn(
-                      "p-2 rounded-xl border border-red-500/40 bg-red-950/30 flex flex-col justify-between overflow-hidden min-h-0",
-                      viewMode === 'visual' ? "shrink-0" : "sm:col-span-5"
-                    )}>
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-0.5 text-red-400">
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                          <span className="text-[10px] font-black uppercase tracking-wider">Fatal Mistake</span>
-                        </div>
-                        <p className="text-[10px] text-red-200 leading-tight line-clamp-2">
-                          {step.warning}
-                        </p>
-                        <button
-                          onClick={() => setShowConsequenceModal(true)}
-                          className="w-full mt-1 py-1 px-1.5 rounded-md border border-red-500/60 bg-red-950/80 hover:bg-red-900 text-red-200 hover:text-white transition-all text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-sm active:scale-95"
-                          title="Simulate what happens if this step is skipped"
-                        >
-                          <Skull className="w-3 h-3 text-red-400 shrink-0" />
-                          <span>Simulate Failure</span>
-                        </button>
-                      </div>
-
-                      <div className="pt-0.5 border-t border-red-500/20 text-[8px] font-mono text-red-400/80 flex items-center justify-between">
-                        <span>OSHA Standard</span>
-                        <span className="text-[7.5px] bg-red-950 px-1 py-0.2 rounded border border-red-800 text-red-300">CRITICAL</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bottom: Action Controls Bar */}
-                  <div className="shrink-0 pt-1.5 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
+                  {/* Step 0 Actions: Survey & Identify */}
+                  {currentStep === 0 && (
+                    <div className="space-y-1">
                       <button
-                        disabled={currentStep === 0}
-                        onClick={() => setCurrentStep(s => s - 1)}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-200 hover:text-white border border-slate-700 bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all uppercase shadow-md active:scale-95"
+                        onClick={handleInspectAllSources}
+                        className="w-full py-1.5 px-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10.5px] uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95 flex items-center justify-center gap-1"
                       >
-                        <ChevronLeft className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Prev</span>
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Identify All 6 Energy Sources</span>
                       </button>
-
-                      <button
-                        onClick={resetProcedure}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:text-red-300 hover:bg-red-950/40 hover:border-red-500/50 cursor-pointer transition-all text-xs font-bold uppercase tracking-wider shadow-md active:scale-95"
-                        title="Reset All Steps"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5 text-orange-400" />
-                        <span className="hidden sm:inline">Reset</span>
-                      </button>
+                      <div className="grid grid-cols-3 gap-1">
+                        {[
+                          { id: "ELEC", name: "480V AC" },
+                          { id: "PNEU", name: "120 PSI" },
+                          { id: "MECH", name: "Gravity" },
+                          { id: "HYDR", name: "Hydr Ram" },
+                          { id: "CHEM", name: "Chemical" },
+                          { id: "THERM", name: "Thermal" },
+                        ].map(src => {
+                          const isDone = inspectedSources.has(src.id);
+                          return (
+                            <button
+                              key={src.id}
+                              onClick={() => handleInspectSource(src.id)}
+                              className={cn(
+                                "py-1 px-1 rounded text-[8.5px] font-bold border transition-all cursor-pointer truncate",
+                                isDone ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-slate-950 border-slate-800 text-slate-400"
+                              )}
+                            >
+                              {isDone ? "✓ " : ""}{src.name}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
+                  )}
 
-                    {!allDone ? (
-                      <motion.button
-                        onClick={completeStep}
-                        whileTap={{ scale: 0.95 }}
-                        whileHover={{ scale: 1.02 }}
+                  {/* Step 1 Actions: Equipment Shutdown */}
+                  {currentStep === 1 && (
+                    <div className="space-y-1">
+                      <button
+                        onClick={handleStopMotor}
                         className={cn(
-                          "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-black text-xs md:text-sm uppercase tracking-wider cursor-pointer border transition-all shadow-[0_0_15px_rgba(249,115,22,0.3)] active:scale-95 text-slate-950",
-                          completedSteps.has(currentStep)
-                            ? "bg-gradient-to-r from-emerald-400 to-teal-400 border-emerald-300 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.35)]"
-                            : "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 border-amber-300"
+                          "w-full py-2 px-2 rounded-lg font-black text-[11px] uppercase tracking-wider transition-all cursor-pointer shadow-md active:scale-95 flex items-center justify-center gap-1.5",
+                          motorStopped && motorRpm === 0
+                            ? "bg-emerald-500 text-slate-950 border border-emerald-300"
+                            : "bg-red-600 hover:bg-red-500 text-white animate-pulse"
                         )}
                       >
-                        <CheckCircle className="w-4 h-4 shrink-0" />
-                        {completedSteps.has(currentStep) ? "Step Verified ✓" : `Complete Step ${currentStep + 1}`}
-                      </motion.button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setCertScore(100);
-                          setShowCertModal(true);
-                        }}
-                        className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-black text-xs md:text-sm uppercase tracking-wider bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 hover:brightness-110 border border-emerald-300 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-pointer active:scale-95 transition-all"
-                        title="Click to view and print official accredited LOTO Certificate"
-                      >
-                        <Award className="w-4 h-4" /> LOTO Completed · Claim Certificate!
+                        <Power className="w-4 h-4" />
+                        <span>{motorStopped && motorRpm === 0 ? "✓ MOTOR STOPPED (0 RPM)" : "🔴 PUSH EMERGENCY STOP"}</span>
                       </button>
-                    )}
+                      <div className="flex items-center justify-between text-[9px] font-mono px-1 text-slate-400">
+                        <span>Speed: {motorRpm} RPM</span>
+                        <span>Current: {motorAmps.toFixed(1)} A</span>
+                      </div>
+                    </div>
+                  )}
 
+                  {/* Step 2 Actions: Energy Isolation */}
+                  {currentStep === 2 && (
+                    <div className="space-y-1">
+                      <div className="grid grid-cols-2 gap-1">
+                        <button
+                          onClick={handleToggleKnifeSwitch}
+                          className={cn(
+                            "py-1.5 px-1 rounded-lg border font-bold text-[9.5px] transition-all cursor-pointer flex flex-col items-center justify-center leading-tight",
+                            knifeSwitchOpen ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-violet-950/80 border-violet-500 text-violet-200"
+                          )}
+                        >
+                          <span>400A SWITCH</span>
+                          <span className="text-[7.5px] font-black">{knifeSwitchOpen ? "✓ OPEN (AIR GAP)" : "👉 PULL LEVER"}</span>
+                        </button>
+                        <button
+                          onClick={handleToggleAirValve}
+                          className={cn(
+                            "py-1.5 px-1 rounded-lg border font-bold text-[9.5px] transition-all cursor-pointer flex flex-col items-center justify-center leading-tight",
+                            pneumaticValveClosed ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-cyan-950/80 border-cyan-500 text-cyan-200"
+                          )}
+                        >
+                          <span>AIR VALVE 90°</span>
+                          <span className="text-[7.5px] font-black">{pneumaticValveClosed ? "✓ CLOSED" : "👉 TURN 90°"}</span>
+                        </button>
+                      </div>
+                      <button
+                        onClick={handleIsolateAll}
+                        className="w-full py-1 rounded bg-violet-600 hover:bg-violet-500 text-white font-black text-[9.5px] uppercase tracking-wider transition-all cursor-pointer active:scale-95"
+                      >
+                        ⚡ Isolate Both Simultaneously
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Step 3 Actions: Lockout & Tagout */}
+                  {currentStep === 3 && (
+                    <div className="space-y-1">
+                      <div className="grid grid-cols-3 gap-1">
+                        <button
+                          onClick={handleApplyHasp}
+                          className={cn(
+                            "py-1 px-0.5 rounded text-[8.5px] font-bold border transition-all cursor-pointer text-center",
+                            haspApplied ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-slate-950 border-slate-750 text-slate-300"
+                          )}
+                        >
+                          1. Hasp {haspApplied ? "✓" : "👉"}
+                        </button>
+                        <button
+                          onClick={handleApplyPadlock}
+                          className={cn(
+                            "py-1 px-0.5 rounded text-[8.5px] font-bold border transition-all cursor-pointer text-center",
+                            padlockApplied ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-slate-950 border-slate-750 text-slate-300"
+                          )}
+                        >
+                          2. Lock {padlockApplied ? "✓" : "👉"}
+                        </button>
+                        <button
+                          onClick={handleApplyTag}
+                          className={cn(
+                            "py-1 px-0.5 rounded text-[8.5px] font-bold border transition-all cursor-pointer text-center",
+                            dangerTagApplied ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-slate-950 border-slate-750 text-slate-300"
+                          )}
+                        >
+                          3. Tag {dangerTagApplied ? "✓" : "👉"}
+                        </button>
+                      </div>
+                      <button
+                        onClick={handleApplyAllLOTO}
+                        className="w-full py-1.5 rounded-lg bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer active:scale-95 flex items-center justify-center gap-1"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Apply Hasp, Lock & Tag</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Step 4 Actions: Stored Energy Release */}
+                  {currentStep === 4 && (
+                    <div className="space-y-1">
+                      <div className="grid grid-cols-2 gap-1">
+                        <button
+                          onClick={handleBleedAir}
+                          className={cn(
+                            "py-1.5 px-1 rounded-lg border font-bold text-[9.5px] transition-all cursor-pointer flex flex-col items-center justify-center leading-tight",
+                            airPressurePsi === 0 ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-cyan-950/80 border-cyan-500 text-cyan-200"
+                          )}
+                        >
+                          <span>VENT AIR</span>
+                          <span className="text-[7.5px] font-black">{airPressurePsi === 0 ? "✓ 0 PSI" : isBleedingAir ? "VENTING..." : "👉 120→0 PSI"}</span>
+                        </button>
+                        <button
+                          onClick={handleDischargeDC}
+                          className={cn(
+                            "py-1.5 px-1 rounded-lg border font-bold text-[9.5px] transition-all cursor-pointer flex flex-col items-center justify-center leading-tight",
+                            dcCapacitorVolts === 0 ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-amber-950/80 border-amber-500 text-amber-200"
+                          )}
+                        >
+                          <span>BLEED DC CAP</span>
+                          <span className="text-[7.5px] font-black">{dcCapacitorVolts === 0 ? "✓ 0 V" : isDischargingDC ? "DRAINING..." : "👉 680→0 V"}</span>
+                        </button>
+                      </div>
+                      <button
+                        onClick={handleBleedAllEnergy}
+                        className="w-full py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-black text-[9.5px] uppercase tracking-wider transition-all cursor-pointer active:scale-95"
+                      >
+                        💨 Purge Both Stored Energies
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Step 5 Actions: Verification */}
+                  {currentStep === 5 && (
+                    <div className="space-y-1">
+                      <div className="grid grid-cols-2 gap-1 text-[8.5px]">
+                        <button
+                          onClick={handleProbeLive1}
+                          className={cn(
+                            "py-1 px-1 rounded border font-bold text-center",
+                            zeroVerifyPhase >= 1 ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-slate-950 border-slate-750 text-slate-300 cursor-pointer"
+                          )}
+                        >
+                          1. Live: 230V {zeroVerifyPhase >= 1 ? "✓" : ""}
+                        </button>
+                        <button
+                          onClick={handleProbeDead}
+                          className={cn(
+                            "py-1 px-1 rounded border font-bold text-center",
+                            zeroVerifyPhase >= 2 ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-slate-950 border-slate-750 text-slate-300 cursor-pointer"
+                          )}
+                        >
+                          2. Dead: 0.0V {zeroVerifyPhase >= 2 ? "✓" : ""}
+                        </button>
+                        <button
+                          onClick={handleProbeLive2}
+                          className={cn(
+                            "py-1 px-1 rounded border font-bold text-center",
+                            zeroVerifyPhase >= 3 ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-slate-950 border-slate-750 text-slate-300 cursor-pointer"
+                          )}
+                        >
+                          3. Re-Live: 230V {zeroVerifyPhase >= 3 ? "✓" : ""}
+                        </button>
+                        <button
+                          onClick={handlePressTry}
+                          className={cn(
+                            "py-1 px-1 rounded border font-bold text-center",
+                            zeroVerifyPhase >= 4 ? "bg-emerald-950 border-emerald-500 text-emerald-300" : "bg-slate-950 border-slate-750 text-slate-300 cursor-pointer"
+                          )}
+                        >
+                          4. TRY Button {zeroVerifyPhase >= 4 ? "✓" : ""}
+                        </button>
+                      </div>
+                      <button
+                        onClick={handleExecuteNextZeroTest}
+                        className="w-full py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer active:scale-95 flex items-center justify-center gap-1"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Execute Next Zero-Energy Probe</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 3: Rapid Physical Energy Interlocks */}
+                <div className="pt-1.5 border-t border-slate-800 space-y-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                    3. PHYSICAL ENERGY INTERLOCKS
+                  </span>
+
+                  <div className="grid grid-cols-3 gap-1">
+                    {/* 480V Feeder */}
                     <button
-                      disabled={currentStep === LOTO_STEPS.length - 1}
-                      onClick={() => setCurrentStep(s => s + 1)}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-200 hover:text-white border border-slate-700 bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all uppercase shadow-md active:scale-95"
+                      onClick={() => {
+                        setMainsPower480V(v => !v);
+                        lotoAudio.playSwitchClack();
+                      }}
+                      className={cn(
+                        "py-1 px-1 rounded-md border text-center transition-all cursor-pointer flex flex-col items-center justify-center leading-tight",
+                        mainsPower480V
+                          ? "bg-rose-950/70 border-rose-500 text-rose-300 font-bold"
+                          : "bg-emerald-950/70 border-emerald-500 text-emerald-300 font-bold"
+                      )}
                     >
-                      <span className="hidden sm:inline">Next</span> <ChevronRight className="w-3.5 h-3.5" />
+                      <span className="text-[9px]">480V Feeder</span>
+                      <span className="text-[7.5px] font-black">{mainsPower480V ? "LIVE 🔴" : "OFF 🟢"}</span>
+                    </button>
+
+                    {/* Air Supply */}
+                    <button
+                      onClick={() => {
+                        setPneumaticSupplyOpen(v => !v);
+                        lotoAudio.playAirHiss();
+                      }}
+                      className={cn(
+                        "py-1 px-1 rounded-md border text-center transition-all cursor-pointer flex flex-col items-center justify-center leading-tight",
+                        pneumaticSupplyOpen
+                          ? "bg-cyan-950/70 border-cyan-500 text-cyan-300 font-bold"
+                          : "bg-emerald-950/70 border-emerald-500 text-emerald-300 font-bold"
+                      )}
+                    >
+                      <span className="text-[9px]">Air Feed</span>
+                      <span className="text-[7.5px] font-black">{pneumaticSupplyOpen ? "120 PSI 💨" : "0 PSI 🟢"}</span>
+                    </button>
+
+                    {/* Gravity Wedge */}
+                    <button
+                      onClick={() => {
+                        setGravityRamBlocked(v => !v);
+                        lotoAudio.playSwitchClack();
+                      }}
+                      className={cn(
+                        "py-1 px-1 rounded-md border text-center transition-all cursor-pointer flex flex-col items-center justify-center leading-tight",
+                        gravityRamBlocked
+                          ? "bg-emerald-950/70 border-emerald-500 text-emerald-300 font-bold"
+                          : "bg-slate-950 border-slate-750 text-slate-400 font-bold"
+                      )}
+                    >
+                      <span className="text-[9px]">Die Block</span>
+                      <span className="text-[7.5px] font-black">{gravityRamBlocked ? "LOCKED 🧱" : "FREE ⚠️"}</span>
                     </button>
                   </div>
                 </div>
-              </div>
+
+                {/* Section 4: Step Navigation Bar */}
+                <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between gap-1.5 shrink-0">
+                  <button
+                    disabled={currentStep === 0}
+                    onClick={() => setCurrentStep(s => s - 1)}
+                    className="flex-1 py-1.5 rounded-lg border border-slate-700 bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-750 text-slate-200 text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center justify-center gap-1 shadow-sm active:scale-95"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Prev</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      assessmentAudio.playCorrectChime();
+                      setCompletedSteps(prev => new Set([...prev, currentStep]));
+                      if (currentStep < 5) setCurrentStep(s => s + 1);
+                    }}
+                    className={cn(
+                      "flex-[2] py-1.5 rounded-lg font-black text-[10.5px] uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 shadow-md active:scale-95",
+                      completedSteps.has(currentStep)
+                        ? "bg-emerald-500 text-slate-950 border border-emerald-300"
+                        : "bg-orange-500 hover:bg-orange-400 text-slate-950 border border-orange-400"
+                    )}
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>{completedSteps.has(currentStep) ? "Step Verified ✓" : `Complete Step ${currentStep + 1}`}</span>
+                  </button>
+
+                  <button
+                    disabled={currentStep === 5}
+                    onClick={() => setCurrentStep(s => s + 1)}
+                    className="flex-1 py-1.5 rounded-lg border border-slate-700 bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-750 text-slate-200 text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center justify-center gap-1 shadow-sm active:scale-95"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </aside>
+
+              {/* ────────────────────────────────────────────────────────────
+                  CENTER COLUMN: SIMULATOR & ANIMATIONS (MAXIMIZED CANVAS)
+              ──────────────────────────────────────────────────────────── */}
+              <main className="flex-1 min-w-0 h-full flex flex-col bg-slate-950 p-1.5 sm:p-2 overflow-hidden relative">
+                
+                {/* Center Machinery HUD Header */}
+                <div className="shrink-0 flex items-center justify-between px-2 py-1 bg-slate-900/90 border border-slate-800 rounded-lg mb-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ backgroundColor: step.color }} />
+                    <span className="text-[10px] sm:text-xs font-black uppercase text-white tracking-wider truncate">
+                      MACHINE UNIT #4: 480V 3Ø CONVEYOR DRIVE (50 HP)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      className="text-[9px] px-2 py-0.5 rounded font-mono font-black uppercase tracking-wider border"
+                      style={{ color: step.color, borderColor: step.color + "80", backgroundColor: step.color + "20" }}
+                    >
+                      Step {currentStep + 1}: {step.title}
+                    </span>
+                    <span className={cn(
+                      "text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider border shrink-0",
+                      step.hazardLevel === "Critical" ? "text-red-300 border-red-500/60 bg-red-950/60" : "text-amber-300 border-amber-500/60 bg-amber-950/60"
+                    )}>
+                      {step.hazardLevel}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Pure Animation Stage - Fills 100% of Center Column */}
+                <div className="flex-1 w-full min-h-0 relative overflow-hidden bg-slate-950 border border-slate-850 rounded-xl flex items-center justify-center shadow-inner">
+                  <LOTOMachineryVisualEngine
+                    step={currentStep}
+                    isCompleted={completedSteps.has(currentStep)}
+                    color={step.color}
+                    onStepAccomplished={(idx) => {
+                      setCompletedSteps(prev => new Set([...prev, idx]));
+                    }}
+                    machineryState={{
+                      inspectedSources,
+                      motorStopped,
+                      motorRpm,
+                      motorAmps,
+                      knifeSwitchOpen,
+                      pneumaticValveClosed,
+                      haspApplied,
+                      padlockApplied,
+                      dangerTagApplied,
+                      airPressurePsi,
+                      dcCapacitorVolts,
+                      isBleedingAir,
+                      isDischargingDC,
+                      zeroVerifyPhase,
+                      probeVoltage,
+                      tryButtonPressed,
+                    }}
+                    onInspectSource={handleInspectSource}
+                    onInspectAllSources={handleInspectAllSources}
+                    onStopMotor={handleStopMotor}
+                    onToggleKnifeSwitch={handleToggleKnifeSwitch}
+                    onToggleAirValve={handleToggleAirValve}
+                    onIsolateAll={handleIsolateAll}
+                    onApplyHasp={handleApplyHasp}
+                    onApplyPadlock={handleApplyPadlock}
+                    onApplyTag={handleApplyTag}
+                    onApplyAllLOTO={handleApplyAllLOTO}
+                    onBleedAir={handleBleedAir}
+                    onDischargeDC={handleDischargeDC}
+                    onBleedAllEnergy={handleBleedAllEnergy}
+                    onProbeLive1={handleProbeLive1}
+                    onProbeDead={handleProbeDead}
+                    onProbeLive2={handleProbeLive2}
+                    onPressTry={handlePressTry}
+                    onExecuteNextZeroTest={handleExecuteNextZeroTest}
+                  />
+
+                  {/* Step Completion Flash */}
+                  <AnimatePresence>
+                    {stepAnimTrigger !== null && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center bg-emerald-950/20 backdrop-blur-[2px]"
+                      >
+                        <div className="flex flex-col items-center gap-1.5 p-4 rounded-2xl bg-slate-900/90 border-2 border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+                          <CheckCircle className="w-10 h-10 text-emerald-400" />
+                          <span className="text-sm font-black text-emerald-300 uppercase tracking-wider">
+                            Step {stepAnimTrigger + 1} Verified!
+                          </span>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Hardware Dock Quick Bar */}
+                <div className="shrink-0 mt-1.5 px-2 py-1 bg-slate-900/80 border border-slate-800 rounded-lg flex items-center justify-between gap-2">
+                  <span className="text-[9px] font-mono font-black uppercase text-slate-400 hidden sm:inline">
+                    Interactive Dock:
+                  </span>
+                  <div className="flex-1 flex items-center justify-end gap-1.5 overflow-x-auto no-scrollbar">
+                    {HARDWARE_TOOLS[currentStep]?.map((t, ti) => (
+                      <button
+                        key={ti}
+                        onClick={() => {
+                          assessmentAudio.playClick();
+                          if (currentStep === 0) handleInspectAllSources();
+                          else if (currentStep === 1) handleStopMotor();
+                          else if (currentStep === 2) handleIsolateAll();
+                          else if (currentStep === 3) handleApplyAllLOTO();
+                          else if (currentStep === 4) handleBleedAllEnergy();
+                          else if (currentStep === 5) handleExecuteNextZeroTest();
+                        }}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 hover:bg-orange-950/60 border border-slate-700 hover:border-orange-500/60 text-[9px] font-bold text-slate-200 hover:text-orange-300 shadow-sm whitespace-nowrap cursor-pointer transition-all active:scale-95"
+                      >
+                        <span>{t.icon}</span>
+                        <span>{t.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </main>
+
+              {/* ────────────────────────────────────────────────────────────
+                  RIGHT COLUMN: OUTPUTS, RESULTS & OTHER INFO (ZERO SCROLLBARS)
+              ──────────────────────────────────────────────────────────── */}
+              <aside className="w-full lg:w-72 xl:w-78 shrink-0 h-full overflow-hidden p-2 bg-slate-900/95 border-l border-slate-800 flex flex-col justify-between select-none">
+                
+                {/* Section 1: Live Energy State Verdict Banner */}
+                <div className={cn("p-2.5 rounded-xl border flex flex-col gap-1 transition-all", verdictStyle)}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider">
+                      ENERGY STATE VERDICT
+                    </span>
+                    <span className="text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded bg-black/40 border border-white/20">
+                      OSHA 1910.147
+                    </span>
+                  </div>
+                  <div className="text-xs font-black leading-tight">
+                    {verdictTitle}
+                  </div>
+                  <div className="text-[9.5px] opacity-90 leading-tight">
+                    {verdictSub}
+                  </div>
+                </div>
+
+                {/* Section 2: Live Sensor Telemetry Gauges */}
+                <div className="pt-1.5 border-t border-slate-800 space-y-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                    LIVE MACHINERY GAUGES
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {/* Feeder Voltage Gauge */}
+                    <div className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 flex flex-col justify-between">
+                      <span className="text-[8.5px] font-mono text-slate-400 uppercase">Feeder Voltage</span>
+                      <div className="flex items-baseline justify-between mt-0.5">
+                        <span className={cn("text-base font-black font-mono", liveFeederVoltage > 0 ? "text-rose-400" : "text-emerald-400")}>
+                          {liveFeederVoltage.toFixed(0)} <span className="text-[10px]">V</span>
+                        </span>
+                        <span className={cn("text-[8px] font-black px-1 rounded", liveFeederVoltage > 0 ? "bg-rose-950 text-rose-300" : "bg-emerald-950 text-emerald-300")}>
+                          {liveFeederVoltage > 0 ? "HOT ⚡" : "ZERO 🟢"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Air Line Pressure */}
+                    <div className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 flex flex-col justify-between">
+                      <span className="text-[8.5px] font-mono text-slate-400 uppercase">Air Pressure</span>
+                      <div className="flex items-baseline justify-between mt-0.5">
+                        <span className={cn("text-base font-black font-mono", liveAirPressure > 10 ? "text-cyan-400" : "text-emerald-400")}>
+                          {liveAirPressure} <span className="text-[10px]">PSI</span>
+                        </span>
+                        <span className={cn("text-[8px] font-black px-1 rounded", liveAirPressure > 10 ? "bg-cyan-950 text-cyan-300" : "bg-emerald-950 text-emerald-300")}>
+                          {liveAirPressure > 10 ? "TRAPPED" : "BLED 🟢"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Motor Tachometer */}
+                    <div className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 flex flex-col justify-between">
+                      <span className="text-[8.5px] font-mono text-slate-400 uppercase">Motor Speed</span>
+                      <div className="flex items-baseline justify-between mt-0.5">
+                        <span className={cn("text-base font-black font-mono", motorRpm > 0 ? "text-amber-400" : "text-emerald-400")}>
+                          {motorRpm} <span className="text-[10px]">RPM</span>
+                        </span>
+                        <span className={cn("text-[8px] font-black px-1 rounded", motorRpm > 0 ? "bg-amber-950 text-amber-300" : "bg-emerald-950 text-emerald-300")}>
+                          {motorRpm > 0 ? "SPINNING" : "REST 🟢"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Stored DC Capacitor */}
+                    <div className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 flex flex-col justify-between">
+                      <span className="text-[8.5px] font-mono text-slate-400 uppercase">Stored DC Bus</span>
+                      <div className="flex items-baseline justify-between mt-0.5">
+                        <span className={cn("text-base font-black font-mono", dcCapacitorVolts > 15 ? "text-orange-400" : "text-emerald-400")}>
+                          {dcCapacitorVolts} <span className="text-[10px]">V</span>
+                        </span>
+                        <span className={cn("text-[8px] font-black px-1 rounded", dcCapacitorVolts > 15 ? "bg-orange-950 text-orange-300" : "bg-emerald-950 text-emerald-300")}>
+                          {dcCapacitorVolts > 15 ? "CHARGED" : "0V 🟢"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Directive Brief & Fatal Consequence */}
+                <div className="pt-1.5 border-t border-slate-800 space-y-1">
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                    <div className="text-[9px] font-black uppercase text-orange-400 mb-0.5">
+                      What Just Happened?
+                    </div>
+                    <div className="text-[10px] text-slate-300 font-sans leading-snug">
+                      {step.desc}
+                    </div>
+                  </div>
+
+                  {/* Fatal Mistake Alert & Failure Simulation Button */}
+                  <div className="p-2 rounded-lg border border-red-500/40 bg-red-950/30">
+                    <div className="flex items-center justify-between text-red-400 mb-0.5">
+                      <span className="text-[9.5px] font-black uppercase flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        Fatal Consequence
+                      </span>
+                    </div>
+                    <p className="text-[9.5px] text-red-200 leading-tight">
+                      {step.warning}
+                    </p>
+                    <button
+                      onClick={() => setShowConsequenceModal(true)}
+                      className="w-full mt-1.5 py-1 px-1.5 rounded bg-red-950/80 hover:bg-red-900 border border-red-500/60 text-red-200 hover:text-white text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm"
+                    >
+                      <Skull className="w-3 h-3 text-red-400" />
+                      <span>Simulate Catastrophe</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section 4: Safety Tools & Certifications (2x2 Grid) */}
+                <div className="pt-1.5 border-t border-slate-800 space-y-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                    SAFETY TOOLS & CERTIFICATION
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {/* PTW Permit */}
+                    <button
+                      onClick={() => setShowPermitModal(true)}
+                      className="p-1.5 rounded-lg border border-blue-500/50 bg-blue-950/40 hover:bg-blue-900/60 text-blue-300 hover:text-white text-[9.5px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 shadow-sm active:scale-95"
+                    >
+                      <FileText className="w-3 h-3 text-blue-400" />
+                      <span>PTW Permit</span>
+                    </button>
+
+                    {/* Consequence Sim */}
+                    <button
+                      onClick={() => setShowConsequenceModal(true)}
+                      className="p-1.5 rounded-lg border border-red-500/50 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white text-[9.5px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 shadow-sm active:scale-95"
+                    >
+                      <Skull className="w-3 h-3 text-red-400" />
+                      <span>Disaster Sim</span>
+                    </button>
+
+                    {/* Practical Exam */}
+                    <button
+                      onClick={() => setShowExamModal(true)}
+                      className="p-1.5 rounded-lg border border-amber-500/50 bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 hover:text-white text-[9.5px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 shadow-sm active:scale-95"
+                    >
+                      <Timer className="w-3 h-3 text-amber-400" />
+                      <span>Exam (120s)</span>
+                    </button>
+
+                    {/* Certificate */}
+                    <button
+                      onClick={() => {
+                        setCertScore(allDone ? 100 : Math.max(certScore, 85));
+                        setShowCertModal(true);
+                      }}
+                      className="p-1.5 rounded-lg border border-emerald-500/50 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-white text-[9.5px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 shadow-sm active:scale-95"
+                    >
+                      <Award className="w-3 h-3 text-emerald-400" />
+                      <span>Certificate</span>
+                    </button>
+                  </div>
+                </div>
+              </aside>
             </motion.div>
           )}
 
-          {/* === LEARN TAB === */}
+          {/* ══════════════════════════════════════════════════════════════════
+              B. LEARN / THEORY TAB
+          ══════════════════════════════════════════════════════════════════ */}
           {activeTab === "learn" && (
-            <motion.div key="learn" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="flex flex-col lg:flex-row h-full overflow-hidden p-2.5 md:p-3 gap-3 bg-slate-950/60">
-              
+            <motion.div
+              key="learn"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col lg:flex-row h-full overflow-hidden p-2.5 md:p-3 gap-3 bg-slate-950/60"
+            >
               <div className="w-full lg:w-1/2 flex flex-col gap-2.5 overflow-hidden justify-between h-full">
                 <div className="flex items-center justify-between shrink-0">
                   <span className="text-xs font-black text-slate-100 uppercase tracking-wide">Knowledge Cards ({learnCard + 1}/{LEARN_CARDS.length})</span>
-                  <div className="flex gap-1">{LEARN_CARDS.map((c, i) => (
-                    <button key={i} onClick={() => setLearnCard(i)} className="rounded-full transition-all cursor-pointer hover:scale-110" style={{ width: i === learnCard ? 16 : 8, height: 8, backgroundColor: i === learnCard ? c.color : "#475569" }} />
-                  ))}</div>
+                  <div className="flex gap-1">
+                    {LEARN_CARDS.map((c, i) => (
+                      <button key={i} onClick={() => setLearnCard(i)} className="rounded-full transition-all cursor-pointer hover:scale-110" style={{ width: i === learnCard ? 16 : 8, height: 8, backgroundColor: i === learnCard ? c.color : "#475569" }} />
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex-1 min-h-0 flex flex-col">
                   <AnimatePresence mode="wait">
-                    <motion.div key={learnCard} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+                    <motion.div
+                      key={learnCard}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
                       className="flex-1 rounded-xl border p-3.5 flex flex-col justify-between"
-                      style={{ borderColor: LEARN_CARDS[learnCard].color + "90", backgroundColor: LEARN_CARDS[learnCard].color + "18" }}>
-                      
+                      style={{ borderColor: LEARN_CARDS[learnCard].color + "90", backgroundColor: LEARN_CARDS[learnCard].color + "18" }}
+                    >
                       <div>
                         <div className="flex items-center gap-2 mb-2">
-                          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-md"
-                            style={{ backgroundColor: LEARN_CARDS[learnCard].color + "30", border: `1.5px solid ${LEARN_CARDS[learnCard].color}` }}>
+                          <div
+                            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-md"
+                            style={{ backgroundColor: LEARN_CARDS[learnCard].color + "30", border: `1.5px solid ${LEARN_CARDS[learnCard].color}` }}
+                          >
                             {React.createElement(LEARN_CARDS[learnCard].icon, { className: "w-5 h-5", style: { color: LEARN_CARDS[learnCard].color } })}
                           </div>
                           <h3 className="text-sm md:text-base font-black uppercase tracking-wide text-white">{LEARN_CARDS[learnCard].title}</h3>
@@ -832,26 +1416,32 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                 </div>
 
                 <div className="flex gap-2 shrink-0">
-                  <button disabled={learnCard === 0} onClick={() => setLearnCard(c => c - 1)} 
-                    className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-black border border-slate-700 bg-slate-850 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-750 hover:text-white cursor-pointer transition-all uppercase text-slate-100 shadow-md">
+                  <button
+                    disabled={learnCard === 0}
+                    onClick={() => setLearnCard(c => c - 1)}
+                    className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-black border border-slate-700 bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-750 text-slate-100 shadow-md"
+                  >
                     <ChevronLeft className="w-4 h-4" /> Previous
                   </button>
-                  <button disabled={learnCard === LEARN_CARDS.length - 1} onClick={() => setLearnCard(c => c + 1)} 
-                    className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-black border border-slate-700 bg-slate-850 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-750 hover:text-white cursor-pointer transition-all uppercase text-slate-100 shadow-md">
+                  <button
+                    disabled={learnCard === LEARN_CARDS.length - 1}
+                    onClick={() => setLearnCard(c => c + 1)}
+                    className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-black border border-slate-700 bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-750 text-slate-100 shadow-md"
+                  >
                     Next <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
-              <div className="w-full lg:w-1/2 flex flex-col gap-2.5 overflow-y-auto pr-1">
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-2 shrink-0">
+              <div className="w-full lg:w-1/2 flex flex-col gap-2.5 overflow-y-auto pr-1 no-scrollbar">
+                <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 shrink-0">
                   {[
                     { val: "120+", label: "Deaths/yr w/o LOTO", color: "#ef4444" },
                     { val: "50k+", label: "Injuries saved/yr", color: "#22c55e" },
                     { val: "6", label: "Energy types", color: "#8b5cf6" },
                     { val: "$15k+", label: "Avg OSHA fine", color: "#f97316" },
                   ].map((s, i) => (
-                    <div key={i} className="p-2.5 rounded-xl bg-slate-900 border border-slate-750 text-center shadow-md">
+                    <div key={i} className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-center shadow-md">
                       <p className="text-base md:text-lg font-black" style={{ color: s.color }}>{s.val}</p>
                       <p className="text-[9px] md:text-[10px] text-slate-200 font-bold uppercase tracking-wide leading-tight mt-0.5">{s.label}</p>
                     </div>
@@ -869,7 +1459,7 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                       { type: "Thermal", emoji: "🔥", color: "#ef4444", ex: "Steam, hot surfaces" },
                       { type: "Chemical", emoji: "☣️", color: "#22c55e", ex: "Gases, chemicals" },
                     ].map((e, i) => (
-                      <div key={i} className="flex items-center gap-2.5 p-2 rounded-xl border border-slate-750 bg-slate-900 shadow-md">
+                      <div key={i} className="flex items-center gap-2.5 p-2 rounded-xl border border-slate-800 bg-slate-900 shadow-md">
                         <span className="text-xl md:text-2xl shrink-0">{e.emoji}</span>
                         <div className="min-w-0">
                           <p className="text-xs font-black text-white leading-none mb-0.5">{e.type}</p>
@@ -883,340 +1473,174 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
             </motion.div>
           )}
 
-          {/* === IMPROVED CHECKLIST TAB (ZERO SCROLL SMART GRID) === */}
+          {/* ══════════════════════════════════════════════════════════════════
+              C. CHECKLIST TAB
+          ══════════════════════════════════════════════════════════════════ */}
           {activeTab === "checklist" && (
-            <motion.div key="checklist" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="flex flex-col h-full overflow-hidden p-2 sm:p-3 gap-2 bg-slate-950">
-              
-              {/* Header Status & Filter Controls */}
+            <motion.div
+              key="checklist"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col h-full overflow-hidden p-2 sm:p-3 gap-2 bg-slate-950"
+            >
               <div className="shrink-0 bg-slate-900 border border-slate-800 rounded-xl p-2 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-md">
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <div className={cn("w-3 h-3 rounded-full animate-pulse shrink-0", checkedCritical === totalCritical ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]" : "bg-amber-400")} />
+                  <div className={cn("w-3 h-3 rounded-full animate-pulse shrink-0", checkedCritical === totalCritical ? "bg-emerald-400" : "bg-amber-400")} />
                   <span className={cn("text-xs md:text-sm font-black uppercase tracking-wide", checkedCritical === totalCritical ? "text-emerald-300" : "text-amber-300")}>
                     {checkedCritical === totalCritical ? "All Critical Items Complete!" : `${totalCritical - checkedCritical} Critical Items Remaining`}
                   </span>
                 </div>
 
-                {/* Category Filters & Actions */}
                 <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto justify-end">
                   {["All", "Before Start", "Shutdown", "Isolation", "Lock & Tag", "Energy Release", "Verification"].map(cat => (
                     <button
                       key={cat}
                       onClick={() => setChecklistFilter(cat)}
                       className={cn(
-                        "px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap border",
-                        checklistFilter === cat
-                          ? "bg-orange-500 text-slate-950 border-orange-400 shadow-sm"
-                          : "bg-slate-950 text-slate-300 border-slate-800 hover:text-white hover:border-slate-700"
+                        "px-2 py-1 rounded-lg text-[9.5px] font-bold uppercase whitespace-nowrap transition-all cursor-pointer border",
+                        checklistFilter === cat ? "bg-orange-500 text-slate-950 border-orange-400 font-black" : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
                       )}
                     >
                       {cat}
                     </button>
                   ))}
-                  <button
-                    onClick={() => setCheckedItems(new Set(CHECKLIST_ITEMS.map(i => i.id)))}
-                    className="px-2 py-1 rounded-lg text-[9px] font-black uppercase bg-emerald-950 border border-emerald-500/50 text-emerald-300 hover:bg-emerald-900 cursor-pointer shadow-sm"
-                  >
-                    Check All
-                  </button>
-                  <button
-                    onClick={() => setCheckedItems(new Set())}
-                    className="p-1 rounded-lg text-slate-300 bg-slate-950 border border-slate-800 hover:text-red-300 hover:border-red-500/50 cursor-pointer shadow-sm"
-                    title="Reset Checklist"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                  </button>
                 </div>
               </div>
 
-              {/* Progress Bar */}
-              <div className="shrink-0 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-orange-500 to-emerald-400"
-                  animate={{ width: `${(checkedItems.size / CHECKLIST_ITEMS.length) * 100}%` }}
-                />
-              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 no-scrollbar">
+                {CHECKLIST_ITEMS.filter(i => checklistFilter === "All" || i.category === checklistFilter).map(item => {
+                  const isChecked = checkedItems.has(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        assessmentAudio.playClick();
+                        setCheckedItems(prev => {
+                          const next = new Set(prev);
+                          if (next.has(item.id)) next.delete(item.id);
+                          else next.add(item.id);
+                          return next;
+                        });
+                      }}
+                      className={cn(
+                        "p-2 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all",
+                        isChecked ? "bg-emerald-950/30 border-emerald-500/60 text-white" : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={cn("w-4 h-4 rounded flex items-center justify-center border shrink-0", isChecked ? "bg-emerald-500 border-emerald-400 text-slate-950 font-black" : "border-slate-600 bg-slate-950")}>
+                          {isChecked && <CheckCircle className="w-3.5 h-3.5" />}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-medium leading-snug">{item.text}</span>
+                          <span className="text-[9px] text-slate-400 font-mono block">{item.category}</span>
+                        </div>
+                      </div>
 
-              {/* Checklist Items Viewport (Zero Scroll Smart Grid) */}
-              <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-2 no-scrollbar">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {CHECKLIST_ITEMS
-                    .filter(item => checklistFilter === "All" || item.category === checklistFilter)
-                    .map(item => {
-                      const checked = checkedItems.has(item.id);
-                      return (
-                        <motion.button
-                          key={item.id}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => setCheckedItems(prev => { const n = new Set(prev); checked ? n.delete(item.id) : n.add(item.id); return n; })}
-                          className={cn(
-                            "flex items-center gap-2.5 p-2 px-3 rounded-xl border text-left transition-all cursor-pointer shadow-md",
-                            checked
-                              ? "bg-emerald-950/30 border-emerald-500/50"
-                              : "bg-slate-900 border-slate-800 hover:border-slate-700 hover:bg-slate-850"
-                          )}
-                        >
-                          <div className={cn("w-5 h-5 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all", checked ? "bg-emerald-500 border-emerald-400 text-slate-950" : "border-slate-600 bg-slate-800")}>
-                            {checked && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-xs font-black">✓</motion.span>}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-[9px] font-mono text-orange-400 font-bold uppercase block">{item.category}</span>
-                            <span className={cn("text-xs font-medium leading-snug block truncate", checked ? "text-slate-400 line-through" : "text-white")}>
-                              {item.text}
-                            </span>
-                          </div>
-                          {item.critical && !checked && (
-                            <span className="shrink-0 text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase bg-red-950 border border-red-500/60 text-red-300 shadow-sm">
-                              Critical
-                            </span>
-                          )}
-                        </motion.button>
-                      );
-                    })}
-                </div>
+                      {item.critical && (
+                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-red-950 border border-red-800 text-red-300 shrink-0">
+                          CRITICAL
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
           )}
 
-          {/* === IMPROVED QUIZ TAB (10 QUESTIONS x 10 MARKS = 100 MARKS) === */}
+          {/* ══════════════════════════════════════════════════════════════════
+              D. QUIZ TAB (100 MARKS)
+          ══════════════════════════════════════════════════════════════════ */}
           {activeTab === "quiz" && (
             <motion.div
               key="quiz"
-              animate={screenShake ? { x: [-12, 12, -8, 8, -4, 4, 0] } : { x: 0 }}
-              transition={{ duration: 0.3 }}
-              className="flex flex-col h-full overflow-hidden p-2.5 md:p-3.5 bg-slate-950 relative"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col h-full overflow-hidden p-2 sm:p-3 gap-2 bg-slate-950"
             >
+              {quizQuestions.length > 0 && !quizSubmitted && (
+                <div className="flex-1 min-h-0 flex flex-col justify-between max-w-2xl mx-auto w-full">
+                  <div className="shrink-0 flex items-center justify-between pb-1 border-b border-slate-800">
+                    <span className="text-xs font-black uppercase text-orange-400">
+                      Question {quizIndex + 1} of 10
+                    </span>
+                    <span className="text-xs font-mono font-bold text-slate-400">
+                      Score: {totalQuizMarks} / 100 Marks
+                    </span>
+                  </div>
 
-              {/* Floating Score Animation */}
-              <AnimatePresence>
-                {floatingScore && (
-                  <motion.div
-                    initial={{ opacity: 1, y: 0, scale: 0.8 }}
-                    animate={{ opacity: 0, y: -50, scale: 1.2 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 1 }}
-                    className="absolute top-1/3 left-1/2 -translate-x-1/2 z-50 pointer-events-none text-xl font-black font-mono drop-shadow-[0_0_15px_currentColor]"
-                    style={{ color: floatingScore.includes("WRONG") ? "#ef4444" : "#22c55e" }}
-                  >
-                    {floatingScore}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {quizSubmitted ? (
-                /* QUIZ RESULTS SCREEN */
-                <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col h-full overflow-y-auto space-y-3 no-scrollbar">
-                  <div className={cn("p-5 rounded-2xl border text-center shadow-2xl relative overflow-hidden",
-                    totalQuizMarks >= 80 ? "bg-emerald-950/50 border-emerald-500/60 shadow-[0_0_30px_rgba(16,185,129,0.2)]" : totalQuizMarks >= 60 ? "bg-amber-950/50 border-amber-500/60" : "bg-rose-950/50 border-rose-500/60"
-                  )}>
-                    <div className="text-5xl mb-2">{totalQuizMarks >= 80 ? "🏆" : totalQuizMarks >= 60 ? "🛡️" : "⚠️"}</div>
-                    <h3 className="text-base md:text-lg font-black uppercase tracking-widest text-white mb-1">
-                      {totalQuizMarks >= 80 ? "LOTO SAFETY CHAMPION" : totalQuizMarks >= 60 ? "CERTIFIED SAFETY OFFICER" : "HAZARD RISK ZONE"}
+                  <div className="my-auto space-y-3">
+                    <h3 className="text-sm sm:text-base font-black text-white leading-snug">
+                      {quizQuestions[quizIndex].question}
                     </h3>
-                    <p className={cn("text-4xl font-black font-mono my-1", totalQuizMarks >= 80 ? "text-emerald-300" : totalQuizMarks >= 60 ? "text-amber-300" : "text-rose-400")}>
-                      {totalQuizMarks} <span className="text-lg text-slate-400">/ 100 MARKS</span>
-                    </p>
-                    <p className="text-xs font-bold text-slate-300 max-w-md mx-auto leading-relaxed">
-                      {totalQuizMarks >= 80 ? "Flawless performance! You have mastered LOTO energy isolation protocols." : "Review missed questions below and retake the quiz to achieve 100% mastery."}
-                    </p>
-                  </div>
 
-                  {/* Question Breakdown List */}
-                  <div className="space-y-2">
-                    {quizQuestions.map((q, qi) => {
-                      const userChoice = quizAnswers[qi];
-                      const isCorrect = userChoice === q.correctAnswer;
-                      return (
-                        <div key={qi} className={cn("p-3 rounded-xl border shadow-md transition-all", isCorrect ? "bg-emerald-950/30 border-emerald-500/50" : "bg-rose-950/30 border-rose-500/50")}>
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <div className="flex items-start gap-2">
-                              {isCorrect ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" /> : <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />}
-                              <div>
-                                <span className="text-xs font-bold text-white block">Q{qi + 1}: {q.question}</span>
-                                <span className="text-[9px] font-mono text-orange-400 uppercase font-bold">{q.category}</span>
-                              </div>
-                            </div>
-                            <span className={cn("text-xs font-black font-mono px-2 py-0.5 rounded border shrink-0", isCorrect ? "text-emerald-300 border-emerald-500/40 bg-emerald-950" : "text-rose-300 border-rose-500/40 bg-rose-950")}>
-                              {isCorrect ? "+10 MARKS" : "0 MARKS"}
-                            </span>
-                          </div>
-                          <p className="text-[11px] pl-6 text-slate-300 leading-relaxed font-medium mt-1">{q.explanation}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
+                    <div className="space-y-1.5">
+                      {quizQuestions[quizIndex].options.map((opt, oi) => {
+                        const isAnswered = quizAnswers[quizIndex] !== undefined;
+                        const isSelected = quizAnswers[quizIndex] === oi;
+                        const isCorrect = oi === quizQuestions[quizIndex].correctAnswer;
 
-                  {totalQuizMarks >= 70 && (
-                    <button
-                      onClick={() => {
-                        setCertScore(totalQuizMarks);
-                        setShowCertModal(true);
-                      }}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs md:text-sm uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.3)] active:scale-95"
-                    >
-                      <Award className="w-4 h-4" /> Claim Accredited LOTO Safety Certificate ({totalQuizMarks}%)
-                    </button>
-                  )}
-
-                  <button
-                    onClick={initializeQuiz}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-slate-950 font-black text-xs md:text-sm uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95"
-                  >
-                    <RefreshCw className="w-4 h-4" /> Start New 10-Question Quiz (Fresh Shuffled Set)
-                  </button>
-                </motion.div>
-              ) : (
-                /* ACTIVE QUIZ INTERFACE */
-                <div className="flex flex-col h-full justify-between space-y-2">
-                  
-                  {/* Quiz HUD Header */}
-                  <div className="shrink-0 bg-slate-900 border border-slate-800 rounded-xl p-2 flex items-center justify-between shadow-md">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-orange-500/20 text-orange-400">
-                        <HelpCircle className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-black text-white uppercase tracking-wider block">
-                          Question {quizIndex + 1} of 10
-                        </span>
-                        <span className="text-[9px] font-mono text-orange-400 uppercase font-bold">
-                          {quizQuestions[quizIndex]?.category} · 10 Marks Each
-                        </span>
-                      </div>
+                        return (
+                          <button
+                            key={oi}
+                            disabled={isAnswered}
+                            onClick={() => handleQuizAnswerSubmit(oi)}
+                            className={cn(
+                              "w-full text-left p-2.5 rounded-xl border text-xs sm:text-sm font-medium transition-all flex items-center justify-between cursor-pointer",
+                              isAnswered
+                                ? isCorrect
+                                  ? "bg-emerald-950/80 border-emerald-500 text-emerald-200 font-bold"
+                                  : isSelected
+                                  ? "bg-rose-950/80 border-rose-500 text-rose-200 font-bold"
+                                  : "bg-slate-900/60 border-slate-800 text-slate-500"
+                                : "bg-slate-900 border-slate-800 hover:border-orange-500/60 text-slate-200"
+                            )}
+                          >
+                            <span>{opt}</span>
+                            {isAnswered && (
+                              <span>
+                                {isCorrect ? "✓ (+10)" : isSelected ? "✗" : ""}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <span className="text-[9px] font-mono text-slate-400 uppercase block">Current Score</span>
-                        <span className="text-sm font-black font-mono text-emerald-400">{totalQuizMarks} / 100 MARKS</span>
+                    {showExplanation && (
+                      <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 font-sans leading-relaxed">
+                        <span className="font-bold text-amber-400 uppercase tracking-wider block mb-0.5">OSHA Rationale:</span>
+                        {quizQuestions[quizIndex].explanation}
                       </div>
-
-                      {/* Question indicator pills */}
-                      <div className="hidden sm:flex gap-1">
-                        {quizQuestions.map((_, i) => (
-                          <div
-                            key={i}
-                            className="h-2 rounded-full transition-all"
-                            style={{
-                              width: i === quizIndex ? 18 : quizAnswers[i] !== undefined ? 10 : 6,
-                              backgroundColor: quizAnswers[i] !== undefined ? (quizAnswers[i] === quizQuestions[i]?.correctAnswer ? "#22c55e" : "#ef4444") : i === quizIndex ? "#f97316" : "#475569"
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
+                    )}
                   </div>
 
-                  {/* Question Card */}
-                  <div className="flex-1 min-h-0 flex flex-col justify-between space-y-2 overflow-hidden bg-slate-900/60 border border-slate-800 rounded-2xl p-3 sm:p-4">
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={quizIndex}
-                        initial={{ opacity: 0, x: 30 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -30 }}
-                        transition={{ duration: 0.25 }}
-                        className="flex flex-col flex-1 min-h-0 justify-between space-y-2"
-                      >
-                        <div>
-                          <h3 className="text-sm sm:text-base font-bold text-white leading-relaxed mb-2">
-                            {quizQuestions[quizIndex]?.question}
-                          </h3>
-                        </div>
-
-                        {/* 4 Shuffled Options */}
-                        <div className="grid grid-cols-1 gap-2">
-                          {quizQuestions[quizIndex]?.options.map((opt, oi) => {
-                            const answered = quizAnswers[quizIndex] !== undefined;
-                            const isCorrectOpt = oi === quizQuestions[quizIndex].correctAnswer;
-                            const isSelected = quizAnswers[quizIndex] === oi;
-
-                            return (
-                              <motion.button
-                                key={oi}
-                                whileTap={!answered ? { scale: 0.98 } : undefined}
-                                onClick={() => handleQuizAnswerSubmit(oi)}
-                                disabled={answered}
-                                className={cn(
-                                  "w-full flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all cursor-pointer text-xs sm:text-sm shadow-md",
-                                  answered
-                                    ? (isCorrectOpt
-                                        ? "bg-emerald-950/50 border-emerald-500/70 text-emerald-200 font-bold shadow-[0_0_15px_rgba(16,185,129,0.2)]"
-                                        : isSelected
-                                          ? "bg-rose-950/50 border-rose-500/70 text-rose-200 font-medium"
-                                          : "bg-slate-950/30 border-slate-900 text-slate-600 opacity-40")
-                                    : "bg-slate-900 border-slate-800 text-slate-100 hover:border-orange-500/70 hover:bg-orange-950/30 hover:text-white"
-                                )}
-                              >
-                                <span className={cn(
-                                  "w-6 h-6 rounded-lg border-2 flex items-center justify-center text-[10px] font-black shrink-0 transition-all",
-                                  answered
-                                    ? (isCorrectOpt
-                                        ? "border-emerald-400 bg-emerald-500 text-slate-950"
-                                        : isSelected
-                                          ? "border-rose-400 bg-rose-500 text-white"
-                                          : "border-slate-700 text-slate-600")
-                                    : "border-slate-700 text-slate-300"
-                                )}>
-                                  {String.fromCharCode(65 + oi)}
-                                </span>
-                                <span className="flex-1 leading-snug">{opt}</span>
-                                {answered && isCorrectOpt && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />}
-                                {answered && isSelected && !isCorrectOpt && <XCircle className="w-5 h-5 text-rose-400 shrink-0" />}
-                              </motion.button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Explanation Box */}
-                        <AnimatePresence>
-                          {showExplanation && quizAnswers[quizIndex] !== undefined && (
-                            <motion.div
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0 }}
-                              className={cn(
-                                "p-2.5 rounded-xl border flex items-start gap-2 shadow-md shrink-0",
-                                quizAnswers[quizIndex] === quizQuestions[quizIndex].correctAnswer
-                                  ? "bg-emerald-950/40 border-emerald-500/50"
-                                  : "bg-rose-950/40 border-rose-500/50"
-                              )}
-                            >
-                              <Info className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
-                              <p className="text-xs text-slate-200 leading-relaxed font-medium">
-                                {quizQuestions[quizIndex].explanation}
-                              </p>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </motion.div>
-                    </AnimatePresence>
-                  </div>
-
-                  {/* Quiz Navigation Action Bar */}
-                  <div className="shrink-0 flex items-center justify-between pt-1 border-t border-slate-800">
+                  <div className="shrink-0 pt-2 border-t border-slate-800 flex items-center justify-between">
                     <button
                       disabled={quizIndex === 0}
-                      onClick={() => setQuizIndex(i => i - 1)}
-                      className="px-3 py-2 rounded-xl border border-slate-700 bg-slate-850 text-slate-200 text-xs font-black uppercase disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer hover:bg-slate-750 transition-all shadow-md"
+                      onClick={() => { setQuizIndex(i => i - 1); setShowExplanation(false); }}
+                      className="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                     >
-                      <ChevronLeft className="w-4 h-4 inline" /> Prev
+                      Prev
                     </button>
 
                     {quizAnswers[quizIndex] !== undefined && (
                       quizIndex < 9 ? (
                         <button
                           onClick={() => { setQuizIndex(i => i + 1); setShowExplanation(false); }}
-                          className="flex-1 max-w-xs py-2.5 rounded-xl bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs md:text-sm uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-lg active:scale-95 mx-2"
+                          className="px-4 py-1.5 rounded-lg bg-orange-500 text-slate-950 text-xs font-black uppercase cursor-pointer"
                         >
-                          Next Question <ChevronRight className="w-4 h-4" />
+                          Next Question ➔
                         </button>
                       ) : (
                         <button
                           onClick={() => setQuizSubmitted(true)}
-                          className="flex-1 max-w-xs py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs md:text-sm uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-lg active:scale-95 mx-2"
+                          className="px-4 py-1.5 rounded-lg bg-emerald-500 text-slate-950 text-xs font-black uppercase cursor-pointer"
                         >
-                          <Award className="w-4 h-4" /> Finish & View Results (100 Marks)
+                          Finish & View Results
                         </button>
                       )
                     )}
@@ -1224,12 +1648,42 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                     <button
                       disabled={quizIndex === 9 || quizAnswers[quizIndex] === undefined}
                       onClick={() => { setQuizIndex(i => i + 1); setShowExplanation(false); }}
-                      className="px-3 py-2 rounded-xl border border-slate-700 bg-slate-850 text-slate-200 text-xs font-black uppercase disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer hover:bg-slate-750 transition-all shadow-md"
+                      className="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                     >
-                      Next <ChevronRight className="w-4 h-4 inline" />
+                      Next
                     </button>
                   </div>
+                </div>
+              )}
 
+              {quizSubmitted && (
+                <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 text-center max-w-md mx-auto">
+                  <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center text-emerald-400">
+                    <Award className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-black uppercase text-white">
+                    Quiz Complete: {totalQuizMarks} / 100 Marks
+                  </h3>
+                  <p className="text-xs text-slate-300 font-sans">
+                    {totalQuizMarks >= 80 ? "Outstanding performance! You have demonstrated OSHA 1910.147 Authorized Employee Competency." : "Review the LOTO steps and safety standards to improve your score."}
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={initializeQuiz}
+                      className="px-4 py-2 rounded-xl border border-slate-700 bg-slate-800 text-xs font-bold uppercase cursor-pointer"
+                    >
+                      Retake Quiz
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCertScore(totalQuizMarks);
+                        setShowCertModal(true);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-orange-500 text-slate-950 text-xs font-black uppercase cursor-pointer"
+                    >
+                      Claim Certificate
+                    </button>
+                  </div>
                 </div>
               )}
             </motion.div>
@@ -1238,14 +1692,15 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
         </AnimatePresence>
       </div>
 
-      {/* Catastrophe Failure Consequence Modal */}
+      {/* ════════════════════════════════════════════════════════════════════════
+          3. MODAL DIALOGS
+      ════════════════════════════════════════════════════════════════════════ */}
       <LOTOFailureConsequenceModal
         stepIndex={currentStep}
         isOpen={showConsequenceModal}
         onClose={() => setShowConsequenceModal(false)}
       />
 
-      {/* Industrial Permit-to-Work (PTW) Generator Modal */}
       <LOTOPermitModal
         isOpen={showPermitModal}
         onClose={() => setShowPermitModal(false)}
@@ -1253,7 +1708,6 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
         completedStepsCount={completedSteps.size}
       />
 
-      {/* Timed OSHA 1910.147 Practical Competency Exam Modal */}
       <LOTOPracticalExamModal
         isOpen={showExamModal}
         onClose={() => setShowExamModal(false)}
@@ -1263,7 +1717,6 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
         }}
       />
 
-      {/* Accredited LOTO Authorized Employee Certificate Modal */}
       <LOTOCertificateModal
         isOpen={showCertModal}
         onClose={() => setShowCertModal(false)}
