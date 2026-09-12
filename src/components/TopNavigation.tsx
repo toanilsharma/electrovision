@@ -27,11 +27,12 @@ const modules: { id: SimulationType; label: string; icon: React.ElementType; tag
   { id: 'loto', label: 'LOTO Procedure', icon: Shield, tag: 'Safety Protocol' },
   { id: 'first_aid', label: 'First Aid & CPR', icon: Activity, tag: 'Emergency Rescue' },
   { id: 'mcb_simulator', label: 'IEC 60898 MCB', icon: Zap, tag: 'Breaker Physics' },
+  { id: 'homeguard', label: 'HomeGuard™', icon: Home, tag: 'Residential Safety' },
   { id: 'assessment', label: 'Assessment Mode', icon: ShieldCheck, tag: 'Test Knowledge' },
   { id: 'safety_quiz', label: 'Safety Quiz', icon: HelpCircle, tag: 'IEC Micro-Quiz' },
 ];
 
-const RESIDENTIAL_MODULE_IDS: SimulationType[] = ['ac_shock', 'earth_fault', 'short_circuit', 'first_aid', 'mcb_simulator', 'assessment', 'safety_quiz'];
+const RESIDENTIAL_MODULE_IDS: SimulationType[] = ['ac_shock', 'earth_fault', 'short_circuit', 'first_aid', 'mcb_simulator', 'homeguard', 'assessment', 'safety_quiz'];
 
 export function TopNavigation({ 
   activeModule, 

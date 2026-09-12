@@ -464,6 +464,41 @@ export const SEO_ROUTES: Record<SimulationType | 'home', RouteSEOData> = {
       educationalUse: 'Gamified Electrical Safety Training & Knowledge Verification'
     },
     physicsSummary: 'Interactive quiz evaluating understanding of touch potentials, let-go limits, arc blast blast-radius calculations, breaker trip classifications, and CPR emergency resuscitation protocols.'
+  },
+
+  homeguard: {
+    moduleId: 'homeguard',
+    path: '/simulators/homeguard',
+    title: 'HomeGuard™ | 2.5D Residential Electrical Safety & Circuit Simulator | ElectroLive™',
+    description: 'Interactive 2.5D isometric residential electrical safety trainer. Peel walls in X-Ray mode to inspect conduits, copper wiring, distribution board breaker faceplates, and overload physics.',
+    canonicalUrl: `${BASE_URL}/simulators/homeguard`,
+    keywords: [
+      'residential electrical safety simulator',
+      'home circuit breaker overload',
+      'RCD shock protection 30mA',
+      '2.5D isometric house electrical wiring',
+      'home consumer unit distribution board'
+    ],
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'HomeGuard™ Residential Electrical Safety Simulator',
+      applicationCategory: 'EducationalApplication',
+      operatingSystem: 'Web',
+      description: 'Explore household electrical hazards in a 2.5D isometric cutaway home. Learn how overloads, short-circuits, and earth leakages trip modern consumer unit breakers.',
+      url: `${BASE_URL}/simulators/homeguard`,
+      author: {
+        '@type': 'Person',
+        name: 'Anil Sharma'
+      },
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'USD'
+      },
+      educationalUse: 'Homeowner & Apprentice Electrical Safety Education'
+    },
+    physicsSummary: 'HomeGuard simulates a standard 230V TN-S single-phase residential installation. Socket circuits are protected by 16A C-curve MCBs, lighting by 10A B-curve MCBs, and the overall installation is guarded by a 40A 30mA Type A RCCB. Overloads calculate thermal accumulation with identical calibration to IEC 60898-1, tripping at 1.45x In in approximately 2246 seconds.'
   }
 };
 
@@ -541,6 +576,7 @@ export function resolveModuleFromPath(pathname: string): SimulationType {
   if (clean.includes('/simulators/loto') || clean.includes('loto')) return 'loto';
   if (clean.includes('/simulators/first-aid') || clean.includes('first-aid')) return 'first_aid';
   if (clean.includes('/simulators/mcb') || clean.includes('mcb')) return 'mcb_simulator';
+  if (clean.includes('/simulators/homeguard') || clean.includes('homeguard')) return 'homeguard';
   if (clean.includes('/assessment')) return 'assessment';
   if (clean.includes('/safety-quiz')) return 'safety_quiz';
   return 'ac_shock';

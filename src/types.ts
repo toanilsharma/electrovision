@@ -8,6 +8,7 @@ export type SimulationType =
   | 'loto'
   | 'first_aid'
   | 'mcb_simulator'
+  | 'homeguard'
   | 'assessment'
   | 'safety_quiz';
 

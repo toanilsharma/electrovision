@@ -15,6 +15,7 @@ import { LOTOSimulator } from './components/Simulators/LOTOSimulator';
 import { FirstAidSimulator } from './components/Simulators/FirstAidSimulator';
 import { AssessmentModule } from './components/AssessmentModule';
 import { MCBLayoutShell } from './components/mcb/MCBLayoutShell';
+import { HomeGuardSimulator } from './modules/homeguard';
 import { SafetyQuizPage } from './components/SafetyQuizPage';
 import { DisasterReplayModal } from './components/DisasterReplayModal';
 import { HazardRescueScenarios } from './components/HazardRescueScenarios';
@@ -151,6 +152,8 @@ export default function App() {
         return <FirstAidSimulator key={resetKey} config={userConfig} />;
       case 'mcb_simulator':
         return <MCBLayoutShell key={resetKey} />;
+      case 'homeguard':
+        return <HomeGuardSimulator key={resetKey} />;
       case 'assessment':
         return <AssessmentModule key={resetKey} config={userConfig} />;
       case 'safety_quiz':
