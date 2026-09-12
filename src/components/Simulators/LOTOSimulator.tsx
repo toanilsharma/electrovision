@@ -128,6 +128,9 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
     };
   }, [ambientHumEnabled, completedSteps]);
 
+  // View mode for Procedure: Visual Focus (70% machinery) vs Balanced (50% machinery)
+  const [viewMode, setViewMode] = useState<'visual' | 'balanced'>('visual');
+
   // Checklist state
   const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
   const [checklistFilter, setChecklistFilter] = useState<string>("All");
@@ -565,16 +568,49 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
               {/* MAIN ACTIVE STEP VIEWPORT */}
               <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2 overflow-hidden">
                 {/* SVG ANIMATED INTERACTIVE SCENE PANEL */}
-                <div className="lg:col-span-6 flex flex-col min-h-0 overflow-hidden bg-slate-900/80 border border-slate-800 rounded-xl p-2 shadow-md">
-                  <div className="flex items-center justify-between shrink-0 mb-1">
-                    <span className="text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded border"
-                      style={{ color: step.color, borderColor: step.color + "90", backgroundColor: step.color + "25" }}>
-                      Diagram · Step {currentStep + 1}: {step.shortTitle}
-                    </span>
-                    <span className={cn("text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider border shadow-sm",
-                      step.hazardLevel === "Critical" ? "text-red-300 border-red-500/60 bg-red-950/60" : step.hazardLevel === "High" ? "text-amber-300 border-amber-500/60 bg-amber-950/60" : "text-emerald-300 border-emerald-500/60 bg-emerald-950/60")}>
-                      {step.hazardLevel} Hazard
-                    </span>
+                <div className={cn(
+                  "flex flex-col min-h-0 overflow-hidden bg-slate-900/80 border border-slate-800 rounded-xl p-2 shadow-md transition-all duration-300",
+                  viewMode === 'visual' ? "lg:col-span-8 xl:col-span-8" : "lg:col-span-6"
+                )}>
+                  <div className="flex items-center justify-between shrink-0 mb-1 px-0.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border truncate"
+                        style={{ color: step.color, borderColor: step.color + "90", backgroundColor: step.color + "25" }}>
+                        Diagram · Step {currentStep + 1}: {step.shortTitle}
+                      </span>
+                      <span className={cn("text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider border shadow-sm shrink-0",
+                        step.hazardLevel === "Critical" ? "text-red-300 border-red-500/60 bg-red-950/60" : step.hazardLevel === "High" ? "text-amber-300 border-amber-500/60 bg-amber-950/60" : "text-emerald-300 border-emerald-500/60 bg-emerald-950/60")}>
+                        {step.hazardLevel} Hazard
+                      </span>
+                    </div>
+
+                    {/* View Mode Toggle: Visual Focus (70%) vs Balanced (50%) */}
+                    <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800 shrink-0">
+                      <button
+                        onClick={() => setViewMode('visual')}
+                        className={cn(
+                          "px-2 py-0.5 rounded text-[9.5px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer",
+                          viewMode === 'visual'
+                            ? "bg-orange-500 text-slate-950 shadow-sm"
+                            : "text-slate-400 hover:text-white"
+                        )}
+                        title="Visual Simulator Mode (Expanded High-Definition Machinery Focus)"
+                      >
+                        📺 Visual Focus (70%)
+                      </button>
+                      <button
+                        onClick={() => setViewMode('balanced')}
+                        className={cn(
+                          "px-2 py-0.5 rounded text-[9.5px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer",
+                          viewMode === 'balanced'
+                            ? "bg-orange-500 text-slate-950 shadow-sm"
+                            : "text-slate-400 hover:text-white"
+                        )}
+                        title="Balanced Mode (50% Machinery / 50% Protocol Specs)"
+                      >
+                        ⚖ Balanced
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex-1 min-h-0 bg-slate-950 border border-slate-800 rounded-lg relative flex flex-col items-center justify-center overflow-hidden">
@@ -613,35 +649,44 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                 </div>
 
                 {/* FOCUSED STEP DETAILS PANEL (ZERO-SCROLL BALANCED LAYOUT) */}
-                <div className="lg:col-span-6 flex flex-col justify-between min-h-0 overflow-hidden bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 gap-2 shadow-md">
+                <div className={cn(
+                  "flex flex-col justify-between min-h-0 overflow-hidden bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 gap-2 shadow-md transition-all duration-300",
+                  viewMode === 'visual' ? "lg:col-span-4 xl:col-span-4" : "lg:col-span-6"
+                )}>
                   
                   {/* Top: Step Directive Header */}
-                  <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col gap-1 shrink-0">
+                  <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col gap-1 shrink-0">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
                         <span className="w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ backgroundColor: step.color }} />
-                        <span className="text-xs font-black uppercase text-white tracking-wide">
+                        <span className="text-xs font-black uppercase text-white tracking-wide truncate">
                           Step {step.id}: {step.title} Directive
                         </span>
                       </div>
-                      <span className="text-[9px] font-mono text-orange-400 uppercase bg-orange-950/60 px-1.5 py-0.5 rounded border border-orange-500/30">
+                      <span className="text-[9px] font-mono text-orange-400 uppercase bg-orange-950/60 px-1.5 py-0.5 rounded border border-orange-500/30 shrink-0">
                         {step.regulation}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-200 leading-snug font-sans">
+                    <p className="text-[10.5px] text-slate-200 leading-snug font-sans">
                       {step.desc}
                     </p>
                   </div>
 
-                  {/* Middle: 2-Column Micro-Grid (Mandatory Actions 7 cols & Fatal Mistake 5 cols) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 flex-1 min-h-0 overflow-hidden">
-                    {/* Mandatory Safety Actions (7 cols) */}
-                    <div className="sm:col-span-7 p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 flex flex-col justify-between overflow-hidden min-h-0">
+                  {/* Middle: Adaptive Protocol Checklist and Fatal Mistake Alert */}
+                  <div className={cn(
+                    "flex-1 min-h-0 overflow-hidden gap-2",
+                    viewMode === 'visual' ? "flex flex-col justify-between" : "grid grid-cols-1 sm:grid-cols-12"
+                  )}>
+                    {/* Mandatory Safety Actions */}
+                    <div className={cn(
+                      "p-2 rounded-xl bg-slate-950/90 border border-slate-800 flex flex-col justify-between overflow-hidden min-h-0",
+                      viewMode === 'visual' ? "flex-1" : "sm:col-span-7"
+                    )}>
                       <div>
                         <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 block mb-1">
                           Mandatory Safety Protocol
                         </span>
-                        <div className="space-y-1 overflow-y-auto pr-1" style={{ scrollbarWidth: 'none' }}>
+                        <div className="space-y-1 overflow-y-auto pr-1 no-scrollbar" style={{ maxHeight: viewMode === 'visual' ? '120px' : '150px' }}>
                           {step.keyPoints.map((pt, i) => (
                             <div key={i} className="flex items-start gap-1.5">
                               <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-emerald-400" />
@@ -650,25 +695,28 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                           ))}
                         </div>
                       </div>
-                      <div className="pt-1.5 border-t border-slate-800/80 text-[8.5px] font-mono text-slate-400 flex items-center justify-between">
+                      <div className="pt-1 border-t border-slate-800/80 text-[8.5px] font-mono text-slate-400 flex items-center justify-between shrink-0">
                         <span>Zero-Energy Verified</span>
                         <span className="text-emerald-400 font-bold">REQUIRED</span>
                       </div>
                     </div>
 
-                    {/* Fatal Mistake Alert (5 cols) */}
-                    <div className="sm:col-span-5 p-2 rounded-xl border border-red-500/40 bg-red-950/30 flex flex-col justify-between overflow-hidden min-h-0">
+                    {/* Fatal Mistake Alert */}
+                    <div className={cn(
+                      "p-2 rounded-xl border border-red-500/40 bg-red-950/30 flex flex-col justify-between overflow-hidden min-h-0",
+                      viewMode === 'visual' ? "shrink-0" : "sm:col-span-5"
+                    )}>
                       <div>
-                        <div className="flex items-center gap-1.5 mb-1 text-red-400">
+                        <div className="flex items-center gap-1.5 mb-0.5 text-red-400">
                           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                           <span className="text-[10px] font-black uppercase tracking-wider">Fatal Mistake</span>
                         </div>
-                        <p className="text-[10.5px] text-red-200 leading-tight">
+                        <p className="text-[10px] text-red-200 leading-tight line-clamp-2">
                           {step.warning}
                         </p>
                         <button
                           onClick={() => setShowConsequenceModal(true)}
-                          className="w-full mt-1.5 py-1 px-1.5 rounded-md border border-red-500/60 bg-red-950/80 hover:bg-red-900 text-red-200 hover:text-white transition-all text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-sm active:scale-95"
+                          className="w-full mt-1 py-1 px-1.5 rounded-md border border-red-500/60 bg-red-950/80 hover:bg-red-900 text-red-200 hover:text-white transition-all text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-sm active:scale-95"
                           title="Simulate what happens if this step is skipped"
                         >
                           <Skull className="w-3 h-3 text-red-400 shrink-0" />
@@ -676,7 +724,7 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                         </button>
                       </div>
 
-                      <div className="pt-1 border-t border-red-500/20 text-[8.5px] font-mono text-red-400/80 flex items-center justify-between">
+                      <div className="pt-0.5 border-t border-red-500/20 text-[8px] font-mono text-red-400/80 flex items-center justify-between">
                         <span>OSHA Standard</span>
                         <span className="text-[7.5px] bg-red-950 px-1 py-0.2 rounded border border-red-800 text-red-300">CRITICAL</span>
                       </div>
