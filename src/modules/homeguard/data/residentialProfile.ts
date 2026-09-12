@@ -90,8 +90,8 @@ export const AVAILABLE_APPLIANCES: Appliance[] = [
     id: 'tv_console',
     name: 'Smart TV & Console',
     room: 'living',
-    powerWatts: 300,
-    currentAmps: 1.3,
+    powerWatts: 150,
+    currentAmps: 0.7,
     circuitId: 'c2_living_sockets',
     icon: 'tv',
     description: 'Normal everyday entertainment load.'
@@ -110,8 +110,8 @@ export const AVAILABLE_APPLIANCES: Appliance[] = [
     id: 'hair_dryer',
     name: 'High-Power Hair Dryer',
     room: 'living',
-    powerWatts: 1100,
-    currentAmps: 4.8,
+    powerWatts: 986,
+    currentAmps: 4.3,
     circuitId: 'c2_living_sockets',
     icon: 'wind',
     description: 'Motor fan and heating coils combined.'
