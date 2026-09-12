@@ -414,7 +414,7 @@ export function IndustrialGridDiagram({
       </div>
 
       {/* Main SVG Vector Diagram + Canvas Arc Flash Overlay with Panzoom & Reset FAB */}
-      <div className="relative flex-1 w-full min-h-[420px] flex items-center justify-center p-2 overflow-hidden bg-[radial-gradient(ellipse_at_top,_#1e293b_0%,_#0f172a_100%)] touch-none select-none">
+      <div className="relative flex-1 w-full min-h-0 flex items-center justify-center p-2 overflow-hidden bg-[radial-gradient(ellipse_at_top,_#1e293b_0%,_#0f172a_100%)] touch-none select-none">
         
         {/* Panzoom Viewport Container */}
         <div 
