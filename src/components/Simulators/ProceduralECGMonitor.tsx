@@ -145,6 +145,8 @@ export function ProceduralECGMonitor({
   const rhythmLabels: Record<ECGRhythmType, { name: string; status: string; color: string }> = {
     sinus: { name: 'NORMAL SINUS RHYTHM', status: 'NON-SHOCKABLE / ROSC', color: 'text-emerald-400' },
     coarse_vf: { name: 'VENTRICULAR FIBRILLATION (COARSE)', status: 'SHOCKABLE — HIGH EFFICACY', color: 'text-amber-400' },
+    vfib: { name: 'VENTRICULAR FIBRILLATION', status: 'SHOCKABLE — HIGH EFFICACY', color: 'text-amber-400' },
+    intermediate_vf: { name: 'INTERMEDIATE VENTRICULAR FIBRILLATION', status: 'SHOCKABLE — CPR REQUIRED', color: 'text-orange-400' },
     fine_vf: { name: 'FINE VENTRICULAR FIBRILLATION', status: 'SHOCKABLE — CPR REQUIRED', color: 'text-orange-400' },
     pvt: { name: 'PULSELESS VENTRICULAR TACHYCARDIA', status: 'SHOCKABLE — IMMEDIATE DEFIB', color: 'text-red-400' },
     asystole: { name: 'ASYSTOLE (FLATLINE)', status: 'NON-SHOCKABLE — CONTINUE CPR', color: 'text-red-500' },

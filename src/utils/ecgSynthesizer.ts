@@ -6,7 +6,7 @@
  * Standards: AHA ACLS 2024 / IEC 60601-2-27 (ECG monitoring standards)
  */
 
-export type ECGRhythmType = 'sinus' | 'coarse_vf' | 'fine_vf' | 'pvt' | 'asystole' | 'pea';
+export type ECGRhythmType = 'sinus' | 'coarse_vf' | 'fine_vf' | 'intermediate_vf' | 'vfib' | 'pvt' | 'asystole' | 'pea';
 export type ECGLead = 'Lead II' | 'V1';
 
 export interface ECGPoint {
@@ -179,9 +179,11 @@ export function sampleECGVoltage(t: number, options: ECGSampleOptions): ECGPoint
       rhythmVoltageMv = generateSinusWave(cyclePhase, lead);
       break;
     case 'coarse_vf':
+    case 'vfib':
       rhythmVoltageMv = generateCoarseVF(t);
       break;
     case 'fine_vf':
+    case 'intermediate_vf':
       rhythmVoltageMv = generateFineVF(t);
       break;
     case 'pvt':

@@ -68,6 +68,14 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
     prevStateRef.current = state;
   }, [state, isMagneticTrip, playBreakerTripSound, playArcCrackle, playMagneticTripSolenoid]);
 
+  // Auto-reset manual scrub bar when breaker state returns to CLOSED
+  useEffect(() => {
+    if (state === MCBState.CLOSED) {
+      setScrubProgress(null);
+      setIsManualScrub(false);
+    }
+  }, [state]);
+
   // Effective scrub progress (0.0: Closed -> 0.3: Unlatched -> 0.7: Arcing -> 1.0: Cleared)
   const effectiveProgress = useMemo(() => {
     if (scrubProgress !== null) return scrubProgress;
@@ -166,6 +174,10 @@ export const BreakerCutaway: React.FC<BreakerCutawayProps> = ({
       const h = rect ? Math.max(160, rect.height - 45) : 320;
 
       ctx.clearRect(0, 0, w, h);
+
+      if (state === MCBState.CLOSED) {
+        arcParticles = [];
+      }
 
       // Trigger Arc Particles when unlatching / arcing
       const isArcingNow = state === MCBState.ARCING || (isManualScrub && effectiveProgress > 0.3 && effectiveProgress < 0.95);

@@ -16,6 +16,7 @@ interface CanvasOscilloscopeProps {
   ratedCurrent?: number;
   faultCurrent?: number;
   isSimulating?: boolean;
+  state?: MCBState;
   className?: string;
 }
 
@@ -29,6 +30,7 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
   ratedCurrent = 16,
   faultCurrent = 23.2,
   isSimulating = false,
+  state = MCBState.CLOSED,
   className
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,6 +53,7 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
 
   const is3Phase = systemType === '3ph_400v';
   const isDC = currentType === 'dc';
+  const hasTrippedOrActive = isSimulating || state !== MCBState.CLOSED;
 
   // Generate live dataset (Pre-fault continuous or Worker Fault Waveform)
   const plotData = useMemo<uPlot.AlignedData>(() => {
@@ -64,8 +67,8 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
     const iArrC: number[] = new Array(numPoints);
     const vArr: number[] = new Array(numPoints);
 
-    // If we have real worker samples from fault execution
-    if (samples && samples.length > 5) {
+    // If active fault simulation or tripped event
+    if (hasTrippedOrActive && samples && samples.length > 5) {
       const stepRatio = Math.max(1, Math.floor(samples.length / numPoints));
       const filtered = samples.filter((_, idx) => idx % stepRatio === 0).slice(0, numPoints);
 
@@ -142,7 +145,7 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
       return [timeArr, iArrA, iArrB, iArrC, vArr];
     }
     return [timeArr, iArrA, vArr];
-  }, [samples, timebaseMs, ratedCurrent, systemType, currentType, is3Phase, isDC, tClear]);
+  }, [samples, timebaseMs, ratedCurrent, systemType, currentType, is3Phase, isDC, tClear, hasTrippedOrActive]);
 
   // Build uPlot instance
   useEffect(() => {
@@ -155,6 +158,7 @@ export const CanvasOscilloscope: React.FC<CanvasOscilloscopeProps> = ({
     const tripMarkerPlugin: uPlot.Plugin = {
       hooks: {
         draw: (u: uPlot) => {
+          if (!hasTrippedOrActive) return;
           const { ctx } = u;
           const { left, top, width: pW, height: pH } = u.bbox;
 

@@ -112,6 +112,7 @@ export const MCBLayoutShell: React.FC = () => {
   // View Stage State: 'sld' | 'cutaway2d' | 'cutaway3d'
   const [centerView, setCenterView] = useState<'sld' | 'cutaway2d' | 'cutaway3d'>('sld');
   const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
+  const [leftRailTab, setLeftRailTab] = useState<'cockpit' | 'params'>('cockpit');
 
   // Simulator configuration state
   const [ratedCurrent, setRatedCurrent] = useState<number>(16);
@@ -143,10 +144,15 @@ export const MCBLayoutShell: React.FC = () => {
   );
 
   const previousStateRef = useRef<MCBState>(MCBState.CLOSED);
+  const tripTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Reset Simulation helper
   const resetSimulation = useCallback(() => {
     setIsSimulating(false);
+    if (tripTimeoutRef.current) {
+      clearTimeout(tripTimeoutRef.current);
+      tripTimeoutRef.current = null;
+    }
     previousStateRef.current = MCBState.CLOSED;
     simulatorRef.current.reset(ambientTemp);
     simulatorRef.current.setFaultWaveform({
@@ -158,13 +164,19 @@ export const MCBLayoutShell: React.FC = () => {
       currentType,
       faultType
     });
-    const initialSnap = simulatorRef.current.step(0, faultCurrent);
+    // Clean standby closed state before fault is applied (current = 0)
+    const initialSnap = simulatorRef.current.step(0, 0);
     setCurrentSnapshot(initialSnap);
+    setIsConsoleOpen(false);
   }, [ambientTemp, faultCurrent, inceptionAngleDeg, xrRatio, systemType, currentType, faultType]);
 
   // FORCED RESET BUTTON HANDLER
   const handleForcedReset = () => {
     setIsSimulating(false);
+    if (tripTimeoutRef.current) {
+      clearTimeout(tripTimeoutRef.current);
+      tripTimeoutRef.current = null;
+    }
     previousStateRef.current = MCBState.CLOSED;
     simulatorRef.current.reset(ambientTemp);
     simulatorRef.current.setFaultWaveform({
@@ -176,8 +188,11 @@ export const MCBLayoutShell: React.FC = () => {
       currentType,
       faultType
     });
-    const resetSnap = simulatorRef.current.step(0, faultCurrent);
+    // Clean standby closed state on forced reclose (current = 0)
+    const resetSnap = simulatorRef.current.step(0, 0);
     setCurrentSnapshot(resetSnap);
+    setIsConsoleOpen(false);
+    mcbSoundSystem.playRecloseLatch();
   };
 
   // Fast-Forward to Instant of Trip (For long thermal tests > 2s)
@@ -397,7 +412,8 @@ export const MCBLayoutShell: React.FC = () => {
       triggerOverloadHaptic();
     }
 
-    setTimeout(() => {
+    if (tripTimeoutRef.current) clearTimeout(tripTimeoutRef.current);
+    tripTimeoutRef.current = setTimeout(() => {
       setIsConsoleOpen(true);
     }, 1200);
   }, [isSoundMuted, playTripAudio, triggerShortCircuitHaptic, triggerOverloadHaptic, triggerArcFlash]);
@@ -578,7 +594,7 @@ export const MCBLayoutShell: React.FC = () => {
   }, [curve, ratedCurrent, faultCurrent, currentMultiplier, systemType, currentType, currentSnapshot, ambientTemp]);
 
   return (
-    <div className="h-[100dvh] w-full bg-slate-950 text-slate-100 flex flex-col overflow-hidden font-mono select-none relative">
+    <div className="h-full w-full bg-slate-950 text-slate-100 flex flex-col overflow-hidden font-mono select-none relative">
       <ArcFlashOverlay />
       <StandardsProofModal isOpen={isProofModalOpen} onClose={() => setIsProofModalOpen(false)} />
 
@@ -759,155 +775,221 @@ export const MCBLayoutShell: React.FC = () => {
       {/* DESKTOP VIEW (≥1024px): 3-COLUMN COCKPIT GRID LOCKED */}
       <div className="hidden lg:flex flex-1 min-h-0 flex-row overflow-hidden relative">
         
-        {/* LEFT CONTROL RAIL (260px) */}
-        <aside className="w-[260px] shrink-0 h-full border-r border-slate-800 bg-slate-900/90 flex flex-col overflow-y-auto p-2.5 space-y-2.5 z-20 font-mono text-xs">
+        {/* LEFT CONTROL RAIL (280px) - SMART & SCROLLER-FREE */}
+        <aside className="w-[280px] shrink-0 h-full border-r border-slate-800 bg-slate-900/95 flex flex-col p-2 space-y-2 z-20 font-mono text-xs overflow-hidden select-none">
           
-          {/* DIN RAIL PHOTOREALISTIC BRAND-NEUTRAL MCB FACEPLATE */}
-          <DINRailMCBFaceplate
-            In={ratedCurrent}
-            curve={curve}
-            state={currentSnapshot?.state || MCBState.CLOSED}
-            tripCause={currentSnapshot?.tripCause || TripCause.NONE}
-            onReclose={handleForcedReset}
-          />
-
-          {/* MISSION CARDS WITH SEQUENTIAL PROGRESS DOTS */}
-          <MissionCardsLab
-            selectedExperiment={selectedExperiment}
-            onSelectExperiment={handleSelectExperiment}
-            state={currentSnapshot?.state || MCBState.CLOSED}
-            tripCause={currentSnapshot?.tripCause || TripCause.NONE}
-            className={isHighlightingControls ? "ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-950 transition-all duration-300" : ""}
-          />
-
-          {/* Primary Action Trigger Button */}
-          <button
-            data-tour="apply-fault"
-            onClick={handleToggleSimulation}
-            className={cn(
-              "w-full py-2.5 rounded-xl font-black uppercase tracking-wider text-slate-950 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg min-h-[40px] shrink-0",
-              isSimulating ? "bg-amber-500 hover:bg-amber-400" : "bg-emerald-500 hover:bg-emerald-400",
-              isHighlightingControls ? "ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-950" : ""
-            )}
-          >
-            {isSimulating ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-            {isSimulating ? 'PAUSE FAULT' : 'APPLY FAULT CURRENT'}
-          </button>
-
-          {/* FORCED RESET / RE-CLOSE BUTTON */}
-          <button
-            onClick={handleForcedReset}
-            className="w-full py-2 rounded-xl font-black uppercase tracking-wider bg-rose-950/80 border border-rose-500/80 hover:bg-rose-900 text-rose-200 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg min-h-[38px] shrink-0"
-          >
-            <RefreshCw className="w-4 h-4 text-rose-400" />
-            FORCED RESET / RE-CLOSE
-          </button>
-
-          {/* Fault Type Selector */}
-          <div className={isHighlightingControls ? "ring-2 ring-cyan-400 p-0.5 rounded-lg" : ""}>
-            <label className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">Fault Distribution</label>
-            <select
-              value={faultType}
-              onChange={(e) => setFaultType(e.target.value as FaultType)}
-              className="w-full bg-slate-950 border border-slate-750 rounded-lg p-1.5 text-xs font-bold text-white min-h-[38px]"
-            >
-              {systemType === '3ph_400v' ? (
-                <>
-                  <option value="3ph_bolted">3-Phase Bolted Fault</option>
-                  <option value="L-L">Line-to-Line Fault (L-L)</option>
-                  <option value="L-G">Line-to-Ground Fault (L-G)</option>
-                </>
-              ) : (
-                <>
-                  <option value="L-N">Line-to-Neutral Fault (L-N)</option>
-                  <option value="L-G">Line-to-Ground Fault (L-G)</option>
-                </>
+          {/* Primary Action Buttons (Always Visible) */}
+          <div className="flex flex-col gap-1.5 shrink-0">
+            <button
+              data-tour="apply-fault"
+              onClick={handleToggleSimulation}
+              className={cn(
+                "w-full py-2 rounded-xl font-black uppercase tracking-wider text-slate-950 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg min-h-[38px] shrink-0 active:scale-[0.98]",
+                isSimulating ? "bg-amber-500 hover:bg-amber-400" : "bg-emerald-500 hover:bg-emerald-400",
+                isHighlightingControls ? "ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-950" : ""
               )}
-            </select>
-          </div>
-
-          {/* Curve Selection (B, C, D) */}
-          <div className={isHighlightingControls ? "ring-2 ring-cyan-400 p-0.5 rounded-xl" : ""}>
-            <label className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">Tripping Curve (IEC 60898-1)</label>
-            <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold">
-              {(['B', 'C', 'D'] as MCBTrippingCurve[]).map(c => (
-                <button
-                  key={c}
-                  onClick={() => setCurve(c)}
-                  className={cn(
-                    "py-1 rounded-lg font-black transition-all cursor-pointer min-h-[32px] shrink-0",
-                    curve === c ? "bg-emerald-500 text-slate-950 shadow" : "text-slate-400 hover:text-white"
-                  )}
-                >
-                  Curve {c}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* MULTIPLIER GAUGE WITH IEC 60898-1 COLOUR ZONES */}
-          <MultiplierGauge
-            multiplier={Number(currentMultiplier)}
-            curve={curve}
-            ratedCurrent={ratedCurrent}
-            faultCurrent={faultCurrent}
-          />
-
-          {/* Prospective Fault Current Slider */}
-          <div className={isHighlightingControls ? "ring-2 ring-cyan-400 p-1 rounded-lg" : ""}>
-            <div className="flex justify-between items-center text-[11px] font-bold text-white uppercase mb-0.5">
-              <span>Fault Current (I)</span>
-              <span className="text-emerald-400 tabular-nums">{faultCurrent.toFixed(1)} A</span>
-            </div>
-            <input
-              type="range" min="1" max="1000" step="1" value={faultCurrent}
-              onChange={(e) => setFaultCurrent(Number(e.target.value))}
-              className="w-full h-2 accent-emerald-500 cursor-pointer rounded-lg bg-slate-800 focus-visible:ring-2 focus-visible:ring-cyan-400"
-            />
-          </div>
-
-          {/* Rated Current Dropdown */}
-          <div className={isHighlightingControls ? "ring-2 ring-cyan-400 p-0.5 rounded-lg" : ""}>
-            <label className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">Rated Current (In)</label>
-            <select
-              value={ratedCurrent}
-              onChange={(e) => setRatedCurrent(Number(e.target.value))}
-              className="w-full bg-slate-950 border border-slate-750 rounded-lg p-1.5 text-xs font-bold text-white min-h-[38px]"
             >
-              <option value="6">6 Amperes</option>
-              <option value="16">16 Amperes (Standard)</option>
-              <option value="25">25 Amperes</option>
-              <option value="32">32 Amperes</option>
-              <option value="63">63 Amperes</option>
-            </select>
+              {isSimulating ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
+              {isSimulating ? 'PAUSE FAULT' : 'APPLY FAULT CURRENT'}
+            </button>
+
+            {/* FORCED RESET / RE-CLOSE BUTTON */}
+            <button
+              onClick={handleForcedReset}
+              className="w-full py-2 rounded-xl font-black uppercase tracking-wider bg-rose-950/90 border border-rose-500/80 hover:bg-rose-900 text-rose-200 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg min-h-[36px] shrink-0 active:scale-[0.98]"
+              title="Force Reset / Re-close Breaker"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-rose-400" />
+              FORCED RESET / RE-CLOSE
+            </button>
           </div>
 
-          {/* Ambient Temp Slider (-5°C to +40°C per IEC 60898-1) */}
-          <div className={isHighlightingControls ? "ring-2 ring-cyan-400 p-1 rounded-lg" : ""}>
-            <div className="flex justify-between items-center text-[11px] font-bold text-white uppercase mb-0.5">
-              <span>Ambient Temp (Tamb)</span>
-              <span className="text-amber-300 tabular-nums">{ambientTemp}°C</span>
-            </div>
-            <input
-              type="range" min="-5" max="40" step="1" value={ambientTemp}
-              onChange={(e) => setAmbientTemp(Number(e.target.value))}
-              className="w-full h-2 accent-amber-500 cursor-pointer rounded-lg bg-slate-800 focus-visible:ring-2 focus-visible:ring-cyan-400"
-            />
+          {/* Smart Segmented Tab Navigation: [⚡ BREAKER & LAB] | [⚙ RATINGS & FAULT] */}
+          <div className="grid grid-cols-2 p-0.5 rounded-xl bg-slate-950 border border-slate-800 shrink-0 text-[11px] font-black">
+            <button
+              onClick={() => setLeftRailTab('cockpit')}
+              className={cn(
+                "py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                leftRailTab === 'cockpit'
+                  ? "bg-cyan-500 text-slate-950 shadow font-black"
+                  : "text-slate-400 hover:text-white"
+              )}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              BREAKER & LAB
+            </button>
+            <button
+              onClick={() => setLeftRailTab('params')}
+              className={cn(
+                "py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                leftRailTab === 'params'
+                  ? "bg-cyan-500 text-slate-950 shadow font-black"
+                  : "text-slate-400 hover:text-white"
+              )}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              RATINGS & FAULT
+            </button>
           </div>
 
-          {/* Thermal Memory Ratio Progress Bar */}
-          <div className="p-2 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
-            <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 uppercase">
-              <span>Thermal Memory Bar</span>
-              <span className="text-amber-400 tabular-nums">{((currentSnapshot?.thermal.thermalMemoryRatio || 0) * 100).toFixed(0)}%</span>
-            </div>
-            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-              <div 
-                className="bg-amber-500 h-2 transition-all duration-200" 
-                style={{ width: `${(currentSnapshot?.thermal.thermalMemoryRatio || 0) * 100}%` }}
+          {/* TAB 1: BREAKER FACEPLATE & MISSION CARDS */}
+          {leftRailTab === 'cockpit' ? (
+            <div className="flex-1 min-h-0 flex flex-col justify-between space-y-2 overflow-hidden animate-fadeIn">
+              {/* DIN RAIL PHOTOREALISTIC BRAND-NEUTRAL MCB FACEPLATE */}
+              <DINRailMCBFaceplate
+                In={ratedCurrent}
+                curve={curve}
+                state={currentSnapshot?.state || MCBState.CLOSED}
+                tripCause={currentSnapshot?.tripCause || TripCause.NONE}
+                onReclose={handleForcedReset}
               />
+
+              {/* MISSION CARDS WITH SEQUENTIAL PROGRESS DOTS */}
+              <div className="flex-1 min-h-0 flex flex-col justify-center">
+                <MissionCardsLab
+                  selectedExperiment={selectedExperiment}
+                  onSelectExperiment={handleSelectExperiment}
+                  state={currentSnapshot?.state || MCBState.CLOSED}
+                  tripCause={currentSnapshot?.tripCause || TripCause.NONE}
+                  className={isHighlightingControls ? "ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-950 transition-all duration-300" : ""}
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            /* TAB 2: RATINGS & FAULT INPUTS */
+            <div className="flex-1 min-h-0 flex flex-col justify-between space-y-1.5 overflow-hidden text-xs animate-fadeIn">
+              {/* Curve Selection (B, C, D) */}
+              <div className={isHighlightingControls ? "ring-2 ring-cyan-400 p-0.5 rounded-xl" : ""}>
+                <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase mb-0.5">
+                  <span>Curve (IEC 60898-1)</span>
+                  <span className="text-cyan-400 font-extrabold">{curve === 'B' ? '3-5×' : curve === 'C' ? '5-10×' : '10-20×'} In</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold">
+                  {(['B', 'C', 'D'] as MCBTrippingCurve[]).map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setCurve(c)}
+                      className={cn(
+                        "py-1 rounded-lg font-black transition-all cursor-pointer min-h-[28px] shrink-0",
+                        curve === c ? "bg-emerald-500 text-slate-950 shadow" : "text-slate-400 hover:text-white"
+                      )}
+                    >
+                      Curve {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Grid: Rated Current (In) & Fault Distribution */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className={isHighlightingControls ? "ring-2 ring-cyan-400 p-0.5 rounded-lg" : ""}>
+                  <label className="text-[10px] text-slate-400 font-bold uppercase block mb-0.5">Rated In</label>
+                  <select
+                    value={ratedCurrent}
+                    onChange={(e) => setRatedCurrent(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-750 rounded-lg p-1 text-xs font-bold text-white min-h-[32px]"
+                  >
+                    <option value="6">6 A</option>
+                    <option value="16">16 A (Std)</option>
+                    <option value="25">25 A</option>
+                    <option value="32">32 A</option>
+                    <option value="63">63 A</option>
+                  </select>
+                </div>
+
+                <div className={isHighlightingControls ? "ring-2 ring-cyan-400 p-0.5 rounded-lg" : ""}>
+                  <label className="text-[10px] text-slate-400 font-bold uppercase block mb-0.5">Fault Type</label>
+                  <select
+                    value={faultType}
+                    onChange={(e) => setFaultType(e.target.value as FaultType)}
+                    className="w-full bg-slate-950 border border-slate-750 rounded-lg p-1 text-xs font-bold text-white min-h-[32px]"
+                  >
+                    {systemType === '3ph_400v' ? (
+                      <>
+                        <option value="3ph_bolted">3Ø Bolted</option>
+                        <option value="L-L">Line-Line</option>
+                        <option value="L-G">Line-Ground</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="L-N">Line-Neutral</option>
+                        <option value="L-G">Line-Ground</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* Prospective Fault Current Slider + Multiplier Chips */}
+              <div className={isHighlightingControls ? "ring-2 ring-cyan-400 p-1 rounded-lg" : ""}>
+                <div className="flex justify-between items-center text-[10px] font-bold text-white uppercase mb-0.5">
+                  <span>Fault Current (I)</span>
+                  <span className="text-emerald-400 tabular-nums">{faultCurrent.toFixed(1)} A</span>
+                </div>
+                <input
+                  type="range" min="1" max="1000" step="1" value={faultCurrent}
+                  onChange={(e) => setFaultCurrent(Number(e.target.value))}
+                  className="w-full h-2 accent-emerald-500 cursor-pointer rounded-lg bg-slate-800"
+                />
+                {/* 1-Tap Quick Multiplier Buttons */}
+                <div className="flex items-center justify-between gap-1 mt-1">
+                  {[
+                    { label: '1.13x', mult: 1.13 },
+                    { label: '1.45x', mult: 1.45 },
+                    { label: '2.55x', mult: 2.55 },
+                    { label: `${curve === 'B' ? '4x' : curve === 'C' ? '7.5x' : '15x'}`, mult: curve === 'B' ? 4 : curve === 'C' ? 7.5 : 15 },
+                    { label: '12.5x', mult: 12.5 },
+                  ].map(m => (
+                    <button
+                      key={m.label}
+                      onClick={() => setFaultCurrent(Number((m.mult * ratedCurrent).toFixed(1)))}
+                      className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/50 text-[10px] font-black transition-colors"
+                      title={`Set prospective current to ${m.label} In`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ambient Temp Slider (-5°C to +40°C) with In_eff derating */}
+              <div className={isHighlightingControls ? "ring-2 ring-cyan-400 p-1 rounded-lg" : ""}>
+                <div className="flex justify-between items-center text-[10px] font-bold text-white uppercase mb-0.5">
+                  <span>Tamb: <strong className="text-amber-300">{ambientTemp}°C</strong></span>
+                  <span className="text-slate-400 text-[9px]">In,eff: <strong className="text-cyan-300">{In_eff.toFixed(1)}A</strong></span>
+                </div>
+                <input
+                  type="range" min="-5" max="40" step="1" value={ambientTemp}
+                  onChange={(e) => setAmbientTemp(Number(e.target.value))}
+                  className="w-full h-1.5 accent-amber-500 cursor-pointer rounded-lg bg-slate-800"
+                />
+              </div>
+
+              {/* MULTIPLIER GAUGE WITH IEC 60898-1 COLOUR ZONES */}
+              <div className="py-0.5">
+                <MultiplierGauge
+                  multiplier={Number(currentMultiplier)}
+                  curve={curve}
+                  ratedCurrent={ratedCurrent}
+                  faultCurrent={faultCurrent}
+                />
+              </div>
+
+              {/* Thermal Memory Ratio Progress Bar */}
+              <div className="p-1.5 bg-slate-950 border border-slate-800 rounded-xl space-y-1 shrink-0">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-300 uppercase">
+                  <span>Thermal Memory Bar</span>
+                  <span className="text-amber-400 tabular-nums">{((currentSnapshot?.thermal.thermalMemoryRatio || 0) * 100).toFixed(0)}%</span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className="bg-amber-500 h-1.5 transition-all duration-200" 
+                    style={{ width: `${(currentSnapshot?.thermal.thermalMemoryRatio || 0) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </aside>
 
         {/* CENTER MAIN VIEWPORT (1FR) - SPLIT INTO SLD DIAGRAM (LEFT 58%) + WAVEFORM OSCILLOSCOPE (RIGHT 42%) */}
@@ -1019,6 +1101,7 @@ export const MCBLayoutShell: React.FC = () => {
                 ratedCurrent={ratedCurrent}
                 faultCurrent={faultCurrent}
                 isSimulating={isSimulating}
+                state={currentSnapshot?.state || MCBState.CLOSED}
                 className="h-full"
               />
             </div>
@@ -1026,16 +1109,64 @@ export const MCBLayoutShell: React.FC = () => {
           </div>
         </main>
 
-        {/* RIGHT COLUMN (320PX) - TCC CHART */}
-        <aside data-tour="tcc-chart" className="w-[320px] shrink-0 h-full border-l border-slate-800 bg-slate-900/90 flex flex-col p-2.5 overflow-hidden z-20">
-          <CanvasTCCChart 
-            ratedCurrent={ratedCurrent}
-            faultCurrent={faultCurrent}
-            activeCurve={curve}
-            bimetalTemp={currentSnapshot?.thermal.temperature || ambientTemp}
-            isTripped={currentSnapshot?.state === MCBState.OPEN_CLEARED}
-            className="h-full"
-          />
+        {/* RIGHT COLUMN (330PX) - TCC CHART + LIVE TELEMETRY HUD (ZERO SCROLLER) */}
+        <aside data-tour="tcc-chart" className="w-[330px] shrink-0 h-full border-l border-slate-800 bg-slate-900/95 flex flex-col p-2 space-y-1.5 overflow-hidden z-20 font-mono text-xs select-none">
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <CanvasTCCChart 
+              ratedCurrent={ratedCurrent}
+              faultCurrent={faultCurrent}
+              activeCurve={curve}
+              bimetalTemp={currentSnapshot?.thermal.temperature || ambientTemp}
+              isTripped={currentSnapshot?.state === MCBState.OPEN_CLEARED || currentSnapshot?.state === MCBState.UNLATCHED}
+              className="h-full"
+            />
+          </div>
+
+          {/* REAL-TIME IEC 60898-1 TELEMETRY COCKPIT HUD */}
+          <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono space-y-1 shrink-0 select-none">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-1 text-[10px] text-slate-400 font-bold uppercase">
+              <span className="flex items-center gap-1 text-cyan-400">
+                <Activity className="w-3 h-3" /> LIVE MCB TELEMETRY
+              </span>
+              <span className={cn(
+                "px-1.5 py-0.5 rounded font-black text-[9px] uppercase",
+                currentSnapshot?.state === MCBState.CLOSED 
+                  ? "bg-emerald-500/20 text-emerald-400" 
+                  : "bg-rose-500/20 text-rose-400 animate-pulse"
+              )}>
+                {currentSnapshot?.state === MCBState.CLOSED ? 'CLOSED • ARMED' : `TRIPPED (${currentSnapshot?.tripCause || 'FAULT'})`}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Multiple:</span>
+                <span className="text-amber-300 font-bold tabular-nums">{currentMultiplier}× In</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">t_trip:</span>
+                <span className="text-emerald-400 font-bold tabular-nums">
+                  {remainingTimeSec === Infinity ? '∞ (Hold)' : remainingTimeSec > 0 ? `${remainingTimeSec.toFixed(2)}s` : '<10ms'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">I²t Energy:</span>
+                <span className="text-sky-300 font-bold tabular-nums">{(currentSnapshot?.letThrough.i2t || 0).toFixed(1)} A²s</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Peak Ip:</span>
+                <span className="text-rose-400 font-bold tabular-nums">{(currentSnapshot?.letThrough.peakLetThroughCurrent || 0).toFixed(0)} A</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Bimetal T:</span>
+                <span className="text-orange-400 font-bold tabular-nums">{(currentSnapshot?.thermal.temperature || ambientTemp).toFixed(1)}°C</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Derated In:</span>
+                <span className="text-slate-200 font-bold tabular-nums">{In_eff.toFixed(1)} A</span>
+              </div>
+            </div>
+          </div>
         </aside>
 
         {/* HAZARD CONSOLE OVERLAY DRAWER */}

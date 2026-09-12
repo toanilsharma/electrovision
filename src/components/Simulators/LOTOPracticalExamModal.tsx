@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Timer, AlertTriangle, ShieldCheck, CheckCircle2, Award, RotateCcw, X, Zap, ChevronRight, ChevronLeft } from "lucide-react";
 import { LOTOMachineryVisualEngine } from "./LOTOMachineryVisualEngine";
 import { assessmentAudio } from "@/src/utils/assessmentSound";
+import { cn } from "@/src/lib/utils";
 
 interface LOTOPracticalExamModalProps {
   isOpen: boolean;

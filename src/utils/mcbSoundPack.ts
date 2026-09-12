@@ -62,6 +62,47 @@ class MCBSoundSystem {
   }
 
   /**
+   * Firm mechanical re-close / toggle re-latch snap sound.
+   */
+  public playRecloseLatch(): void {
+    if (this.isMuted) return;
+    const ctx = this.initContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+
+    // Firm spring latching snap
+    const snapOsc = ctx.createOscillator();
+    const snapGain = ctx.createGain();
+    snapOsc.type = 'triangle';
+    snapOsc.frequency.setValueAtTime(950, now);
+    snapOsc.frequency.exponentialRampToValueAtTime(150, now + 0.05);
+
+    snapGain.gain.setValueAtTime(0.45, now);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+    snapOsc.connect(snapGain);
+    snapGain.connect(ctx.destination);
+    snapOsc.start(now);
+    snapOsc.stop(now + 0.06);
+
+    // Subtle metallic contact engagement click
+    const clickOsc = ctx.createOscillator();
+    const clickGain = ctx.createGain();
+    clickOsc.type = 'sine';
+    clickOsc.frequency.setValueAtTime(2200, now + 0.01);
+    clickOsc.frequency.exponentialRampToValueAtTime(400, now + 0.04);
+
+    clickGain.gain.setValueAtTime(0.3, now + 0.01);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+
+    clickOsc.connect(clickGain);
+    clickGain.connect(ctx.destination);
+    clickOsc.start(now + 0.01);
+    clickOsc.stop(now + 0.05);
+  }
+
+  /**
    * Heavy spring snap & mechanical trip clack.
    */
   public playTripClack(): void {

@@ -34,7 +34,9 @@ export const CanvasTCCChart: React.FC<CanvasTCCChartProps> = ({
   className
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 280, height: 200 });
 
   const [selectedOEM, setSelectedOEM] = useState<OEMManufacturer>(oemManufacturer);
   const [trail, setTrail] = useState<TrailPoint[]>([]);
@@ -44,6 +46,35 @@ export const CanvasTCCChart: React.FC<CanvasTCCChartProps> = ({
   useEffect(() => {
     setSelectedOEM(oemManufacturer);
   }, [oemManufacturer]);
+
+  // Reset trail and replay when breaker is reset / not tripped
+  useEffect(() => {
+    if (!isTripped) {
+      isReplayingRef.current = false;
+      setTrail([]);
+    }
+  }, [isTripped]);
+
+  // Observe actual chart container size to guarantee screen fit with NO overflow
+  useEffect(() => {
+    const el = chartContainerRef.current;
+    if (!el) return;
+
+    const updateSize = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setDimensions({
+          width: Math.floor(rect.width),
+          height: Math.floor(rect.height)
+        });
+      }
+    };
+
+    updateSize();
+    const ro = new ResizeObserver(updateSize);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Current multiplier (I / In)
   const currentMult = Math.max(0.1, faultCurrent / Math.max(1, ratedCurrent));
@@ -80,6 +111,10 @@ export const CanvasTCCChart: React.FC<CanvasTCCChartProps> = ({
 
   // Update Operating Dot Trail
   useEffect(() => {
+    if (!isTripped && currentMult < 1.13) {
+      setTrail([]);
+      return;
+    }
     const now = Date.now();
     setTrail((prev) => {
       const updated = prev
@@ -96,7 +131,7 @@ export const CanvasTCCChart: React.FC<CanvasTCCChartProps> = ({
       }
       return updated.slice(-25); // Keep last 25 trail samples
     });
-  }, [currentMult, currentTripTime]);
+  }, [currentMult, currentTripTime, isTripped]);
 
   // Trigger Replay Animation on Trip
   useEffect(() => {
@@ -117,14 +152,13 @@ export const CanvasTCCChart: React.FC<CanvasTCCChartProps> = ({
 
   // D3 Chart Render with Morphing (300ms transition)
   useEffect(() => {
-    if (!svgRef.current || !containerRef.current) return;
+    if (!svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
-    const rect = containerRef.current.getBoundingClientRect();
-    const width = Math.max(280, rect.width - 24);
-    const height = Math.max(180, rect.height - 70);
+    const width = Math.max(220, dimensions.width);
+    const height = Math.max(120, dimensions.height);
 
-    const margin = { top: 15, right: 15, bottom: 35, left: 45 };
+    const margin = { top: 12, right: 12, bottom: 30, left: 40 };
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -455,7 +489,7 @@ export const CanvasTCCChart: React.FC<CanvasTCCChartProps> = ({
       )}
 
       {/* D3 SVG Canvas (Log-Log) */}
-      <div className="relative w-full flex-1 min-h-[140px] overflow-hidden rounded-lg bg-[#090d16] border border-slate-850 flex items-center justify-center">
+      <div ref={chartContainerRef} className="relative w-full flex-1 min-h-[140px] overflow-hidden rounded-lg bg-[#090d16] border border-slate-850 flex items-center justify-center">
         <svg ref={svgRef} className="w-full h-full" />
       </div>
 

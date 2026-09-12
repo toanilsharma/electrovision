@@ -86,6 +86,9 @@ export const GSAPTripVerdictStamp: React.FC<GSAPTripVerdictStampProps> = ({
 
     return () => {
       tl.kill();
+      if (stampRef.current?.parentElement) {
+        gsap.set(stampRef.current.parentElement, { x: 0, y: 0 });
+      }
     };
   }, [isTripped, tripCause]);
 
