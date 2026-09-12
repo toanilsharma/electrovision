@@ -60,6 +60,13 @@ export interface IEC60909Result {
   Smin: number; // Minimum required cable size (mm²)
   isThermalPass: boolean; // Verdict: PASS (true) / MELT (false)
   isLimitingActive: boolean; // Whether current-limiting capping is active
+
+  // Conductor Melting & Fusing (Onderdonk / IEEE 242 / IEC 60364-4-43)
+  fusingKFactor: number; // Conductor fusing constant (226 for Cu, 148 for Al)
+  fusingEnergy: number; // Energy required to vaporize conductor (A²s)
+  fusingEnergy_kA2s: number; // Energy required to vaporize conductor (kA²s)
+  tFusingMs: number; // Time until physical conductor vaporization/open-circuit (ms)
+  isMeltInterrupted: boolean; // True if conductor melted & severed open before breaker tripped
 }
 
 /**
@@ -87,6 +94,34 @@ export function calculateKappa(rxRatio: number): number {
  */
 export function calculateCableWithstand(sizeMm2: number, kFactor: number): number {
   return Math.pow(kFactor * sizeMm2, 2);
+}
+
+/**
+ * Conductor melting/fusing constant (Onderdonk's Equation / IEEE Std 242)
+ * For copper melting at 1085°C from 70°C: k_fuse ≈ 226 A·s^(1/2)/mm²
+ * For aluminum melting at 660°C from 70°C: k_fuse ≈ 148 A·s^(1/2)/mm²
+ */
+export function getFusingKFactor(material: 'Cu' | 'Al' = 'Cu'): number {
+  return material === 'Cu' ? 226 : 148;
+}
+
+/**
+ * Calculates Cable Conductor Physical Fusing / Vaporization Energy (A²s)
+ * According to Onderdonk's equation: I²t = k_fuse² * S²
+ */
+export function calculateCableFusingEnergy(sizeMm2: number, material: 'Cu' | 'Al' = 'Cu'): number {
+  const kFuse = getFusingKFactor(material);
+  return Math.pow(kFuse * sizeMm2, 2);
+}
+
+/**
+ * Calculates Time until Physical Conductor Melts and Blows Open (ms)
+ */
+export function calculateFusingTimeMs(faultCurrentA: number, sizeMm2: number, material: 'Cu' | 'Al' = 'Cu'): number {
+  if (faultCurrentA <= 0) return Infinity;
+  const fusingEnergyA2s = calculateCableFusingEnergy(sizeMm2, material);
+  const timeSec = fusingEnergyA2s / Math.pow(faultCurrentA, 2);
+  return timeSec * 1000;
 }
 
 /**
@@ -170,6 +205,16 @@ export function calculateIEC60909(params: IEC60909Params): IEC60909Result {
   const tTotalMs = tRelayMs === Infinity ? Infinity : (tRelayMs + tBreakerMs + tArcMs);
 
   // 7. Energy & Thermal Withstand
+  const kFactor = getKFactor(cableMaterial, cableInsulation);
+  const withstandEnergy = calculateCableWithstand(cableSizeMm2, kFactor);
+  const withstandEnergy_kA2s = withstandEnergy / 1000000;
+
+  // Conductor Fusing / Vaporization Threshold (Onderdonk / IEEE 242)
+  const fusingKFactor = getFusingKFactor(cableMaterial);
+  const fusingEnergy = calculateCableFusingEnergy(cableSizeMm2, cableMaterial);
+  const fusingEnergy_kA2s = fusingEnergy / 1000000;
+  const tFusingMs = Ik > 0 ? (fusingEnergy / Math.pow(Ik, 2)) * 1000 : Infinity;
+
   let letThroughEnergy = 0; // A²s
   let isLimitingActive = false;
 
@@ -177,7 +222,6 @@ export function calculateIEC60909(params: IEC60909Params): IEC60909Result {
     const uncappedEnergy = Math.pow(Ik, 2) * (tTotalMs / 1000); // A²s
     if (isLimitingBreaker) {
       // IEC 60898 Class 3 Current Limiting Breaker caps energy at high fault current
-      // Standard target: 0.6 kA²s (600,000 A²s) at 15 kA prospective fault current
       const capTargetA2s = 600000 * Math.pow(Ik / 15000, 2);
       const cappedEnergy = Math.min(uncappedEnergy, Math.max(100000, capTargetA2s));
       if (cappedEnergy < uncappedEnergy) {
@@ -193,10 +237,19 @@ export function calculateIEC60909(params: IEC60909Params): IEC60909Result {
     letThroughEnergy = Infinity;
   }
 
-  const kFactor = getKFactor(cableMaterial, cableInsulation);
-  const withstandEnergy = calculateCableWithstand(cableSizeMm2, kFactor);
+  // Does the conductor physically melt and blow open before the breaker clears?
+  // If current limiting is active, energy is suppressed well below fusing energy.
+  const isMeltInterrupted = !isLimitingActive && (tFusingMs < tTotalMs || letThroughEnergy > fusingEnergy);
+
+  if (isMeltInterrupted) {
+    // Conductor vaporized into an open-circuit!
+    // Real physics: Energy is capped at conductor vaporization plus transient blowout arc (~3ms)
+    const blowoutArcEnergy = Math.pow(Ik, 2) * 0.003;
+    letThroughEnergy = fusingEnergy + blowoutArcEnergy;
+  }
+
   const Smin = calculateSmin(letThroughEnergy, kFactor);
-  const isThermalPass = letThroughEnergy <= withstandEnergy;
+  const isThermalPass = !isMeltInterrupted && (letThroughEnergy <= withstandEnergy);
 
   return {
     Z_T,
@@ -224,9 +277,14 @@ export function calculateIEC60909(params: IEC60909Params): IEC60909Result {
     letThroughEnergy_kA2s: letThroughEnergy / 1000000,
     kFactor,
     withstandEnergy,
-    withstandEnergy_kA2s: withstandEnergy / 1000000,
+    withstandEnergy_kA2s,
     Smin,
     isThermalPass,
-    isLimitingActive
+    isLimitingActive,
+    fusingKFactor,
+    fusingEnergy,
+    fusingEnergy_kA2s,
+    tFusingMs,
+    isMeltInterrupted
   };
 }

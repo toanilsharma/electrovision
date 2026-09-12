@@ -4,7 +4,10 @@ import {
   calculateKappa,
   calculateCableWithstand,
   calculateSmin,
-  getKFactor
+  getKFactor,
+  getFusingKFactor,
+  calculateCableFusingEnergy,
+  calculateFusingTimeMs
 } from '../iec60909';
 
 describe('IEC 60909 Short Circuit Physics Engine', () => {
@@ -160,5 +163,44 @@ describe('IEC 60909 Short Circuit Physics Engine', () => {
     expect(limited.isLimitingActive).toBe(true);
     expect(limited.letThroughEnergy_kA2s).toBeLessThan(unlimited.letThroughEnergy_kA2s);
     expect(limited.letThroughEnergy_kA2s).toBeLessThanOrEqual(0.65);
+  });
+
+  it('should calculate conductor fusing energy and time according to Onderdonk / IEEE 242', () => {
+    // Copper fusing constant k = 226 A·s^(1/2)/mm²
+    const kFuse = getFusingKFactor('Cu');
+    expect(kFuse).toBe(226);
+
+    // 16 mm² Cu fusing energy = (226 * 16)^2 = 13,075,456 A²s ≈ 13.08 kA²s
+    const fusingEnergy = calculateCableFusingEnergy(16, 'Cu');
+    expect(fusingEnergy).toBe(13075456);
+
+    // At 15,340 A, fusing time = 13075456 / (15340)^2 ≈ 0.0556s = 55.6ms
+    const tFuseMs = calculateFusingTimeMs(15340, 16, 'Cu');
+    expect(tFuseMs).toBeCloseTo(55.6, 1);
+  });
+
+  it('should terminate short circuit and cap let-through energy when conductor melts in fail/no-trip mode', () => {
+    const res = calculateIEC60909({
+      transformerKVA: 1000,
+      ukPercent: 6.0,
+      voltageUn: 415,
+      voltageFactorC: 1.05,
+      cableLengthM: 0,
+      cableSizeMm2: 16,
+      z0z1Ratio: 1.7,
+      faultType: 'three_phase',
+      protectionSpeed: 'fail', // Infinity
+      isLimitingBreaker: false
+    });
+
+    // Ik ≈ 24.35 kA
+    expect(res.Ik_kA).toBeCloseTo(24.35, 1);
+    // Conductor melts at tFusingMs ≈ 22ms < Infinity
+    expect(res.tFusingMs).toBeLessThan(30);
+    expect(res.isMeltInterrupted).toBe(true);
+    expect(res.isThermalPass).toBe(false);
+    // Real physics: Energy is not infinite; it is capped at fusing energy + arc blowout (~13-15 kA²s)
+    expect(res.letThroughEnergy_kA2s).toBeGreaterThan(12);
+    expect(res.letThroughEnergy_kA2s).toBeLessThan(20);
   });
 });

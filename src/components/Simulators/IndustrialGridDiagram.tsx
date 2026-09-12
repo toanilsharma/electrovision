@@ -27,6 +27,7 @@ export interface IndustrialGridDiagramProps {
   isThermalPass: boolean;
   timeScale: number; // 1, 0.5, 0.25
   setTimeScale: (scale: number) => void;
+  isConductorMelted?: boolean;
   className?: string;
 }
 
@@ -48,6 +49,7 @@ export function IndustrialGridDiagram({
   isThermalPass,
   timeScale,
   setTimeScale,
+  isConductorMelted,
   className
 }: IndustrialGridDiagramProps) {
   // Sound & Motion settings
@@ -66,11 +68,13 @@ export function IndustrialGridDiagram({
 
   // Lorentz Electrodynamic Force Calculation (F/L = mu0 * I1 * I2 / (2 * pi * d))
   // With busbar phase spacing d = 0.1m, F/L = 0.2 * Ip^2 / d (N/m) -> / 1000 for kN/m
+  // Real physics: Drop to zero when circuit current is interrupted
   const lorentzForceKNm = useMemo(() => {
+    if (faultCurrentKA <= 0 || isConductorMelted || tripped) return 0;
     const dMeters = 0.1;
     const forceNm = (0.2 * Math.pow(peakCurrentKA, 2)) / dMeters;
     return forceNm / 1000;
-  }, [peakCurrentKA]);
+  }, [peakCurrentKA, faultCurrentKA, isConductorMelted, tripped]);
 
   // Rated standard industrial LV busbar insulator mechanical withstand capacity (12 kN/m)
   const insulatorRatingKNm = 12.0;
@@ -254,6 +258,22 @@ export function IndustrialGridDiagram({
     } catch (e) {}
   }, [tripped, isMuted, prefersReducedMotion]);
 
+  // Calculate Conductor Dynamic Color based on Thermal Stress Ratio (I²t / k²S²)
+  const thermalRatio = useMemo(() => {
+    if (withstandCapacityKA2s <= 0) return 0;
+    return letThroughEnergyKA2s / withstandCapacityKA2s;
+  }, [letThroughEnergyKA2s, withstandCapacityKA2s]);
+
+  const isMelted = isConductorMelted !== undefined ? isConductorMelted : (thermalRatio > 1.0);
+
+  const conductorColor = useMemo(() => {
+    if (tripped) return '#64748b'; // Cold slate gray after trip
+    if (isMelted || thermalRatio >= 1.0) return '#ef4444'; // Red-hot melted
+    if (thermalRatio >= 0.7) return '#f97316'; // Glowing orange
+    if (thermalRatio >= 0.4) return '#facc15'; // Warm yellow
+    return '#38bdf8'; // Normal cool cyan
+  }, [thermalRatio, tripped, isMelted]);
+
   // Particle System Canvas Animation for Arc Plasma Sparks
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -279,7 +299,7 @@ export function IndustrialGridDiagram({
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (isFaultActive && !prefersReducedMotion) {
+      if (isFaultActive && !isMelted && !prefersReducedMotion) {
         // Spawn sparks at the fault busbar (x: 350, y: 160)
         for (let i = 0; i < 4; i++) {
           const angle = Math.random() * Math.PI * 2;
@@ -323,23 +343,7 @@ export function IndustrialGridDiagram({
 
     render();
     return () => cancelAnimationFrame(animFrame);
-  }, [isFaultActive, prefersReducedMotion]);
-
-  // Calculate Conductor Dynamic Color based on Thermal Stress Ratio (I²t / k²S²)
-  const thermalRatio = useMemo(() => {
-    if (withstandCapacityKA2s <= 0) return 0;
-    return letThroughEnergyKA2s / withstandCapacityKA2s;
-  }, [letThroughEnergyKA2s, withstandCapacityKA2s]);
-
-  const conductorColor = useMemo(() => {
-    if (tripped) return '#64748b'; // Cold slate gray after trip
-    if (thermalRatio >= 1.0) return '#ef4444'; // Red-hot melted
-    if (thermalRatio >= 0.7) return '#f97316'; // Glowing orange
-    if (thermalRatio >= 0.4) return '#facc15'; // Warm yellow
-    return '#38bdf8'; // Normal cool cyan
-  }, [thermalRatio, tripped]);
-
-  const isMelted = thermalRatio > 1.0;
+  }, [isFaultActive, isMelted, prefersReducedMotion]);
 
   return (
     <div className={cn("flex flex-col h-full bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative", className)}>
@@ -653,24 +657,35 @@ export function IndustrialGridDiagram({
             ) : (
               <g>
                 <motion.path
-                  d="M 305,50 L 335,65"
+                  d="M 305,50 L 332,60"
                   fill="none"
                   stroke="#78350f"
                   strokeWidth="4"
                   initial={{ pathLength: 1 }}
-                  animate={{ rotate: [-10, 15, -5] }}
+                  animate={{ rotate: [-6, 8, -3] }}
                   transition={{ duration: 0.4 }}
                 />
+                <circle cx="332" cy="60" r="4" fill="#b45309" stroke="#ef4444" strokeWidth="1.5" />
                 <motion.path
-                  d="M 350,160 L 350,110 L 340,95"
+                  d="M 350,160 L 350,115 L 342,95"
                   fill="none"
                   stroke="#78350f"
                   strokeWidth="4"
                 />
-                <circle cx="335" cy="65" r="3" fill="#ef4444" className="animate-ping" />
-                <text x="360" y="90" fill="#ef4444" fontSize="12" fontWeight="black" fontFamily="sans-serif" className="animate-bounce pointer-events-none select-none">
-                  CABLE MELTDOWN!
-                </text>
+                <circle cx="342" cy="95" r="4" fill="#b45309" stroke="#ef4444" strokeWidth="1.5" />
+
+                {/* Severed gap dashed burnout indicator */}
+                <line x1="332" y1="60" x2="342" y2="95" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3,3" opacity="0.6" />
+
+                <g transform="translate(355, 68)">
+                  <rect x="0" y="0" width="138" height="34" rx="4" fill="#450a0a" stroke="#ef4444" strokeWidth="1.5" />
+                  <text x="69" y="14" textAnchor="middle" fill="#fca5a5" fontSize="10" fontWeight="black" fontFamily="sans-serif" className="pointer-events-none select-none">
+                    CONDUCTOR VAPORIZED
+                  </text>
+                  <text x="69" y="27" textAnchor="middle" fill="#ef4444" fontSize="9" fontWeight="bold" fontFamily="monospace" className="pointer-events-none select-none">
+                    OPEN-CIRCUIT (0 A)
+                  </text>
+                </g>
               </g>
             )}
 
@@ -709,9 +724,9 @@ export function IndustrialGridDiagram({
 
             {/* 6. FAULT INCEPTION POINT & PROTECTIVE EARTH GROUND SYMBOL */}
             <g transform="translate(350, 160)">
-              <circle cx="0" cy="0" r="4" fill="#ef4444" />
-              <text x="-10" y="-10" fill="#ef4444" fontSize="12" fontWeight="black" fontFamily="sans-serif" className="pointer-events-none select-none">
-                {faultType === 'three_phase' ? '3-PHASE FAULT' : 'L-G FAULT'}
+              <circle cx="0" cy="0" r="4" fill={isMelted ? '#64748b' : '#ef4444'} />
+              <text x="-10" y="-10" fill={isMelted ? '#94a3b8' : '#ef4444'} fontSize="12" fontWeight="black" fontFamily="sans-serif" className="pointer-events-none select-none">
+                {isMelted ? 'FAULT EXTINCT (0 A)' : faultType === 'three_phase' ? '3-PHASE FAULT' : 'L-G FAULT'}
               </text>
 
               <line x1="0" y1="0" x2="0" y2="40" stroke="#cbd5e1" strokeWidth="2.5" />
@@ -763,9 +778,9 @@ export function IndustrialGridDiagram({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
                   >
-                    <rect x="-10" y="-18" width="95" height="18" rx="3" fill="#7f1d1d" stroke="#ef4444" strokeWidth="1" />
-                    <text x="37.5" y="-5" textAnchor="middle" fill="#ffffff" fontSize="12" fontWeight="black" fontFamily="monospace" className="animate-pulse pointer-events-none select-none">
-                      ⚠️ LOAD LOST
+                    <rect x="-10" y="-18" width="115" height="18" rx="3" fill="#7f1d1d" stroke="#ef4444" strokeWidth="1" />
+                    <text x="47.5" y="-5" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black" fontFamily="monospace" className="animate-pulse pointer-events-none select-none">
+                      {isMelted ? '⚠️ CIRCUIT BROKEN' : '⚠️ LOAD LOST'}
                     </text>
                   </motion.g>
                 )}
@@ -810,11 +825,20 @@ export function IndustrialGridDiagram({
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1">
             <span className="text-slate-400">Ik:</span>
-            <span className="font-bold text-red-400 tabular-nums">{faultCurrentKA.toFixed(2)} kA</span>
+            <span className={cn("font-bold tabular-nums", faultCurrentKA > 0 ? "text-red-400" : "text-slate-300")}>
+              {faultCurrentKA.toFixed(2)} kA
+            </span>
+            {isMelted && (
+              <span className="text-[9px] font-black text-amber-300 bg-amber-950/90 px-1 py-0.2 rounded border border-amber-500/40">
+                OPEN
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <span className="text-slate-400">ip:</span>
-            <span className="font-bold text-orange-400 tabular-nums">{peakCurrentKA.toFixed(2)} kA</span>
+            <span className={cn("font-bold tabular-nums", faultCurrentKA > 0 ? "text-orange-400" : "text-slate-400")}>
+              {faultCurrentKA > 0 ? `${peakCurrentKA.toFixed(2)} kA` : '0.00 kA'}
+            </span>
           </div>
           <div className="flex items-center gap-1">
             <span className="text-slate-400">I²t:</span>
@@ -822,14 +846,14 @@ export function IndustrialGridDiagram({
           </div>
           <div className="flex items-center gap-1 border-l border-slate-800 pl-3">
             <span className="text-slate-400">Lorentz F:</span>
-            <span className={cn("font-bold tabular-nums", isFaultActive ? "text-red-400 animate-pulse" : "text-slate-300")}>
-              {isFaultActive ? `${lorentzForceKNm.toFixed(2)} kN/m` : '0.00 kN/m'}
+            <span className={cn("font-bold tabular-nums", lorentzForceKNm > 0 ? "text-red-400 animate-pulse" : "text-slate-300")}>
+              {lorentzForceKNm.toFixed(2)} kN/m
             </span>
           </div>
           <div className="flex items-center gap-1">
             <span className="text-slate-400">Insulator:</span>
-            <span className={cn("font-bold tabular-nums", insulatorStressPct > 80 ? "text-red-400" : insulatorStressPct > 50 ? "text-amber-400" : "text-emerald-400")}>
-              {isFaultActive ? `${insulatorStressPct}%` : '0%'}
+            <span className={cn("font-bold tabular-nums", lorentzForceKNm > 0 ? (insulatorStressPct > 80 ? "text-red-400" : insulatorStressPct > 50 ? "text-amber-400" : "text-emerald-400") : "text-slate-400")}>
+              {lorentzForceKNm > 0 ? `${insulatorStressPct}%` : '0%'}
             </span>
           </div>
         </div>
@@ -842,11 +866,11 @@ export function IndustrialGridDiagram({
                 "h-full transition-all duration-300",
                 thermalRatio < 0.6 ? "bg-emerald-500" : thermalRatio <= 1.0 ? "bg-amber-500" : "bg-red-500 animate-pulse"
               )}
-              style={{ width: `${Math.min(100, thermalRatio * 100)}%` }}
+              style={{ width: `${Math.min(100, Math.min(1.0, thermalRatio) * 100)}%` }}
             />
           </div>
           <span className={cn("font-bold tabular-nums", isMelted ? "text-red-400" : "text-emerald-400")}>
-            {(thermalRatio * 100).toFixed(0)}%
+            {isMelted ? "MELTED (OPEN)" : `${(thermalRatio * 100).toFixed(0)}%`}
           </span>
         </div>
       </div>

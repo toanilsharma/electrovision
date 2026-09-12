@@ -85,10 +85,27 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
   const prospectiveFaultCurrent = iecResults.Ik; // Current selected fault Ik (A)
   const tripTime = iecResults.tTotalMs; // Total clearing time (ms)
 
-  // Evaluate instant current, tripped state, let-through energy, and wire heat
-  const { faultCurrent, tripped, letThroughEnergy, heatLevel } = useMemo(() => {
+  // Real physics: Timeline calculation of events
+  // 1. Breaker clearing timeline
+  const breakerTripTimeline = tripTime === Infinity ? Infinity : (faultIgnitionTime + tripTime);
+  // 2. Conductor physical melting & vaporization timeline (Onderdonk equation)
+  const conductorMeltTimeline = faultIgnitionTime + iecResults.tFusingMs;
+  // 3. Blowout arc extinction timeline (arc lasts ~3ms as gap widens in air)
+  const arcExtinguishTimeline = conductorMeltTimeline + 3;
+
+  // Evaluate instant current, tripped state, conductor vaporization, let-through energy, and wire heat
+  const { 
+    faultCurrent, 
+    tripped, 
+    conductorMelted, 
+    arcExtinct, 
+    letThroughEnergy, 
+    heatLevel 
+  } = useMemo(() => {
     let current = nominalLoadCurrent;
     let isTripped = false;
+    let isMelted = false;
+    let isArcExt = false;
     let energy = 0;
     let heat = 0;
 
@@ -97,44 +114,68 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
         current = nominalLoadCurrent;
         energy = 0;
         heat = 0;
-      } else if (tripTime === Infinity || time <= faultIgnitionTime + tripTime) {
-        // Fault active
-        const ramp = Math.min(1, (time - faultIgnitionTime) / 4);
-        current = nominalLoadCurrent + (prospectiveFaultCurrent - nominalLoadCurrent) * ramp;
-
-        // Energy = I^2 * t
-        const activeSec = (time - faultIgnitionTime) / 1000;
-        const uncappedEnergy = Math.pow(current / 1000, 2) * activeSec; // kA²s
-        
-        if (isLimitingBreaker && tripTime !== Infinity) {
-          const capTarget = 0.6 * Math.pow(current / 15000, 2);
-          energy = Math.min(uncappedEnergy, Math.max(0.1, capTarget));
-        } else {
-          energy = uncappedEnergy;
-        }
-
-        // Heat level normalized relative to cable withstand energy (k²S² in kA²s)
-        const withstandCapacity = iecResults.withstandEnergy_kA2s;
-        heat = Math.min(1.8, energy / (withstandCapacity || 3.4));
       } else {
-        // Breaker tripped
-        isTripped = true;
-        current = 0;
-        energy = iecResults.letThroughEnergy_kA2s;
-        const withstandCapacity = iecResults.withstandEnergy_kA2s;
-        const finalHeat = Math.min(1.8, energy / (withstandCapacity || 3.4));
-        const coolingDuration = time - (faultIgnitionTime + tripTime);
-        heat = Math.max(0, finalHeat - coolingDuration / 50);
+        const isPastMelt = time >= conductorMeltTimeline;
+        const isPastArcExtinct = time >= arcExtinguishTimeline;
+        const isPastBreakerTrip = breakerTripTimeline !== Infinity && time >= breakerTripTimeline;
+
+        if (isPastBreakerTrip && breakerTripTimeline <= conductorMeltTimeline) {
+          // Breaker tripped BEFORE conductor melted
+          isTripped = true;
+          current = 0;
+          energy = iecResults.letThroughEnergy_kA2s;
+          const withstandCapacity = iecResults.withstandEnergy_kA2s;
+          const finalHeat = Math.min(1.8, energy / (withstandCapacity || 3.4));
+          const coolingDuration = time - breakerTripTimeline;
+          heat = Math.max(0, finalHeat - coolingDuration / 50);
+        } else if (isPastArcExtinct) {
+          // Conductor physically melted & vaporized, blowout arc extinguished!
+          // PHYSICAL OPEN CIRCUIT: CURRENT DROPS TO 0 A (CANNOT FLOW THROUGH AIR GAP)
+          isMelted = true;
+          isArcExt = true;
+          isTripped = isPastBreakerTrip;
+          current = 0; // ZERO CURRENT! Galvanic path broken!
+          energy = iecResults.letThroughEnergy_kA2s; // Energy frozen at fusing point
+          heat = 2.0; // Charred & destroyed
+        } else if (isPastMelt) {
+          // Conductor is melting and arcing during 3ms blowout
+          isMelted = true;
+          isArcExt = false;
+          isTripped = isPastBreakerTrip;
+          const arcDecay = Math.max(0, 1 - (time - conductorMeltTimeline) / 3);
+          current = prospectiveFaultCurrent * arcDecay;
+          energy = iecResults.letThroughEnergy_kA2s;
+          heat = 2.0;
+        } else {
+          // Fault active (neither breaker tripped nor cable melted yet)
+          const ramp = Math.min(1, (time - faultIgnitionTime) / 4);
+          current = nominalLoadCurrent + (prospectiveFaultCurrent - nominalLoadCurrent) * ramp;
+
+          const activeSec = (time - faultIgnitionTime) / 1000;
+          const uncappedEnergy = Math.pow(current / 1000, 2) * activeSec; // kA²s
+          
+          if (isLimitingBreaker && tripTime !== Infinity) {
+            const capTarget = 0.6 * Math.pow(current / 15000, 2);
+            energy = Math.min(uncappedEnergy, Math.max(0.1, capTarget));
+          } else {
+            energy = uncappedEnergy;
+          }
+
+          const withstandCapacity = iecResults.withstandEnergy_kA2s;
+          heat = Math.min(2.0, energy / (withstandCapacity || 3.4));
+        }
       }
     }
 
     return {
       faultCurrent: current,
       tripped: isTripped,
+      conductorMelted: isMelted,
+      arcExtinct: isArcExt,
       letThroughEnergy: energy,
       heatLevel: heat
     };
-  }, [time, prospectiveFaultCurrent, tripTime, isLimitingBreaker, iecResults]);
+  }, [time, nominalLoadCurrent, prospectiveFaultCurrent, breakerTripTimeline, conductorMeltTimeline, arcExtinguishTimeline, isLimitingBreaker, tripTime, iecResults]);
 
   // Audio blast trigger at fault ignition
   useEffect(() => {
@@ -171,11 +212,14 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
   }, [time]);
 
   // Electrodynamic Lorentz mechanical force on busbars (kN/m)
+  // Drop to zero when circuit current ceases
   const lorentzForceKNm = useMemo(() => {
+    if (faultCurrent <= nominalLoadCurrent) return 0;
+    const currentKA = faultCurrent / 1000;
     const dMeters = 0.1;
-    const forceNm = (0.2 * Math.pow(iecResults.ip_kA, 2)) / dMeters;
+    const forceNm = (0.2 * Math.pow(currentKA * (iecResults.kappa * Math.sqrt(2)), 2)) / dMeters;
     return forceNm / 1000;
-  }, [iecResults.ip_kA]);
+  }, [faultCurrent, nominalLoadCurrent, iecResults.kappa]);
 
   // Determine safety verdict
   const verdict = useMemo(() => {
@@ -187,20 +231,26 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
         desc: 'Conductors healthy · 150A nominal load · Awaiting fault trigger.' 
       };
     }
+
+    if (conductorMelted) {
+      const breakerStateText = tripped 
+        ? `Breaker opened late at ${tripTime}ms after cable was already destroyed.`
+        : `Breaker contacts remained CLOSED (protection failed to operate).`;
+
+      return { 
+        status: 'fail', 
+        label: 'CRITICAL: CONDUCTOR VAPORIZED (OPEN-CIRCUIT)', 
+        color: 'bg-red-950/90 border-red-500/80 text-red-200 font-black shadow-[0_0_20px_rgba(239,68,68,0.5)]', 
+        desc: `Sustained ${iecResults.Ik_kA.toFixed(1)} kA exceeded ${cableSizeMm2}mm² fusing energy (${iecResults.fusingEnergy_kA2s.toFixed(1)} kA²s) at t = ${conductorMeltTimeline.toFixed(0)}ms. Conductor physically melted & vaporized, breaking the circuit path (fault current dropped to 0 A). ${breakerStateText}` 
+      };
+    }
+
     if (!tripped) {
-      if (time === 100) {
-        return { 
-          status: 'fail', 
-          label: 'CRITICAL FAILURE: NO TRIP (MELT)', 
-          color: 'bg-red-950/80 border-red-500/60 text-red-300 font-black shadow-[0_0_15px_rgba(239,68,68,0.4)]', 
-          desc: `Relay failed to clear. Sustained ${iecResults.Ik_kA.toFixed(1)} kA exceeded ${cableSizeMm2}mm² withstand (${iecResults.withstandEnergy_kA2s.toFixed(1)} kA²s) — explosive conductor vaporization!` 
-        };
-      }
       return { 
         status: 'faulting', 
         label: 'SHORT-CIRCUIT IN PROGRESS', 
         color: 'bg-red-950/80 border-red-500/50 text-red-300 font-bold animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.3)]', 
-        desc: `Heavy ${faultType === 'three_phase' ? '3-Phase' : 'Line-to-Ground'} fault active · Peak making current ip = ${iecResults.ip_kA.toFixed(1)} kA.` 
+        desc: `Heavy ${faultType === 'three_phase' ? '3-Phase' : 'Line-to-Ground'} fault active · Fault current ${(faultCurrent / 1000).toFixed(1)} kA · Peak ip = ${iecResults.ip_kA.toFixed(1)} kA.` 
       };
     }
 
@@ -209,17 +259,17 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
         status: 'safe', 
         label: `VERDICT: PASS (CABLE PROTECTED)`, 
         color: 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300 font-black shadow-[0_0_15px_rgba(16,185,129,0.3)]', 
-        desc: `Cleared in ${tripTime}ms (${iecResults.tRelayMs}ms relay + ${iecResults.tBreakerMs}ms CB + ${iecResults.tArcMs}ms arc). Let-through ${letThroughEnergy.toFixed(2)} kA²s < ${cableSizeMm2}mm² Cu limit (${iecResults.withstandEnergy_kA2s.toFixed(1)} kA²s). S_min = ${iecResults.Smin.toFixed(1)}mm².` 
+        desc: `Cleared by VCB breaker in ${tripTime}ms (${iecResults.tRelayMs}ms relay + ${iecResults.tBreakerMs}ms CB + ${iecResults.tArcMs}ms arc). Let-through ${letThroughEnergy.toFixed(2)} kA²s < ${cableSizeMm2}mm² Cu limit (${iecResults.withstandEnergy_kA2s.toFixed(1)} kA²s). S_min = ${iecResults.Smin.toFixed(1)}mm².` 
       };
     } else {
       return { 
         status: 'danger', 
-        label: `VERDICT: FAIL (CABLE MELTED)`, 
-        color: 'bg-red-950/90 border-red-500/70 text-red-200 font-black shadow-[0_0_15px_rgba(239,68,68,0.5)]', 
-        desc: `Delayed trip (${tripTime}ms) allowed ${letThroughEnergy.toFixed(2)} kA²s let-through, exceeding ${cableSizeMm2}mm² withstand (${iecResults.withstandEnergy_kA2s.toFixed(1)} kA²s). Insulation destroyed! Required S_min = ${iecResults.Smin.toFixed(1)}mm².` 
+        label: `VERDICT: FAIL (INSULATION DAMAGED)`, 
+        color: 'bg-amber-950/90 border-amber-500/70 text-amber-200 font-black shadow-[0_0_15px_rgba(245,158,11,0.5)]', 
+        desc: `Delayed trip (${tripTime}ms) allowed ${letThroughEnergy.toFixed(2)} kA²s let-through, exceeding ${cableSizeMm2}mm² insulation limit (${iecResults.withstandEnergy_kA2s.toFixed(1)} kA²s). Conductor survived but insulation charred! Required S_min = ${iecResults.Smin.toFixed(1)}mm².` 
       };
     }
-  }, [time, tripped, letThroughEnergy, tripTime, iecResults, faultType, cableSizeMm2]);
+  }, [time, conductorMelted, tripped, letThroughEnergy, tripTime, iecResults, faultType, cableSizeMm2, faultCurrent, conductorMeltTimeline]);
 
   // Reset scenario
   const handleResetScenario = () => {
@@ -607,7 +657,7 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
                 {/* Center Grid Status Sub-Bar */}
                 <div className="shrink-0 flex items-center justify-between px-2 py-1 bg-slate-900/90 border border-slate-800 rounded-lg mb-1.5">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ backgroundColor: isFaultActive ? '#ef4444' : tripped ? '#10b981' : '#38bdf8' }} />
+                    <span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ backgroundColor: conductorMelted ? '#ef4444' : isFaultActive ? '#f97316' : tripped ? '#10b981' : '#38bdf8' }} />
                     <span className="text-[10px] sm:text-xs font-black uppercase text-white tracking-wider truncate">
                       SUBSTATION {transformerKVA}kVA · {systemVoltage}V {faultType === 'three_phase' ? '3-PHASE' : '1-PHASE'} FEEDER
                     </span>
@@ -619,9 +669,9 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
                     </span>
                     <span className={cn(
                       "text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider border shrink-0",
-                      isFaultActive ? "text-red-300 border-red-500/60 bg-red-950/60 animate-pulse" : tripped ? "text-emerald-300 border-emerald-500/60 bg-emerald-950/60" : "text-cyan-300 border-cyan-500/60 bg-cyan-950/60"
+                      conductorMelted ? "text-red-300 border-red-500 bg-red-950/80 animate-pulse" : isFaultActive ? "text-orange-300 border-orange-500/60 bg-orange-950/60 animate-pulse" : tripped ? "text-emerald-300 border-emerald-500/60 bg-emerald-950/60" : "text-cyan-300 border-cyan-500/60 bg-cyan-950/60"
                     )}>
-                      {isFaultActive ? "FAULT IN PROGRESS" : tripped ? "CLEARED" : "STANDBY"}
+                      {conductorMelted ? "CABLE VAPORIZED · 0 A" : isFaultActive ? "FAULT IN PROGRESS" : tripped ? "CLEARED" : "STANDBY"}
                     </span>
                   </div>
                 </div>
@@ -632,11 +682,12 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
                     time={time}
                     isFaultActive={isFaultActive}
                     tripped={tripped}
+                    isConductorMelted={conductorMelted}
                     faultType={faultType}
                     protectionSpeed={protectionSpeed}
                     faultCurrent={faultCurrent}
-                    faultCurrentKA={iecResults.Ik_kA}
-                    peakCurrentKA={iecResults.ip_kA}
+                    faultCurrentKA={faultCurrent / 1000}
+                    peakCurrentKA={faultCurrent > 0 ? iecResults.ip_kA : 0}
                     letThroughEnergyKA2s={letThroughEnergy}
                     withstandCapacityKA2s={iecResults.withstandEnergy_kA2s}
                     cableSizeMm2={cableSizeMm2}
@@ -653,11 +704,17 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
                 {/* Bottom Timeline Progress Bar */}
                 <div className="shrink-0 mt-1.5 px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-lg flex items-center justify-between text-[9px] font-mono text-slate-400">
                   <div className="flex items-center gap-3">
-                    <span>⚡ Fault Ik: <strong className="text-amber-400">{(faultCurrent/1000).toFixed(2)} kA</strong></span>
-                    <span>Peak ip: <strong className="text-orange-400">{iecResults.ip_kA.toFixed(2)} kA</strong></span>
+                    <span>⚡ Fault Ik: <strong className={faultCurrent > 0 ? "text-red-400" : "text-slate-300"}>{(faultCurrent/1000).toFixed(2)} kA</strong></span>
+                    <span>Peak ip: <strong className={faultCurrent > 0 ? "text-orange-400" : "text-slate-400"}>{faultCurrent > 0 ? `${iecResults.ip_kA.toFixed(2)} kA` : "0.00 kA"}</strong></span>
                     <span>Energy I²t: <strong className="text-cyan-400">{letThroughEnergy.toFixed(2)} kA²s</strong></span>
                   </div>
                   <div className="flex items-center gap-2">
+                    {conductorMelted && (
+                      <span className="text-amber-400 font-bold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-amber-400" />
+                        CABLE SEVERED (OPEN)
+                      </span>
+                    )}
                     <span>Trip: <strong className="text-emerald-400">{tripTime === Infinity ? 'None' : `${tripTime}ms`}</strong></span>
                   </div>
                 </div>
@@ -697,11 +754,11 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
                     <div className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 flex flex-col justify-between">
                       <span className="text-[8.5px] font-mono text-slate-400 uppercase">Fault Current (Ik)</span>
                       <div className="flex items-baseline justify-between mt-0.5">
-                        <span className={cn("text-base font-black font-mono", isFaultActive ? "text-red-400" : "text-slate-100")}>
-                          {iecResults.Ik_kA.toFixed(2)} <span className="text-[10px]">kA</span>
+                        <span className={cn("text-base font-black font-mono", isFaultActive ? "text-red-400" : conductorMelted ? "text-amber-400" : "text-slate-100")}>
+                          {(faultCurrent / 1000).toFixed(2)} <span className="text-[10px]">kA</span>
                         </span>
-                        <span className="text-[8px] font-black px-1 rounded bg-slate-900 text-slate-300">
-                          RMS
+                        <span className={cn("text-[8px] font-black px-1 rounded", conductorMelted ? "bg-amber-950 text-amber-300" : "bg-slate-900 text-slate-300")}>
+                          {conductorMelted ? "OPEN" : "RMS"}
                         </span>
                       </div>
                     </div>
@@ -710,8 +767,8 @@ export function ShortCircuitSimulator({ config }: { config?: UserConfig }) {
                     <div className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 flex flex-col justify-between">
                       <span className="text-[8.5px] font-mono text-slate-400 uppercase">Peak Making (ip)</span>
                       <div className="flex items-baseline justify-between mt-0.5">
-                        <span className="text-base font-black font-mono text-orange-400">
-                          {iecResults.ip_kA.toFixed(2)} <span className="text-[10px]">kA</span>
+                        <span className={cn("text-base font-black font-mono", faultCurrent > 0 ? "text-orange-400" : "text-slate-400")}>
+                          {faultCurrent > 0 ? iecResults.ip_kA.toFixed(2) : "0.00"} <span className="text-[10px]">kA</span>
                         </span>
                         <span className="text-[8px] font-black px-1 rounded bg-orange-950 text-orange-300 font-mono">
                           κ={iecResults.kappa.toFixed(2)}
