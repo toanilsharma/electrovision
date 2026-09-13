@@ -674,67 +674,28 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
         className
       )}
     >
-      {/* TOP CONTROL BAR: View Mode Switcher + Mains Supply Master Switch */}
-      <div className="flex items-center justify-between px-3 sm:px-4 py-2 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 z-30 shrink-0">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleSelectViewMode('house')}
-            className={cn(
-              "px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-sm",
-              activeViewMode === 'house'
-                ? "bg-blue-600 text-white shadow-blue-900/50"
-                : "bg-slate-800 text-slate-300 hover:text-white"
-            )}
-          >
-            <Home className="w-4 h-4" />
-            <span>🏠 3D House Cutaway</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSelectViewMode('sld')}
-            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <Zap className="w-4 h-4 text-emerald-400" />
-            <span>⚡ Flow SLD Diagram</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSelectViewMode('xray')}
-            className={cn(
-              "px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-              activeViewMode === 'xray'
-                ? "bg-cyan-600 text-white shadow-cyan-900/50"
-                : "bg-slate-800 text-slate-300 hover:text-white"
-            )}
-          >
-            <Eye className="w-4 h-4 text-cyan-400" />
-            <span>🩻 In-Wall Wires</span>
-          </button>
-        </div>
+      {/* FLOATING TOP-RIGHT CONTROLS (Zero vertical space wasted) */}
+      <div className="absolute top-2 right-2 flex items-center gap-2 z-30 pointer-events-auto">
+        {/* Master Mains Supply Toggle Button */}
+        <button
+          type="button"
+          onClick={() => setIsMainsSupplyOn(v => !v)}
+          className={cn(
+            "px-3 py-1 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 border",
+            isMainsSupplyOn
+              ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-300 shadow-emerald-950/40"
+              : "bg-rose-950 hover:bg-rose-900 text-rose-200 border-rose-600 animate-pulse shadow-rose-950/40"
+          )}
+          title="Switch Main Electricity Supply ON/OFF"
+        >
+          <Power className="w-3.5 h-3.5" />
+          <span>{isMainsSupplyOn ? "⚡ MAINS: ON" : "🔴 MAINS: OFF"}</span>
+        </button>
 
-        {/* Master Mains Toggle Button (Big & Obvious!) */}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsMainsSupplyOn(v => !v)}
-            className={cn(
-              "px-3.5 py-1.5 rounded-xl font-black text-xs transition-all flex items-center gap-2 cursor-pointer shadow-lg active:scale-95",
-              isMainsSupplyOn
-                ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 border border-emerald-300"
-                : "bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-600 animate-pulse"
-            )}
-            title="Switch Main Electricity Supply ON/OFF"
-          >
-            <Power className="w-4 h-4" />
-            <span>{isMainsSupplyOn ? "⚡ MAINS SUPPLY: ON" : "🔴 MAINS SUPPLY: OFF"}</span>
-          </button>
-
-          {/* Living Room Wattage Badge */}
-          <div className="hidden sm:flex items-center gap-1.5 bg-slate-950 px-3 py-1 rounded-xl border border-slate-800 text-xs font-bold">
-            <span className="text-slate-400">Total Power:</span>
-            <span className="text-amber-400 font-mono font-black">{powerMetrics.totalWatts}W</span>
-          </div>
+        {/* Living Room Wattage Badge */}
+        <div className="hidden sm:flex items-center gap-1.5 bg-slate-950/85 backdrop-blur-md px-2.5 py-1 rounded-xl border border-slate-700/60 text-xs font-bold shadow-md">
+          <span className="text-slate-400">Total:</span>
+          <span className="text-amber-400 font-mono font-black">{powerMetrics.totalWatts}W</span>
         </div>
       </div>
 
@@ -1471,52 +1432,50 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
         />
       </div>
 
-      {/* BOTTOM ELECTRICAL TELEMETRY & KIRCHHOFF BALANCE STATUS BAR */}
-      <div className="px-3 sm:px-4 py-2 bg-slate-900/95 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs z-30 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 font-mono font-bold">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse shadow-sm shadow-orange-500/50" />
-            <span className="text-orange-400">Phase (Live):</span>
-            <span className="text-white font-black">{isPowerFlowing ? `${totalAmps} A ➔` : '0.0 A'}</span>
-          </div>
-          <div className="flex items-center gap-1.5 font-mono font-bold">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" />
-            <span className="text-blue-400">Neutral (Return):</span>
-            <span className="text-white font-black">{isPowerFlowing ? `${totalAmps} A ⬅` : '0.0 A'}</span>
-          </div>
-          <div className="flex items-center gap-1.5 font-mono font-bold">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
-            <span className="text-emerald-400">Earth (CPC):</span>
-            <span className={cn(
-              "font-black",
-              isWetBath && isPowerFlowing ? "text-amber-400 animate-pulse" :
-              isChildShock && isPowerFlowing ? "text-rose-400 animate-pulse" :
-              "text-emerald-400"
-            )}>
-              {isWetBath && isPowerFlowing ? '45.0 mA ⤓' :
-               isChildShock && isPowerFlowing ? '230.0 mA ⤓' :
-               '0.0 mA (Safe)'}
-            </span>
-          </div>
+      {/* FLOATING BOTTOM CENTER HUD PILL (Zero vertical layout space wasted) */}
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 max-w-[96%] px-3 sm:px-4 py-1.5 bg-slate-950/90 backdrop-blur-md border border-slate-700/70 rounded-full shadow-2xl flex flex-wrap items-center justify-center gap-2.5 text-[11px] z-30 pointer-events-auto">
+        <div className="flex items-center gap-1.5 font-mono font-bold">
+          <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse shadow-sm shadow-orange-500/50" />
+          <span className="text-orange-400">Live:</span>
+          <span className="text-white font-black">{isPowerFlowing ? `${totalAmps}A ➔` : '0.0A'}</span>
+        </div>
+        <div className="flex items-center gap-1.5 font-mono font-bold">
+          <span className="w-2 h-2 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" />
+          <span className="text-blue-400">Neutral:</span>
+          <span className="text-white font-black">{isPowerFlowing ? `${totalAmps}A ⬅` : '0.0A'}</span>
+        </div>
+        <div className="flex items-center gap-1.5 font-mono font-bold">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+          <span className="text-emerald-400">Earth:</span>
+          <span className={cn(
+            "font-black",
+            isWetBath && isPowerFlowing ? "text-amber-400 animate-pulse" :
+            isChildShock && isPowerFlowing ? "text-rose-400 animate-pulse" :
+            "text-emerald-400"
+          )}>
+            {isWetBath && isPowerFlowing ? '45mA ⤓' :
+             isChildShock && isPowerFlowing ? '230mA ⤓' :
+             '0.0mA (Safe)'}
+          </span>
         </div>
 
         {/* Closed Loop Status Summary */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 border-l border-slate-700/60 pl-2">
           {isTripped ? (
-            <span className="px-2.5 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-600 font-bold text-[11px]">
-              🔒 Circuit Safely Tripped (Power Isolated)
+            <span className="px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-600 font-bold text-[10px]">
+              🔒 Circuit Tripped (Power Isolated)
             </span>
           ) : !isMainsSupplyOn ? (
-            <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold text-[11px]">
-              ⚪ Mains Supply Switched OFF (0V)
+            <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold text-[10px]">
+              ⚪ Mains Switched OFF (0V)
             </span>
           ) : isOverloaded ? (
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-500 font-bold text-[11px] animate-pulse">
-              🔥 Overload Alert (I = {livingAmps}A &gt; 16A)
+            <span className="px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-500 font-bold text-[10px] animate-pulse">
+              🔥 Overload Alert ({livingAmps}A &gt; 16A)
             </span>
           ) : (
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500 font-bold text-[11px]">
-              ✓ Closed-Loop Kirchhoff Balanced (100% Correct)
+            <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500 font-bold text-[10px]">
+              ✓ Closed-Loop Balanced (100% Correct)
             </span>
           )}
         </div>
