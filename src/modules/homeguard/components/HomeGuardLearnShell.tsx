@@ -9,6 +9,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { IsometricHouseView } from './IsometricHouseView';
+import { HomeGuardSLDView } from './HomeGuardSLDView';
 import { DistributionBoard } from './DistributionBoard';
 import { ToroidCoreVisualizer } from './ToroidCoreVisualizer';
 import { DeathRaceView } from './DeathRaceView';
@@ -54,6 +55,7 @@ export interface HomeGuardLearnShellProps {
   onSafeRecloseBreaker: (circuitId: string) => void;
   onSafeTestTripRCCB: () => void;
   assessmentState: MissionAssessmentState;
+  onResetProgress?: () => void;
   habitTip: { type: 'warn' | 'success'; text: string } | null;
   livingCountdownSec: number;
   leakageCurrentMA: number;
@@ -76,12 +78,13 @@ export const HomeGuardLearnShell: React.FC<HomeGuardLearnShellProps> = ({
   onSafeRecloseBreaker,
   onSafeTestTripRCCB,
   assessmentState,
+  onResetProgress,
   habitTip,
   livingCountdownSec,
   leakageCurrentMA,
   onOpenCertificateModal
 }) => {
-  const [viewMode, setViewMode] = useState<'house' | 'toroid' | 'db_box' | 'death_race'>('house');
+  const [viewMode, setViewMode] = useState<'house' | 'sld' | 'toroid' | 'db_box' | 'death_race'>('house');
   const [activeLessonTab, setActiveLessonTab] = useState<'why_trip' | 'science' | 'prevention'>('why_trip');
 
   // X-ray Vision Unlock: Death Race unlocks after lesson 4 (CHILD SHOCK), Inside-RCCB/DB after lesson 5 (WET BATH)
@@ -128,9 +131,21 @@ export const HomeGuardLearnShell: React.FC<HomeGuardLearnShellProps> = ({
                 <BookOpen className="w-3.5 h-3.5" />
                 LEARNING MISSIONS
               </span>
-              <span className="text-[10px] font-bold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-800">
-                {assessmentState.completedPresetIds.length}/5 Completed
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-800">
+                  {assessmentState.completedPresetIds.length}/5 Done
+                </span>
+                {assessmentState.completedPresetIds.length > 0 && onResetProgress && (
+                  <button
+                    type="button"
+                    onClick={onResetProgress}
+                    className="text-[9.5px] text-slate-400 hover:text-rose-300 underline cursor-pointer"
+                    title="Clear completed badges"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -145,12 +160,13 @@ export const HomeGuardLearnShell: React.FC<HomeGuardLearnShellProps> = ({
                     className={cn(
                       "w-full text-left p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2",
                       isSelected
-                        ? "bg-cyan-950/80 border-cyan-400 text-white shadow-md shadow-cyan-950/50"
+                        ? "bg-cyan-950/90 border-cyan-400 text-white shadow-md shadow-cyan-950/50 ring-1 ring-cyan-400"
                         : "bg-slate-950/50 border-slate-800 hover:border-slate-700 text-slate-300"
                     )}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="w-6 h-6 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
+                        {preset.chipLabel === 'NORMAL' && <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />}
                         {preset.chipLabel === 'OVERLOAD' && <Flame className="w-3.5 h-3.5 text-amber-400" />}
                         {preset.chipLabel === 'SHORT' && <Zap className="w-3.5 h-3.5 text-rose-400" />}
                         {preset.chipLabel === 'CHILD SHOCK' && <HeartPulse className="w-3.5 h-3.5 text-rose-400" />}
@@ -162,6 +178,7 @@ export const HomeGuardLearnShell: React.FC<HomeGuardLearnShellProps> = ({
                           Lesson {idx + 1}: {preset.chipLabel}
                         </div>
                         <div className="text-[9.5px] text-slate-400 truncate">
+                          {preset.id === 'preset_normal' && 'Standard safe power (no fault)'}
                           {preset.id === 'preset_overload' && 'Thermal expansion & overload'}
                           {preset.id === 'preset_short' && 'Instant magnetic trip'}
                           {preset.id === 'preset_child_shock' && '0.03s Life-saving RCCB trip'}
@@ -170,7 +187,15 @@ export const HomeGuardLearnShell: React.FC<HomeGuardLearnShellProps> = ({
                         </div>
                       </div>
                     </div>
-                    {isPassed && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+                    {isSelected ? (
+                      <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-cyan-400 text-slate-950 shrink-0 shadow-sm">
+                        ACTIVE
+                      </span>
+                    ) : isPassed ? (
+                      <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-1.5 py-0.5 rounded shrink-0">
+                        ✓ Done
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
@@ -224,6 +249,18 @@ export const HomeGuardLearnShell: React.FC<HomeGuardLearnShellProps> = ({
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>House View</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('sld')}
+                className={cn(
+                  "px-3 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1.5",
+                  viewMode === 'sld' ? "bg-emerald-500 text-slate-950 font-bold" : "text-slate-400 hover:text-white"
+                )}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Flow SLD</span>
               </button>
 
               <button
@@ -307,6 +344,22 @@ export const HomeGuardLearnShell: React.FC<HomeGuardLearnShellProps> = ({
                 onToggleDaisyChain={onToggleDaisyChain}
                 className="w-full h-full rounded-2xl overflow-hidden"
               />
+            )}
+
+            {viewMode === 'sld' && (
+              <div className="w-full h-full p-2 overflow-hidden flex flex-col">
+                <HomeGuardSLDView
+                  circuitStates={circuitStates}
+                  activeApplianceIds={activeApplianceIds}
+                  isTripped={isTripped}
+                  isShortCircuit={isShortCircuit}
+                  isOverloaded={isOverloaded}
+                  scenarioId={selectedScenario.id}
+                  onRecloseBreaker={onSafeRecloseBreaker}
+                  onTestTripRCCB={onSafeTestTripRCCB}
+                  className="flex-1 w-full h-full overflow-hidden"
+                />
+              </div>
             )}
 
             {viewMode === 'toroid' && (

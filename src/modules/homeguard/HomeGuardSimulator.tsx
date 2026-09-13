@@ -30,7 +30,12 @@ import {
   buildHomeGuardShareableUrl,
   BreakerConfigurationMode
 } from './data/auditReportData';
-import { loadAssessmentState, recordMissionPassed, MissionAssessmentState } from './data/assessmentStorage';
+import {
+  loadAssessmentState,
+  recordMissionPassed,
+  resetAssessmentState,
+  MissionAssessmentState
+} from './data/assessmentStorage';
 import { MCBState, TripCause } from '@/src/mcb/types';
 import { cn } from '@/src/lib/utils';
 import {
@@ -45,7 +50,7 @@ import {
 export type PresentationMode = 'simple' | 'learn' | 'expert';
 
 export const HomeGuardSimulator: React.FC = () => {
-  // Presentation Layer Mode: persisted in localStorage
+  // Presentation Layer Mode: persisted in localStorage (DEFAULT IS LEARN)
   const [presentationMode, setPresentationMode] = useState<PresentationMode>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('homeguard_presentation_mode');
@@ -53,7 +58,7 @@ export const HomeGuardSimulator: React.FC = () => {
         return saved;
       }
     }
-    return 'simple';
+    return 'learn';
   });
 
   const handleModeChange = (mode: PresentationMode) => {
@@ -81,9 +86,20 @@ export const HomeGuardSimulator: React.FC = () => {
 
   const [activeApplianceIds, setActiveApplianceIds] = useState<string[]>([
     'tv_console',
-    'space_heater',
-    'kettle'
+    'air_conditioner',
+    'refrigerator'
   ]);
+
+  // Dynamic Live Amperage on Living Room Circuit C2 (Physics Engine Synced: I = P / V)
+  const dynamicC2Amps = useMemo(() => {
+    let watts = 0;
+    if (activeApplianceIds.includes('tv_console')) watts += 150;
+    if (activeApplianceIds.includes('space_heater')) watts += 2000;
+    if (activeApplianceIds.includes('kettle')) watts += 2200;
+    if (activeApplianceIds.includes('hair_dryer')) watts += 986;
+    if (activeApplianceIds.includes('air_conditioner')) watts += 1500;
+    return Number((watts / 230).toFixed(1));
+  }, [activeApplianceIds]);
 
   // SINGLE PHYSICS ENGINE INSTANCE
   const {
@@ -98,7 +114,7 @@ export const HomeGuardSimulator: React.FC = () => {
     setIsMuted,
     handleRecloseBreaker,
     handleTestTripRCCB
-  } = useHomeGuardEngine('winter_overload_145');
+  } = useHomeGuardEngine('normal_living', dynamicC2Amps);
 
   // Sync audio mute state
   useEffect(() => {
@@ -213,7 +229,15 @@ export const HomeGuardSimulator: React.FC = () => {
 
   const handleSelectPreset = (preset: HomeGuardPreset) => {
     setSelectedPreset(preset);
-    if (preset.id === 'preset_overload') {
+    if (preset.id === 'preset_normal') {
+      handleScenarioChange('normal_living');
+      setActiveApplianceIds(['tv_console', 'air_conditioner', 'refrigerator']);
+      handleRecloseBreaker('c1_lighting');
+      handleRecloseBreaker('c2_living_sockets');
+      handleRecloseBreaker('c3_kitchen_sockets');
+      handleRecloseBreaker('main_rccb');
+      setHabitTip(null);
+    } else if (preset.id === 'preset_overload') {
       handleScenarioChange('winter_overload_145');
     } else if (preset.id === 'preset_short') {
       handleScenarioChange('damaged_cord_short');
@@ -225,6 +249,37 @@ export const HomeGuardSimulator: React.FC = () => {
       handleScenarioChange('broken_earth_velcb');
       updateHomeGuardUrl('broken_earth_velcb', breakerMode);
     }
+  };
+
+  // Master Reset: Full return to Normal Safe Condition
+  const handleMasterReset = () => {
+    const normalPreset = HOMEGUARD_PRESETS[0]; // preset_normal
+    setSelectedPreset(normalPreset);
+    handleScenarioChange('normal_living');
+    setActiveApplianceIds(['tv_console', 'air_conditioner', 'refrigerator']);
+    handleRecloseBreaker('c1_lighting');
+    handleRecloseBreaker('c2_living_sockets');
+    handleRecloseBreaker('c3_kitchen_sockets');
+    handleRecloseBreaker('main_rccb');
+    setTimeLapseSpeed(1);
+    setIsDaisyChainActive(false);
+    setBreakerMode('rccb_mcb');
+    setHabitTip({
+      type: 'success',
+      text: '🔄 Simulator Reset: Returned to Normal Safe Condition. All switches ON.'
+    });
+    setTimeout(() => setHabitTip(null), 3500);
+  };
+
+  // Reset mission progress / score
+  const handleResetProgress = () => {
+    const cleared = resetAssessmentState();
+    setAssessmentState(cleared);
+    setHabitTip({
+      type: 'success',
+      text: '✨ Learning progress reset. Ready for a new run!'
+    });
+    setTimeout(() => setHabitTip(null), 3000);
   };
 
   const handleUpdateBreakerMode = (mode: BreakerConfigurationMode) => {
@@ -384,17 +439,18 @@ export const HomeGuardSimulator: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => handleScenarioChange(selectedScenario.id)}
+              id="master-reset-btn"
+              onClick={handleMasterReset}
               className={cn(
-                "px-2 py-1 rounded-lg border transition-colors cursor-pointer min-h-[30px] flex items-center gap-1 text-[11px] font-bold",
+                "px-2.5 py-1 rounded-lg border transition-colors cursor-pointer min-h-[30px] flex items-center gap-1.5 text-xs font-bold",
                 presentationMode === 'simple'
                   ? "bg-white border-amber-300 text-rose-600 hover:bg-rose-50"
                   : "bg-slate-800 border-rose-500/50 text-rose-300 hover:bg-rose-900"
               )}
-              title="Reset active scenario"
+              title="Master Reset: Return to Normal Safe Condition"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Reset</span>
+              <span>Reset</span>
             </button>
           </div>
         </div>
@@ -447,6 +503,7 @@ export const HomeGuardSimulator: React.FC = () => {
             onSafeRecloseBreaker={handleSafeRecloseBreaker}
             onSafeTestTripRCCB={handleSafeTestTripRCCB}
             assessmentState={assessmentState}
+            onResetProgress={handleResetProgress}
             habitTip={habitTip}
             livingCountdownSec={livingCountdownSec}
             leakageCurrentMA={leakageCurrentMA}
@@ -471,6 +528,7 @@ export const HomeGuardSimulator: React.FC = () => {
             onSafeRecloseBreaker={handleSafeRecloseBreaker}
             onSafeTestTripRCCB={handleSafeTestTripRCCB}
             assessmentState={assessmentState}
+            onResetProgress={handleResetProgress}
             habitTip={habitTip}
             livingCountdownSec={livingCountdownSec}
             leakageCurrentMA={leakageCurrentMA}

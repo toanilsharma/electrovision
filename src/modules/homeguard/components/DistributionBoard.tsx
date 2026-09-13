@@ -1,19 +1,19 @@
 /**
  * Residential Distribution Board (Consumer Unit / DB Box)
  * 
- * Simple, Clean, Zero-Scrollbar Architecture:
+ * Simple, Clean, Tactile & Intuitive Architecture:
  * - Direct visual DIN rail mounting of 4 modular breakers
  * - Clear, large MCB figures with interactive toggle levers and status indicators
  * - 1-click push UP to reset or flip DOWN to trip
  * - Prominent Yellow Test "T" button on RCCB
- * - Zero vertical/horizontal scrollbars and zero clutter
+ * - Plain-English purpose badges for every breaker (Shock Guard vs Fire Guard)
  */
 
 import React from 'react';
 import { ModularDeviceFaceplate } from '../../../core/ui/faceplates/ModularDeviceFaceplate';
 import { CircuitState } from '../hooks/useHomeGuardEngine';
 import { cn } from '@/src/lib/utils';
-import { Zap, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Zap, ShieldCheck, AlertTriangle, Shield, Flame } from 'lucide-react';
 
 export interface DistributionBoardProps {
   circuitStates: Record<string, CircuitState>;
@@ -45,7 +45,7 @@ export const DistributionBoard: React.FC<DistributionBoardProps> = ({
   return (
     <div
       className={cn(
-        "flex flex-col justify-between w-full h-full bg-slate-900 border border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-2xl font-mono select-none overflow-hidden",
+        "flex flex-col justify-between w-full h-full bg-slate-900 border border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-2xl font-sans select-none overflow-hidden",
         className
       )}
     >
@@ -64,11 +64,11 @@ export const DistributionBoard: React.FC<DistributionBoardProps> = ({
 
         <div>
           {isAnyTripped ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500/20 border border-rose-500 text-rose-300 flex items-center gap-1 animate-pulse">
-              <AlertTriangle className="w-3 h-3 text-rose-400" /> BREAKER TRIPPED
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500/20 border border-rose-500 text-rose-300 flex items-center gap-1 animate-pulse">
+              <AlertTriangle className="w-3 h-3 text-rose-400" /> BREAKER TRIPPED!
             </span>
           ) : (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 flex items-center gap-1">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 flex items-center gap-1">
               <ShieldCheck className="w-3 h-3 text-emerald-400" /> ALL SWITCHES ON
             </span>
           )}
@@ -85,13 +85,23 @@ export const DistributionBoard: React.FC<DistributionBoardProps> = ({
         <div className="relative z-10 grid grid-cols-4 gap-2 h-full items-center">
           
           {/* 1. MAIN INCOMER RCCB (Shock Guard) */}
-          <div className="flex flex-col h-full justify-between items-center bg-slate-900/60 p-1.5 rounded-lg border border-slate-800/80">
+          <div className={cn(
+            "flex flex-col h-full justify-between items-center p-1.5 rounded-lg border transition-all relative",
+            rccbState.state !== 'CLOSED'
+              ? "bg-rose-950/40 border-rose-500 ring-1 ring-rose-500 shadow-lg shadow-rose-950/50"
+              : "bg-slate-900/60 border-slate-800/80"
+          )}>
+            {rccbState.state !== 'CLOSED' && (
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[8px] font-black bg-rose-500 text-slate-950 shadow animate-bounce z-20">
+                TRIPPED!
+              </div>
+            )}
             <div className="text-center w-full">
               <span className="text-[10px] font-black text-cyan-400 uppercase block truncate">
                 1. MAIN RCCB
               </span>
-              <span className="text-[8px] text-slate-400 block font-sans">
-                Shock Guard (30mA)
+              <span className="text-[8px] text-emerald-300 block font-bold">
+                🛡️ SHOCK GUARD (30mA)
               </span>
             </div>
 
@@ -110,14 +120,28 @@ export const DistributionBoard: React.FC<DistributionBoardProps> = ({
               />
             </div>
 
-            <button
-              type="button"
-              onClick={onTestTripRCCB}
-              className="w-full mt-1 py-1 px-1 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[9px] transition-colors cursor-pointer text-center truncate shadow-sm"
-              title="Quarterly push test"
-            >
-              🟡 TEST 'T'
-            </button>
+            <div className="w-full space-y-1">
+              <button
+                type="button"
+                onClick={onTestTripRCCB}
+                className="w-full py-0.5 px-1 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[8.5px] transition-colors cursor-pointer text-center truncate shadow-sm"
+                title="Quarterly push test"
+              >
+                🟡 TEST 'T'
+              </button>
+              <button
+                type="button"
+                onClick={() => onRecloseBreaker('main_rccb')}
+                className={cn(
+                  "w-full py-1 px-1 rounded-md font-black text-[9px] transition-colors cursor-pointer text-center truncate shadow-sm",
+                  rccbState.state !== 'CLOSED'
+                    ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 animate-pulse"
+                    : "bg-slate-800 text-slate-400 hover:text-white"
+                )}
+              >
+                {rccbState.state !== 'CLOSED' ? '⬆ PUSH UP (RESET)' : '● ACTIVE'}
+              </button>
+            </div>
           </div>
 
           {/* 2. LIGHTING MCB */}
@@ -126,8 +150,8 @@ export const DistributionBoard: React.FC<DistributionBoardProps> = ({
               <span className="text-[10px] font-bold text-slate-300 uppercase block truncate">
                 2. LIGHTS
               </span>
-              <span className="text-[8px] text-slate-400 block font-sans">
-                Circuit 1 (10A)
+              <span className="text-[8px] text-slate-400 block">
+                💡 Circuit 1 (10A)
               </span>
             </div>
 
@@ -174,8 +198,8 @@ export const DistributionBoard: React.FC<DistributionBoardProps> = ({
               <span className="text-[10px] font-black text-amber-400 uppercase block truncate">
                 3. LIVING ROOM ★
               </span>
-              <span className="text-[8px] text-amber-300 block font-sans font-bold">
-                C16 Socket Circuit
+              <span className="text-[8px] text-amber-300 block font-bold">
+                🔥 FIRE GUARD (16A)
               </span>
             </div>
 
@@ -213,7 +237,7 @@ export const DistributionBoard: React.FC<DistributionBoardProps> = ({
                 4. KITCHEN
               </span>
               <span className="text-[8px] text-slate-400 block font-sans">
-                Circuit 3 (16A)
+                🍳 Circuit 3 (16A)
               </span>
             </div>
 
@@ -249,8 +273,8 @@ export const DistributionBoard: React.FC<DistributionBoardProps> = ({
 
       {/* 3. COMPACT HINT FOOTER (SINGLE LINE) */}
       <div className="pt-1 border-t border-slate-800 flex items-center justify-between text-[9.5px] text-slate-400 font-sans shrink-0">
-        <span>💡 <strong>How to operate:</strong> Click any switch handle or button to toggle power ON/OFF.</span>
-        <span className="text-cyan-400 font-mono text-[9px]">IEC 60898-1 & IEC 61008-1 Compliant</span>
+        <span>💡 <strong>Role:</strong> RCCB protects your family from electric shocks. MCBs protect wall wires from fire.</span>
+        <span className="text-cyan-400 font-mono text-[9px]">IEC 60898-1 & IEC 61008-1</span>
       </div>
     </div>
   );

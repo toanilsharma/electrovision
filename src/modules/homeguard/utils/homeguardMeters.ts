@@ -17,11 +17,17 @@ export const C2_MAX_SAFE_WATTS = C2_BREAKER_RATING_A * MAINS_VOLTAGE_V; // 3680W
  * Standardized appliance power ratings for Living Room Sockets (C2)
  */
 export const APPLIANCE_POWER_MAP: Record<string, number> = {
-  tv_console: 150,      // 0.65A
-  space_heater: 2000,   // 8.70A
-  kettle: 2200,         // 9.57A (Combined with TV + Heater = 4350W / 18.9A)
-  hair_dryer: 986,      // 4.29A (With TV + Heater + Kettle = 5336W / 23.2A / 145%)
-  microwave: 1200       // 5.22A
+  tv_console: 150,        // 0.65A
+  space_heater: 2000,     // 8.70A
+  kettle: 2200,           // 9.57A
+  air_conditioner: 1500,  // 6.52A
+  water_geyser: 2000,     // 8.70A (Bathroom Geyser)
+  otg_oven: 1400,         // 6.09A (Kitchen OTG Oven)
+  microwave: 1200,        // 5.22A
+  refrigerator: 200,      // 0.87A
+  exhaust_fan: 50,        // 0.22A
+  bed_lamp: 100,          // 0.43A
+  hair_dryer: 986         // 4.29A
 };
 
 export interface CircuitPowerMetrics {

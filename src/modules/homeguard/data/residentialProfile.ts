@@ -215,24 +215,56 @@ export const RESIDENTIAL_SCENARIOS: ResidentialScenario[] = [
     recommendation: 'Unplug and discard frayed or pinched cords immediately. Never tape damaged wires.'
   },
   {
-    id: 'appliance_earth_leakage',
-    title: '4. Wet Appliance Earth Leakage (45mA)',
-    summary: 'RCD / Safety Switch Life-Saving Trip',
+    id: 'child_touch_shock',
+    title: '4. Child Wet-Skin Contact Shock (230mA)',
+    summary: 'Direct Live Contact - RCCB High Sensitivity Trip',
     description:
-      'Water spilled into an iron or kettle element, causing 45mA of current to leak into the grounded metal housing.',
+      'A child inserts a metal pin into a live socket. 230mA of current passes through body resistance to earth.',
     plainEnglishExplanation:
-      'Water caused electricity to leak outside the normal wires onto the metal shell. If you touched it, you could get a nasty shock. The RCD safety switch detected the missing electricity and tripped in 40 milliseconds.',
+      'A child touched a live terminal. 230mA of current is flowing through the body into the ground. Standard 16A breakers ignore this low current, but the 30mA RCCB trips in less than 0.03 seconds to save the child.',
+    targetCircuitId: 'main_rccb',
+    faultType: 'earth_leakage',
+    totalLoadAmps: 4.2,
+    leakageCurrentMA: 230.0,
+    appliancesActive: ['tv_console'],
+    expectedTripTimeSec: 0.030,
+    recommendation: 'Ensure all home circuits are protected by a 30mA RCCB. Install tamper-resistant socket safety shutters.'
+  },
+  {
+    id: 'kettle_earth_leakage',
+    title: '5. Bathroom / Kitchen Appliance Water Ingress (45mA)',
+    summary: 'Insulation Breakdown - Residual Current Trip',
+    description:
+      'Water splashed onto heating element or wiring insulation, leaking 45mA of residual current to the grounded metallic chassis.',
+    plainEnglishExplanation:
+      'Water inside the appliance is conducting electricity to its metal body. The RCCB senses this imbalance between live and neutral lines and snaps power OFF in 0.040s.',
+    targetCircuitId: 'main_rccb',
+    faultType: 'earth_leakage',
+    totalLoadAmps: 9.6,
+    leakageCurrentMA: 45.0,
+    appliancesActive: ['kettle'],
+    expectedTripTimeSec: 0.040,
+    recommendation: 'Keep water away from electrical appliances and replace appliances with compromised water seals.'
+  },
+  {
+    id: 'broken_earth_velcb',
+    title: '6. Broken Earth Wire (v-ELCB vs RCCB)',
+    summary: 'CPC Conductor Failure Mode',
+    description:
+      'The green protective earth conductor is broken. An old voltage-operated ELCB fails completely, but a modern current-operated RCCB still trips.',
+    plainEnglishExplanation:
+      'The grounding wire is cut. An old 1980s v-ELCB will never trip, creating a deadly shock trap. But a modern RCCB does not need the ground wire to detect missing current and safely trips.',
     targetCircuitId: 'main_rccb',
     faultType: 'earth_leakage',
     totalLoadAmps: 6.5,
     leakageCurrentMA: 45.0,
-    appliancesActive: ['wet_steamer'],
+    appliancesActive: ['kettle'],
     expectedTripTimeSec: 0.040,
-    recommendation: 'Never use electrical appliances with wet hands or near standing water without 30mA RCD protection.'
+    recommendation: 'Replace obsolete voltage-operated ELCBs with modern 30mA RCCB / RCBO residual current devices.'
   },
   {
     id: 'safe_boundary_hold',
-    title: '5. Borderline Load Test (1.13× In)',
+    title: '7. Borderline Load Test (1.13× In)',
     summary: 'Conventional Non-Tripping Current Int',
     description:
       'Heater + TV = 18.0A on a 16A breaker (1.13x In). Breaker safely carries this without nuisance tripping per IEC standards.',

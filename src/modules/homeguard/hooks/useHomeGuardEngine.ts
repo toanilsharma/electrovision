@@ -24,7 +24,7 @@ export interface CircuitState {
   remainingTripTimeSec: number;
 }
 
-export function useHomeGuardEngine(initialScenarioId: string = 'normal_living') {
+export function useHomeGuardEngine(initialScenarioId: string = 'normal_living', dynamicC2Amps?: number) {
   const [selectedScenario, setSelectedScenario] = useState<ResidentialScenario>(() => {
     return RESIDENTIAL_SCENARIOS.find(s => s.id === initialScenarioId) || RESIDENTIAL_SCENARIOS[0];
   });
@@ -146,12 +146,16 @@ export function useHomeGuardEngine(initialScenarioId: string = 'normal_living') 
       const isC2Tripped = circuitStates.c2_living_sockets.state !== MCBState.CLOSED;
       const isRCCBTripped = circuitStates.main_rccb.state !== MCBState.CLOSED;
 
-      // Current values
+      // Current values (Physics Synced: Short Circuit = 250A, otherwise live active load or scenario load)
+      const baseLoad = dynamicC2Amps !== undefined ? dynamicC2Amps : (
+        selectedScenario.targetCircuitId === 'c2_living_sockets' ? selectedScenario.totalLoadAmps : 4.2
+      );
+
       const c2TargetCurrent = isC2Tripped || isRCCBTripped
         ? 0
-        : selectedScenario.targetCircuitId === 'c2_living_sockets'
-        ? selectedScenario.totalLoadAmps
-        : 4.2;
+        : selectedScenario.faultType === 'short_circuit'
+        ? 250.0
+        : baseLoad;
 
       // Step c2 engine with dt scaled by timeLapseSpeed
       if (!isC2Tripped && !isRCCBTripped) {

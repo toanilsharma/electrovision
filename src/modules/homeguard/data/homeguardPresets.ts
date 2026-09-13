@@ -11,14 +11,14 @@
 
 export interface HomeGuardPreset {
   id: string;
-  chipLabel: 'OVERLOAD' | 'SHORT' | 'CHILD SHOCK' | 'WET BATH' | 'BROKEN EARTH';
+  chipLabel: 'NORMAL' | 'OVERLOAD' | 'SHORT' | 'CHILD SHOCK' | 'WET BATH' | 'BROKEN EARTH';
   title: string;
   oneLiner: string;
   description: string;
   targetCircuitId: 'c1_lighting' | 'c2_living_sockets' | 'c3_kitchen_sockets' | 'main_rccb';
   faultCurrentAmps: number;
   leakageCurrentMA: number;
-  faultType: 'thermal_overload' | 'short_circuit' | 'earth_leakage' | 'child_shock' | 'broken_cpc';
+  faultType: 'normal' | 'thermal_overload' | 'short_circuit' | 'earth_leakage' | 'child_shock' | 'broken_cpc';
   expectedDevice: string;
   expectedTimeRange: string;
   expectedVerdict: 'TRIP_THERMAL' | 'TRIP_MAGNETIC' | 'TRIP_RESIDUAL' | 'LETHAL_HOLD' | 'TRIP_SAFE';
@@ -30,9 +30,27 @@ export interface HomeGuardPreset {
 
 export const HOMEGUARD_PRESETS: HomeGuardPreset[] = [
   {
+    id: 'preset_normal',
+    chipLabel: 'NORMAL',
+    title: '1. Normal Safe Home (No Faults)',
+    oneLiner: 'Standard everyday electricity flow. Clean power distributed to all rooms without danger.',
+    description: 'Electricity flows safely through your home from the mains supply through the DB fuse box into your appliances. All safety switches remain ON. You can turn the mains supply or individual appliances ON/OFF to see how energy moves.',
+    targetCircuitId: 'c2_living_sockets',
+    faultCurrentAmps: 7.2,
+    leakageCurrentMA: 0,
+    faultType: 'normal',
+    expectedDevice: 'All Switches ON (Safe)',
+    expectedTimeRange: 'Continuous Safe Operation',
+    expectedVerdict: 'TRIP_SAFE',
+    expectedStampText: 'SAFE: NORMAL BALANCED POWER',
+    appliancesActive: ['tv_console', 'air_conditioner', 'refrigerator'],
+    pointsAwarded: 100,
+    learningGoal: 'Observe how balanced electrical current flows safely in a closed loop through insulated wires.'
+  },
+  {
     id: 'preset_overload',
     chipLabel: 'OVERLOAD',
-    title: '1. Winter Living Room Overload (145% Safe Capacity)',
+    title: '2. Winter Room Overload (145% Safe Capacity)',
     oneLiner: 'Space heater + Kettle draw 23.2A on a 16-Amp socket line (145% overloaded—Max ~3,500W safe limit!).',
     description: 'When total load reaches 145% of safe limit (23.2A on a 16A breaker), hidden copper wires inside the wall begin heating up like a toaster wire. The safety switch gives a timed countdown before cutting power to prevent electrical wall fires.',
     targetCircuitId: 'c2_living_sockets',
