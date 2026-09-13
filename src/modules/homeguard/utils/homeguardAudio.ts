@@ -218,6 +218,38 @@ class HomeGuardAudioEngine {
       osc.stop(now + 0.8);
     });
   }
+
+  /**
+   * Subtle 50Hz/100Hz electrical hum warning when wire load approaches limit (>90% rated)
+   */
+  public playWireHumWarningSound() {
+    if (this.isMuted) return;
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(100, now); // 100Hz rectified AC ripple buzz
+
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    // Low pass filter for soft muffled wire hum
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(300, now);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.35);
+  }
 }
 
 export const homeguardAudio = new HomeGuardAudioEngine();
+

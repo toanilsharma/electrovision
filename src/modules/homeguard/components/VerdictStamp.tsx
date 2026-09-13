@@ -34,16 +34,16 @@ export const VerdictStamp: React.FC<VerdictStampProps> = ({
   return (
     <div
       className={cn(
-        "absolute inset-0 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-[2px] z-30 pointer-events-none select-none animate-in zoom-in-75 duration-200",
+        "absolute top-2 right-2 sm:top-3 sm:right-3 z-30 pointer-events-none select-none flex justify-end animate-in fade-in slide-in-from-top-2 duration-200",
         className
       )}
     >
       <div
         className={cn(
-          "px-6 py-4 rounded-2xl border-4 text-center transform shadow-2xl flex flex-col items-center gap-1.5 backdrop-blur-md max-w-sm",
+          "px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl border-3 text-center transform shadow-2xl flex flex-col items-center gap-1 backdrop-blur-md max-w-xs sm:max-w-sm pointer-events-auto",
           isSurvived
-            ? "border-emerald-400 bg-emerald-950/90 text-emerald-300 rotate-[-6deg] shadow-[0_0_30px_rgba(16,185,129,0.4)]"
-            : "border-rose-500 bg-rose-950/90 text-rose-300 rotate-[6deg] shadow-[0_0_30px_rgba(239,68,68,0.5)] animate-pulse"
+            ? "border-emerald-400 bg-emerald-950/95 text-emerald-300 shadow-[0_0_25px_rgba(16,185,129,0.5)]"
+            : "border-rose-500 bg-rose-950/95 text-rose-300 shadow-[0_0_25px_rgba(239,68,68,0.6)] animate-pulse"
         )}
       >
         {/* Top Header Icon & Tag */}

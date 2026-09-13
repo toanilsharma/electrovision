@@ -220,9 +220,8 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
         { x: 240, y: 330 }
       ],
       socketToHeater: [
-        { x: 240, y: 345 },
-        { x: 205, y: 350 },
-        { x: 170, y: 355 }
+        { x: 215, y: 325 },
+        { x: 189, y: 325 }
       ],
       // 4. Kitchen Appliance Branch Wires
       kitchenToFridge: [
@@ -265,8 +264,8 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
       // 7. Earth Ground Leakage Path (from appliance chassis -> DB -> Earth Pit)
       earthToPit: [
         { x: 385, y: 240 },
-        { x: 220, y: 345 },
-        { x: 100, y: 375 }
+        { x: 250, y: 360 },
+        { x: 130, y: 445 }
       ],
       shockPath: [
         { x: 240, y: 330 },
@@ -765,9 +764,9 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
           </g>
 
           {/* ========================================================= */}
-          {/* 2. OUTDOOR EARTH GROUND PIT (BOTTOM LEFT)                 */}
+          {/* 2. OUTDOOR EARTH GROUND PIT (OUTDOOR YARD, AWAY FROM HEATER) */}
           {/* ========================================================= */}
-          <g id="ground-earth-pit" transform="translate(100, 375)">
+          <g id="ground-earth-pit" transform="translate(130, 445)">
             <polygon points="-44,0 44,0 44,75 -44,75" fill="#382314" stroke="#543824" strokeWidth="1.5" />
             <ellipse cx="0" cy="0" rx="38" ry="19" fill="#1e293b" stroke="#475569" strokeWidth="2" />
             <ellipse cx="0" cy="0" rx="30" ry="15" fill="#0f172a" stroke="#22c55e" strokeWidth="2" />
@@ -788,9 +787,9 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
               Ra ≈ 5.2 Ω (Solid Ground)
             </text>
 
-            {/* Earth Bonding Wire (Green) */}
+            {/* Earth Bonding Wire (Green) -> DB Box */}
             <path
-              d="M 0 0 L 120 -30 L 285 -135"
+              d="M 0 0 L 120 -85 L 255 -205"
               fill="none"
               stroke={isBrokenEarth ? "#ef4444" : "#22c55e"}
               strokeWidth={isBrokenEarth ? "3.5" : "3"}
@@ -798,7 +797,7 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
             />
 
             {isBrokenEarth && (
-              <g transform="translate(120, -30)">
+              <g transform="translate(120, -85)">
                 <circle cx="0" cy="0" r="18" fill="#ef4444" fillOpacity="0.45" className="animate-ping" />
                 <circle cx="0" cy="0" r="13" fill="#991b1b" stroke="#ef4444" strokeWidth="2" />
                 <text x="0" y="4.5" textAnchor="middle" fill="#ffffff" fontSize="13" fontWeight="black">✕</text>
@@ -947,7 +946,7 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
 
             {/* Heavy Rubber Cord: Wall Socket -> Space Heater */}
             <path
-              d="M 240 345 L 205 350 L 170 355"
+              d="M 215 325 L 189 325"
               fill="none"
               stroke={activeApplianceIds.includes('space_heater') && isPowerFlowing ? (isOverloaded ? "#ea580c" : "#f97316") : "#475569"}
               strokeWidth={isOverloaded ? "5.5" : "3.5"}
@@ -1155,38 +1154,100 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
 
             {/* Smart TV (150W) */}
             <g
-              transform="translate(195, 230)"
+              transform="translate(190, 225)"
               onClick={() => onToggleAppliance('tv_console')}
-              className="cursor-pointer group"
+              className="cursor-pointer group select-none"
             >
+              {/* Card Body */}
               <rect
-                x="0" y="0" width="68" height="38" rx="8"
+                x="0" y="0" width="76" height="42" rx="8"
                 fill={activeApplianceIds.includes('tv_console') ? "#1e1b4b" : "#0f172a"}
-                stroke={activeApplianceIds.includes('tv_console') ? "#6366f1" : "#334155"}
-                strokeWidth="2"
+                stroke={activeApplianceIds.includes('tv_console') ? "#818cf8" : "#334155"}
+                strokeWidth={activeApplianceIds.includes('tv_console') ? "2.5" : "1.5"}
+                filter={activeApplianceIds.includes('tv_console') ? "drop-shadow(0 0 10px rgba(99,102,241,0.6))" : undefined}
+                className="transition-all"
               />
-              <text x="34" y="24" textAnchor="middle" fill="#c7d2fe" fontSize="11" fontWeight="black">
-                📺 TV 150W
+              {/* Screen Illumination (Sensory Metaphor) */}
+              {activeApplianceIds.includes('tv_console') && (
+                <rect x="5" y="4" width="66" height="18" rx="4" fill="#312e81" opacity="0.9" />
+              )}
+              <text x="38" y="17" textAnchor="middle" fill="#c7d2fe" fontSize="10.5" fontWeight="black">
+                📺 SMART TV
+              </text>
+              {/* Rocker Switch Pill & LED */}
+              <rect
+                x="8" y="24" width="60" height="14" rx="7"
+                fill={activeApplianceIds.includes('tv_console') ? "#312e81" : "#1e293b"}
+                stroke={activeApplianceIds.includes('tv_console') ? "#6366f1" : "#475569"}
+                strokeWidth="1"
+              />
+              <circle
+                cx={activeApplianceIds.includes('tv_console') ? 16 : 58}
+                cy="31"
+                r="4.5"
+                fill={activeApplianceIds.includes('tv_console') ? "#22c55e" : "#64748b"}
+                filter={activeApplianceIds.includes('tv_console') ? "drop-shadow(0 0 4px #22c55e)" : undefined}
+              />
+              <text
+                x={activeApplianceIds.includes('tv_console') ? 42 : 32}
+                y="34"
+                textAnchor="middle"
+                fill={activeApplianceIds.includes('tv_console') ? "#86efac" : "#94a3b8"}
+                fontSize="8"
+                fontWeight="black"
+              >
+                {activeApplianceIds.includes('tv_console') ? "ON 150W" : "OFF (TAP)"}
               </text>
             </g>
 
             {/* Living Room Air Conditioner (1500W) */}
             <g
-              transform="translate(90, 255)"
+              transform="translate(85, 250)"
               onClick={() => onToggleAppliance('air_conditioner')}
-              className="cursor-pointer group"
+              className="cursor-pointer group select-none"
             >
+              {/* Sensory Metaphor: Cool Breeze Drift Lines blowing out */}
+              {activeApplianceIds.includes('air_conditioner') && isPowerFlowing && (
+                <g opacity="0.85" className="animate-pulse">
+                  <path d="M 82 20 Q 95 18 108 22" fill="none" stroke="#38bdf8" strokeWidth="2" strokeDasharray="4 3" />
+                  <path d="M 82 28 Q 100 28 116 32" fill="none" stroke="#7dd3fc" strokeWidth="2.5" strokeDasharray="4 3" />
+                  <path d="M 82 36 Q 95 38 108 34" fill="none" stroke="#38bdf8" strokeWidth="2" strokeDasharray="4 3" />
+                </g>
+              )}
+              {/* Card Body */}
               <rect
-                x="0" y="0" width="76" height="42" rx="8"
+                x="0" y="0" width="82" height="46" rx="8"
                 fill={activeApplianceIds.includes('air_conditioner') ? "#075985" : "#1e293b"}
                 stroke={activeApplianceIds.includes('air_conditioner') ? "#38bdf8" : "#475569"}
-                strokeWidth="2"
+                strokeWidth={activeApplianceIds.includes('air_conditioner') ? "2.5" : "1.5"}
+                filter={activeApplianceIds.includes('air_conditioner') ? "drop-shadow(0 0 12px rgba(56,189,248,0.7))" : undefined}
               />
-              <text x="38" y="20" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
-                ❄️ AC UNIT
+              <text x="41" y="17" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
+                ❄️ LIVING AC
               </text>
-              <text x="38" y="34" textAnchor="middle" fill="#7dd3fc" fontSize="9.5" fontWeight="bold">
-                1500W 🟡
+              {/* Rocker Switch Pill & LED */}
+              <rect
+                x="6" y="24" width="70" height="16" rx="8"
+                fill={activeApplianceIds.includes('air_conditioner') ? "#0c4a6e" : "#0f172a"}
+                stroke={activeApplianceIds.includes('air_conditioner') ? "#38bdf8" : "#334155"}
+                strokeWidth="1"
+              />
+              <circle
+                cx={activeApplianceIds.includes('air_conditioner') ? 16 : 66}
+                cy="32"
+                r="5"
+                fill={activeApplianceIds.includes('air_conditioner') ? "#22c55e" : "#64748b"}
+                filter={activeApplianceIds.includes('air_conditioner') ? "drop-shadow(0 0 5px #22c55e)" : undefined}
+              />
+              <text
+                x={activeApplianceIds.includes('air_conditioner') ? 45 : 35}
+                y="35"
+                textAnchor="middle"
+                fill={activeApplianceIds.includes('air_conditioner') ? "#7dd3fc" : "#94a3b8"}
+                fontSize="8.5"
+                fontWeight="black"
+              >
+                {activeApplianceIds.includes('air_conditioner') ? "ON 1500W" : "OFF (TAP)"}
               </text>
             </g>
 
@@ -1205,24 +1266,61 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
               </text>
             </g>
 
-            {/* Portable Space Heater (2000W) */}
+            {/* Portable Space Heater (2000W) - Positioned in Living Room above Ground */}
             <g
-              transform="translate(90, 335)"
+              transform="translate(105, 305)"
               onClick={() => onToggleAppliance('space_heater')}
-              className="cursor-pointer group"
+              className="cursor-pointer group select-none"
             >
+              {/* Sensory Metaphor: Rising Heat Shimmer Wave Ripples when ON */}
+              {activeApplianceIds.includes('space_heater') && isPowerFlowing && (
+                <g opacity="0.9" className="animate-pulse">
+                  <path d="M 22 -4 Q 28 -12 22 -20" fill="none" stroke="#ea580c" strokeWidth="2.5" strokeDasharray="3 2" />
+                  <path d="M 42 -6 Q 48 -15 42 -24" fill="none" stroke="#f97316" strokeWidth="3" strokeDasharray="3 2" />
+                  <path d="M 62 -4 Q 68 -12 62 -20" fill="none" stroke="#ea580c" strokeWidth="2.5" strokeDasharray="3 2" />
+                </g>
+              )}
+              {/* Card Body */}
               <rect
-                x="0" y="0" width="76" height="46" rx="8"
+                x="0" y="0" width="84" height="48" rx="8"
                 fill={activeApplianceIds.includes('space_heater') ? "#7c2d12" : "#1e293b"}
                 stroke={activeApplianceIds.includes('space_heater') ? "#ea580c" : "#475569"}
-                strokeWidth="2.5"
-                filter={isOverloaded ? "drop-shadow(0 0 14px rgba(234,88,12,0.9))" : "drop-shadow(0 0 10px rgba(234,88,12,0.6))"}
+                strokeWidth={activeApplianceIds.includes('space_heater') ? "2.5" : "1.5"}
+                filter={isOverloaded ? "drop-shadow(0 0 16px rgba(234,88,12,1))" : activeApplianceIds.includes('space_heater') ? "drop-shadow(0 0 12px rgba(234,88,12,0.7))" : undefined}
               />
-              <text x="38" y="22" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
+              {/* Internal Glowing Heating Element Coils (Sensory Metaphor) */}
+              {activeApplianceIds.includes('space_heater') && (
+                <g stroke="#ffedd5" strokeWidth="2" strokeLinecap="round" opacity="0.95">
+                  <line x1="12" y1="8" x2="72" y2="8" stroke="#f97316" strokeWidth="3" />
+                  <line x1="12" y1="14" x2="72" y2="14" stroke="#f97316" strokeWidth="3" />
+                </g>
+              )}
+              <text x="42" y="20" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
                 🔥 HEATER
               </text>
-              <text x="38" y="37" textAnchor="middle" fill="#fb923c" fontSize="9.5" fontWeight="black">
-                2000W 🔴
+              {/* Rocker Switch Pill & LED */}
+              <rect
+                x="6" y="26" width="72" height="16" rx="8"
+                fill={activeApplianceIds.includes('space_heater') ? "#431407" : "#0f172a"}
+                stroke={activeApplianceIds.includes('space_heater') ? "#ea580c" : "#334155"}
+                strokeWidth="1"
+              />
+              <circle
+                cx={activeApplianceIds.includes('space_heater') ? 16 : 68}
+                cy="34"
+                r="5"
+                fill={activeApplianceIds.includes('space_heater') ? "#22c55e" : "#64748b"}
+                filter={activeApplianceIds.includes('space_heater') ? "drop-shadow(0 0 6px #22c55e)" : undefined}
+              />
+              <text
+                x={activeApplianceIds.includes('space_heater') ? 47 : 36}
+                y="37"
+                textAnchor="middle"
+                fill={activeApplianceIds.includes('space_heater') ? "#fdba74" : "#94a3b8"}
+                fontSize="8.5"
+                fontWeight="black"
+              >
+                {activeApplianceIds.includes('space_heater') ? "ON 2000W 🔴" : "OFF (TAP)"}
               </text>
             </g>
 
@@ -1249,58 +1347,135 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
 
             {/* Refrigerator (200W) */}
             <g
-              transform="translate(480, 225)"
+              transform="translate(475, 220)"
               onClick={() => onToggleAppliance('refrigerator')}
-              className="cursor-pointer group"
+              className="cursor-pointer group select-none"
             >
               <rect
-                x="0" y="0" width="70" height="38" rx="8"
+                x="0" y="0" width="76" height="42" rx="8"
                 fill={activeApplianceIds.includes('refrigerator') ? "#064e3b" : "#1e293b"}
                 stroke={activeApplianceIds.includes('refrigerator') ? "#10b981" : "#475569"}
-                strokeWidth="2"
+                strokeWidth={activeApplianceIds.includes('refrigerator') ? "2.5" : "1.5"}
+                filter={activeApplianceIds.includes('refrigerator') ? "drop-shadow(0 0 10px rgba(16,185,129,0.6))" : undefined}
               />
-              <text x="35" y="24" textAnchor="middle" fill="#a7f3d0" fontSize="11" fontWeight="black">
+              <text x="38" y="16" textAnchor="middle" fill="#a7f3d0" fontSize="10.5" fontWeight="black">
                 🧊 FRIDGE 200W
+              </text>
+              {/* Rocker Switch Pill & LED */}
+              <rect
+                x="6" y="22" width="64" height="15" rx="7.5"
+                fill={activeApplianceIds.includes('refrigerator') ? "#065f46" : "#0f172a"}
+                stroke={activeApplianceIds.includes('refrigerator') ? "#10b981" : "#334155"}
+                strokeWidth="1"
+              />
+              <circle
+                cx={activeApplianceIds.includes('refrigerator') ? 15 : 61}
+                cy="29.5"
+                r="4.5"
+                fill={activeApplianceIds.includes('refrigerator') ? "#22c55e" : "#64748b"}
+                filter={activeApplianceIds.includes('refrigerator') ? "drop-shadow(0 0 4px #22c55e)" : undefined}
+              />
+              <text
+                x={activeApplianceIds.includes('refrigerator') ? 42 : 32}
+                y="32.5"
+                textAnchor="middle"
+                fill={activeApplianceIds.includes('refrigerator') ? "#a7f3d0" : "#94a3b8"}
+                fontSize="8"
+                fontWeight="black"
+              >
+                {activeApplianceIds.includes('refrigerator') ? "ON 200W" : "OFF (TAP)"}
               </text>
             </g>
 
             {/* Electric Kettle (2200W) */}
             <g
-              transform="translate(605, 255)"
+              transform="translate(605, 250)"
               onClick={() => onToggleAppliance('kettle')}
-              className="cursor-pointer group"
+              className="cursor-pointer group select-none"
             >
+              {/* Sensory Metaphor: Rising Steam Puffs when active */}
+              {activeApplianceIds.includes('kettle') && isPowerFlowing && (
+                <g opacity="0.85" className="animate-pulse">
+                  <circle cx="15" cy="-8" r="3.5" fill="#e0f2fe" opacity="0.8" />
+                  <circle cx="22" cy="-16" r="4.5" fill="#e0f2fe" opacity="0.6" />
+                  <circle cx="18" cy="-26" r="6" fill="#e0f2fe" opacity="0.4" />
+                </g>
+              )}
               <rect
-                x="0" y="0" width="76" height="44" rx="8"
-                fill={activeApplianceIds.includes('kettle') ? "#0369a1" : "#1e293b"}
+                x="0" y="0" width="82" height="46" rx="8"
+                fill={activeApplianceIds.includes('kettle') ? "#0c4a6e" : "#1e293b"}
                 stroke={activeApplianceIds.includes('kettle') ? "#0284c7" : "#475569"}
-                strokeWidth="2.5"
+                strokeWidth={activeApplianceIds.includes('kettle') ? "2.5" : "1.5"}
+                filter={activeApplianceIds.includes('kettle') ? "drop-shadow(0 0 12px rgba(2,132,199,0.7))" : undefined}
               />
-              <text x="38" y="21" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
+              <text x="41" y="17" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
                 ☕ KETTLE
               </text>
-              <text x="38" y="35" textAnchor="middle" fill="#38bdf8" fontSize="9.5" fontWeight="black">
-                2200W 🔴
+              {/* Rocker Switch Pill & LED */}
+              <rect
+                x="6" y="24" width="70" height="16" rx="8"
+                fill={activeApplianceIds.includes('kettle') ? "#082f49" : "#0f172a"}
+                stroke={activeApplianceIds.includes('kettle') ? "#0284c7" : "#334155"}
+                strokeWidth="1"
+              />
+              <circle
+                cx={activeApplianceIds.includes('kettle') ? 16 : 66}
+                cy="32"
+                r="5"
+                fill={activeApplianceIds.includes('kettle') ? "#22c55e" : "#64748b"}
+                filter={activeApplianceIds.includes('kettle') ? "drop-shadow(0 0 5px #22c55e)" : undefined}
+              />
+              <text
+                x={activeApplianceIds.includes('kettle') ? 45 : 35}
+                y="35"
+                textAnchor="middle"
+                fill={activeApplianceIds.includes('kettle') ? "#38bdf8" : "#94a3b8"}
+                fontSize="8.5"
+                fontWeight="black"
+              >
+                {activeApplianceIds.includes('kettle') ? "ON 2200W 🔴" : "OFF (TAP)"}
               </text>
             </g>
 
             {/* OTG / Microwave Oven (1400W) */}
             <g
-              transform="translate(605, 320)"
+              transform="translate(605, 315)"
               onClick={() => onToggleAppliance('otg_oven')}
-              className="cursor-pointer group"
+              className="cursor-pointer group select-none"
             >
               <rect
-                x="0" y="0" width="76" height="44" rx="8"
+                x="0" y="0" width="82" height="46" rx="8"
                 fill={activeApplianceIds.includes('otg_oven') ? "#065f46" : "#1e293b"}
                 stroke={activeApplianceIds.includes('otg_oven') ? "#10b981" : "#475569"}
-                strokeWidth="2.5"
+                strokeWidth={activeApplianceIds.includes('otg_oven') ? "2.5" : "1.5"}
+                filter={activeApplianceIds.includes('otg_oven') ? "drop-shadow(0 0 12px rgba(16,185,129,0.6))" : undefined}
               />
-              <text x="38" y="21" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
+              <text x="41" y="17" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
                 🍲 OTG OVEN
               </text>
-              <text x="38" y="35" textAnchor="middle" fill="#a7f3d0" fontSize="9.5" fontWeight="black">
-                1400W 🟡
+              {/* Rocker Switch Pill & LED */}
+              <rect
+                x="6" y="24" width="70" height="16" rx="8"
+                fill={activeApplianceIds.includes('otg_oven') ? "#064e3b" : "#0f172a"}
+                stroke={activeApplianceIds.includes('otg_oven') ? "#10b981" : "#334155"}
+                strokeWidth="1"
+              />
+              <circle
+                cx={activeApplianceIds.includes('otg_oven') ? 16 : 66}
+                cy="32"
+                r="5"
+                fill={activeApplianceIds.includes('otg_oven') ? "#22c55e" : "#64748b"}
+                filter={activeApplianceIds.includes('otg_oven') ? "drop-shadow(0 0 5px #22c55e)" : undefined}
+              />
+              <text
+                x={activeApplianceIds.includes('otg_oven') ? 45 : 35}
+                y="35"
+                textAnchor="middle"
+                fill={activeApplianceIds.includes('otg_oven') ? "#a7f3d0" : "#94a3b8"}
+                fontSize="8.5"
+                fontWeight="black"
+              >
+                {activeApplianceIds.includes('otg_oven') ? "ON 1400W 🟡" : "OFF (TAP)"}
               </text>
             </g>
           </g>
@@ -1317,42 +1492,88 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
 
             {/* Water Geyser (2000W) */}
             <g
-              transform="translate(530, 95)"
+              transform="translate(525, 90)"
               onClick={() => onToggleAppliance('water_geyser')}
-              className="cursor-pointer group"
+              className="cursor-pointer group select-none"
             >
+              {/* Sensory Metaphor: Warm Water Tank Glow */}
+              {activeApplianceIds.includes('water_geyser') && isPowerFlowing && (
+                <ellipse cx="44" cy="52" rx="35" ry="6" fill="#38bdf8" opacity="0.3" className="animate-pulse" />
+              )}
               <rect
-                x="0" y="0" width="85" height="46" rx="8"
+                x="0" y="0" width="88" height="48" rx="8"
                 fill={activeApplianceIds.includes('water_geyser') ? "#0c4a6e" : "#1e293b"}
                 stroke={activeApplianceIds.includes('water_geyser') ? "#38bdf8" : "#475569"}
-                strokeWidth="2.5"
-                filter="drop-shadow(0 0 10px rgba(56,189,248,0.6))"
+                strokeWidth={activeApplianceIds.includes('water_geyser') ? "2.5" : "1.5"}
+                filter={activeApplianceIds.includes('water_geyser') ? "drop-shadow(0 0 12px rgba(56,189,248,0.7))" : undefined}
               />
-              <text x="42.5" y="22" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
+              <text x="44" y="18" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
                 🚿 GEYSER
               </text>
-              <text x="42.5" y="37" textAnchor="middle" fill="#38bdf8" fontSize="9.5" fontWeight="black">
-                2000W 🔴
+              {/* Rocker Switch Pill & LED */}
+              <rect
+                x="6" y="25" width="76" height="16" rx="8"
+                fill={activeApplianceIds.includes('water_geyser') ? "#082f49" : "#0f172a"}
+                stroke={activeApplianceIds.includes('water_geyser') ? "#38bdf8" : "#334155"}
+                strokeWidth="1"
+              />
+              <circle
+                cx={activeApplianceIds.includes('water_geyser') ? 16 : 72}
+                cy="33"
+                r="5"
+                fill={activeApplianceIds.includes('water_geyser') ? "#22c55e" : "#64748b"}
+                filter={activeApplianceIds.includes('water_geyser') ? "drop-shadow(0 0 5px #22c55e)" : undefined}
+              />
+              <text
+                x={activeApplianceIds.includes('water_geyser') ? 48 : 38}
+                y="36"
+                textAnchor="middle"
+                fill={activeApplianceIds.includes('water_geyser') ? "#38bdf8" : "#94a3b8"}
+                fontSize="8.5"
+                fontWeight="black"
+              >
+                {activeApplianceIds.includes('water_geyser') ? "ON 2000W 🔴" : "OFF (TAP)"}
               </text>
             </g>
 
             {/* Exhaust Fan (50W) */}
             <g
-              transform="translate(630, 95)"
+              transform="translate(625, 90)"
               onClick={() => onToggleAppliance('exhaust_fan')}
-              className="cursor-pointer group"
+              className="cursor-pointer group select-none"
             >
               <rect
-                x="0" y="0" width="60" height="46" rx="8"
+                x="0" y="0" width="66" height="48" rx="8"
                 fill={activeApplianceIds.includes('exhaust_fan') ? "#1e293b" : "#0f172a"}
                 stroke={activeApplianceIds.includes('exhaust_fan') ? "#94a3b8" : "#334155"}
-                strokeWidth="2"
+                strokeWidth={activeApplianceIds.includes('exhaust_fan') ? "2" : "1"}
               />
-              <text x="30" y="22" textAnchor="middle" fill="#ffffff" fontSize="10.5" fontWeight="black">
-                🌀 FAN
+              <text x="33" y="18" textAnchor="middle" fill="#ffffff" fontSize="10" fontWeight="black">
+                🌀 FAN 50W
               </text>
-              <text x="30" y="37" textAnchor="middle" fill="#cbd5e1" fontSize="8.5" fontWeight="bold">
-                50W 🟢
+              {/* Rocker Switch Pill & LED */}
+              <rect
+                x="5" y="25" width="56" height="16" rx="8"
+                fill={activeApplianceIds.includes('exhaust_fan') ? "#334155" : "#0f172a"}
+                stroke={activeApplianceIds.includes('exhaust_fan') ? "#94a3b8" : "#334155"}
+                strokeWidth="1"
+              />
+              <circle
+                cx={activeApplianceIds.includes('exhaust_fan') ? 14 : 52}
+                cy="33"
+                r="4.5"
+                fill={activeApplianceIds.includes('exhaust_fan') ? "#22c55e" : "#64748b"}
+                filter={activeApplianceIds.includes('exhaust_fan') ? "drop-shadow(0 0 4px #22c55e)" : undefined}
+              />
+              <text
+                x={activeApplianceIds.includes('exhaust_fan') ? 37 : 28}
+                y="36"
+                textAnchor="middle"
+                fill={activeApplianceIds.includes('exhaust_fan') ? "#e2e8f0" : "#94a3b8"}
+                fontSize="8"
+                fontWeight="black"
+              >
+                {activeApplianceIds.includes('exhaust_fan') ? "ON" : "OFF"}
               </text>
             </g>
           </g>
@@ -1369,41 +1590,97 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
 
             {/* Bedroom AC (1500W) */}
             <g
-              transform="translate(170, 95)"
+              transform="translate(165, 90)"
               onClick={() => onToggleAppliance('bedroom_ac')}
-              className="cursor-pointer group"
+              className="cursor-pointer group select-none"
             >
+              {/* Sensory Metaphor: Cool Blue Breeze Lines drifting out */}
+              {activeApplianceIds.includes('bedroom_ac') && isPowerFlowing && (
+                <g opacity="0.85" className="animate-pulse">
+                  <path d="M 88 18 Q 100 16 112 20" fill="none" stroke="#38bdf8" strokeWidth="2" strokeDasharray="4 3" />
+                  <path d="M 88 26 Q 105 26 120 30" fill="none" stroke="#7dd3fc" strokeWidth="2.5" strokeDasharray="4 3" />
+                  <path d="M 88 34 Q 100 36 112 32" fill="none" stroke="#38bdf8" strokeWidth="2" strokeDasharray="4 3" />
+                </g>
+              )}
               <rect
-                x="0" y="0" width="85" height="44" rx="8"
+                x="0" y="0" width="88" height="48" rx="8"
                 fill={activeApplianceIds.includes('bedroom_ac') ? "#075985" : "#1e293b"}
                 stroke={activeApplianceIds.includes('bedroom_ac') ? "#38bdf8" : "#475569"}
-                strokeWidth="2"
+                strokeWidth={activeApplianceIds.includes('bedroom_ac') ? "2.5" : "1.5"}
+                filter={activeApplianceIds.includes('bedroom_ac') ? "drop-shadow(0 0 12px rgba(56,189,248,0.7))" : undefined}
               />
-              <text x="42.5" y="21" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
+              <text x="44" y="18" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
                 ❄️ BEDROOM AC
               </text>
-              <text x="42.5" y="35" textAnchor="middle" fill="#7dd3fc" fontSize="9.5" fontWeight="bold">
-                1500W 🟡
+              {/* Rocker Switch Pill & LED */}
+              <rect
+                x="6" y="25" width="76" height="16" rx="8"
+                fill={activeApplianceIds.includes('bedroom_ac') ? "#0c4a6e" : "#0f172a"}
+                stroke={activeApplianceIds.includes('bedroom_ac') ? "#38bdf8" : "#334155"}
+                strokeWidth="1"
+              />
+              <circle
+                cx={activeApplianceIds.includes('bedroom_ac') ? 16 : 72}
+                cy="33"
+                r="5"
+                fill={activeApplianceIds.includes('bedroom_ac') ? "#22c55e" : "#64748b"}
+                filter={activeApplianceIds.includes('bedroom_ac') ? "drop-shadow(0 0 5px #22c55e)" : undefined}
+              />
+              <text
+                x={activeApplianceIds.includes('bedroom_ac') ? 48 : 38}
+                y="36"
+                textAnchor="middle"
+                fill={activeApplianceIds.includes('bedroom_ac') ? "#7dd3fc" : "#94a3b8"}
+                fontSize="8.5"
+                fontWeight="black"
+              >
+                {activeApplianceIds.includes('bedroom_ac') ? "ON 1500W 🟡" : "OFF (TAP)"}
               </text>
             </g>
 
             {/* Bed / Ceiling Lamp (100W) */}
             <g
-              transform="translate(265, 95)"
+              transform="translate(265, 90)"
               onClick={() => onToggleAppliance('bed_lamp')}
-              className="cursor-pointer group"
+              className="cursor-pointer group select-none"
             >
+              {/* Sensory Metaphor: Radiant Warm Lamp Beam */}
+              {activeApplianceIds.includes('bed_lamp') && isPowerFlowing && (
+                <polygon points="33,0 10,48 56,48" fill="#fef08a" opacity="0.15" className="animate-pulse" />
+              )}
               <rect
-                x="0" y="0" width="60" height="44" rx="8"
+                x="0" y="0" width="66" height="48" rx="8"
                 fill={activeApplianceIds.includes('bed_lamp') ? "#713f12" : "#1e293b"}
                 stroke={activeApplianceIds.includes('bed_lamp') ? "#facc15" : "#475569"}
-                strokeWidth="2"
+                strokeWidth={activeApplianceIds.includes('bed_lamp') ? "2" : "1"}
+                filter={activeApplianceIds.includes('bed_lamp') ? "drop-shadow(0 0 10px rgba(250,204,21,0.6))" : undefined}
               />
-              <text x="30" y="21" textAnchor="middle" fill="#ffffff" fontSize="10.5" fontWeight="black">
+              <text x="33" y="18" textAnchor="middle" fill="#ffffff" fontSize="10.5" fontWeight="black">
                 💡 LAMP
               </text>
-              <text x="30" y="35" textAnchor="middle" fill="#fef08a" fontSize="8.5" fontWeight="bold">
-                100W 🟢
+              {/* Rocker Switch Pill & LED */}
+              <rect
+                x="5" y="25" width="56" height="16" rx="8"
+                fill={activeApplianceIds.includes('bed_lamp') ? "#422006" : "#0f172a"}
+                stroke={activeApplianceIds.includes('bed_lamp') ? "#facc15" : "#334155"}
+                strokeWidth="1"
+              />
+              <circle
+                cx={activeApplianceIds.includes('bed_lamp') ? 14 : 52}
+                cy="33"
+                r="4.5"
+                fill={activeApplianceIds.includes('bed_lamp') ? "#22c55e" : "#64748b"}
+                filter={activeApplianceIds.includes('bed_lamp') ? "drop-shadow(0 0 4px #22c55e)" : undefined}
+              />
+              <text
+                x={activeApplianceIds.includes('bed_lamp') ? 37 : 28}
+                y="36"
+                textAnchor="middle"
+                fill={activeApplianceIds.includes('bed_lamp') ? "#fef08a" : "#94a3b8"}
+                fontSize="8"
+                fontWeight="black"
+              >
+                {activeApplianceIds.includes('bed_lamp') ? "ON 100W" : "OFF"}
               </text>
             </g>
           </g>
@@ -1432,8 +1709,8 @@ export const IsometricHouseView: React.FC<IsometricHouseViewProps> = ({
         />
       </div>
 
-      {/* FLOATING BOTTOM CENTER HUD PILL (Zero vertical layout space wasted) */}
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 max-w-[96%] px-3 sm:px-4 py-1.5 bg-slate-950/90 backdrop-blur-md border border-slate-700/70 rounded-full shadow-2xl flex flex-wrap items-center justify-center gap-2.5 text-[11px] z-30 pointer-events-auto">
+      {/* FLOATING TOP-RIGHT HUD PILL (Leaves bottom terrain & Earth pit 100% visible) */}
+      <div className="absolute top-2 right-3 max-w-[96%] px-3 sm:px-4 py-1.5 bg-slate-950/90 backdrop-blur-md border border-slate-700/70 rounded-full shadow-2xl flex flex-wrap items-center justify-center gap-2.5 text-[11px] z-30 pointer-events-auto">
         <div className="flex items-center gap-1.5 font-mono font-bold">
           <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse shadow-sm shadow-orange-500/50" />
           <span className="text-orange-400">Live:</span>

@@ -260,11 +260,11 @@ function InteractiveEscapeVisualizer() {
               animate={{ opacity: 0.85 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.1 }}
-              className="absolute inset-0 bg-red-600/50 z-30 pointer-events-none flex items-center justify-center"
+              className="absolute inset-0 bg-red-600/15 z-30 pointer-events-none flex items-start justify-end p-2.5 sm:p-3"
             >
-              <div className="bg-slate-950 border-2 border-red-500 text-yellow-300 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider shadow-2xl flex items-center gap-2 animate-bounce">
-                <Zap className="w-5 h-5 text-yellow-300 animate-ping" />
-                FATAL STEP SHOCK! ΔV = {Math.round(deltaV)} V ({bodyCurrentMA.toFixed(1)} mA)
+              <div className="bg-slate-950/95 border-2 border-red-500 text-yellow-300 px-3.5 py-1.5 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider shadow-2xl flex items-center gap-2 backdrop-blur-md animate-bounce">
+                <Zap className="w-4 h-4 text-yellow-300 animate-ping" />
+                <span>FATAL STEP SHOCK! ΔV = {Math.round(deltaV)} V ({bodyCurrentMA.toFixed(1)} mA)</span>
               </div>
             </motion.div>
           )}

@@ -68,7 +68,7 @@ export const HOMEGUARD_PRESETS: HomeGuardPreset[] = [
   {
     id: 'preset_short',
     chipLabel: 'SHORT',
-    title: '2. Damaged Appliance Cord Bolted Short Circuit',
+    title: '3. Damaged Appliance Cord Bolted Short Circuit',
     oneLiner: 'Crushed wire causes Line and Neutral to touch, producing a 250A surge (>10× In).',
     description: 'Phase-to-Neutral short circuit causes instantaneous magnetic solenoid tripping in less than 10 milliseconds without heating delay, quenching the arc safely.',
     targetCircuitId: 'c2_living_sockets',
@@ -86,7 +86,7 @@ export const HOMEGUARD_PRESETS: HomeGuardPreset[] = [
   {
     id: 'preset_child_shock',
     chipLabel: 'CHILD SHOCK',
-    title: '3. Child Wet-Skin Contact Shock (Why Regular Switches Won\'t Save You)',
+    title: '4. Child Wet-Skin Contact Shock (Why Regular Switches Won\'t Save You)',
     oneLiner: 'Child touches live socket with wet skin. Regular 16A switch ignores it, but 30mA RCCB cuts power in 0.03s!',
     description: 'A standard 16A breaker ignores a 0.23A (230mA) shock because it only cares about heavy appliance loads (16A+). But 0.23A is enough to stop a human heart! Only the 30mA Life-Saver Switch (RCCB) senses the missing current and snaps power OFF in 0.03 seconds.',
     targetCircuitId: 'main_rccb',
@@ -104,7 +104,7 @@ export const HOMEGUARD_PRESETS: HomeGuardPreset[] = [
   {
     id: 'preset_wet_bath',
     chipLabel: 'WET BATH',
-    title: '4. Wet Appliance Water Leakage (The Missing Skin Armor)',
+    title: '5. Wet Appliance Water Leakage (The Missing Skin Armor)',
     oneLiner: 'Water dissolves skin resistance armor (from 2,000Ω down to 500Ω), leaking 45mA to ground.',
     description: 'Water turns your skin into an open highway for electricity. The safety donut senses 45mA leaking through the water puddle into the copper pipe and snaps power OFF before a fatal shock occurs.',
     targetCircuitId: 'main_rccb',
@@ -122,7 +122,7 @@ export const HOMEGUARD_PRESETS: HomeGuardPreset[] = [
   {
     id: 'preset_broken_earth',
     chipLabel: 'BROKEN EARTH',
-    title: '5. The Broken Green Ground Wire: Old 1980s Switch Trap',
+    title: '6. The Broken Green Ground Wire: Old 1980s Switch Trap',
     oneLiner: 'Rat chews green ground wire. Old 1980s ELCB fails completely, but modern RCCB saves the family!',
     description: 'If a rodent chews or a nail cuts your green ground wire, the obsolete 1980s voltage switch goes completely blind, leaving the metal appliance chassis electrified to 230V! Modern safety switches detect the current leak and cut power anyway.',
     targetCircuitId: 'main_rccb',

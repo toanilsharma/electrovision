@@ -1152,14 +1152,14 @@ export function LOTOSimulator({ config }: { config?: UserConfig }) {
                   <AnimatePresence>
                     {stepAnimTrigger !== null && (
                       <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center bg-emerald-950/20 backdrop-blur-[2px]"
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        className="absolute top-3 right-3 z-40 pointer-events-none flex items-start justify-end"
                       >
-                        <div className="flex flex-col items-center gap-1.5 p-4 rounded-2xl bg-slate-900/90 border-2 border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-                          <CheckCircle className="w-10 h-10 text-emerald-400" />
-                          <span className="text-sm font-black text-emerald-300 uppercase tracking-wider">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/95 border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.5)] backdrop-blur-md">
+                          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+                          <span className="text-xs font-black text-emerald-300 uppercase tracking-wider">
                             Step {stepAnimTrigger + 1} Verified!
                           </span>
                         </div>

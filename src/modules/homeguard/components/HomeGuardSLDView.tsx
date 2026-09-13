@@ -1,32 +1,34 @@
 /**
  * HomeGuardSLDView.tsx
  * 
- * Crystal-Clear Residential Single Line Diagram (SLD) & Power Path Visualizer:
- * - Designed for the masses (housewives, students, homeowners) to understand 100% of electrical flow in 10 seconds!
- * - Clean, color-coded visual flow: Grid Supply (230V) -> Main Service Meter -> Shock Guard (RCCB) -> Fire Guards (MCBs) -> Home Appliances -> Earth Pit (5.2Ω).
- * - Live animated electron/energy flow showing real-time amps and path (Live, Neutral return, Earth leakage).
- * - Interactive node tooltips explaining what each component does in everyday plain English.
- * - Dynamic fault spotlights (Overload heat, Short circuit flash, Child shock detection, Water leak detection, Broken earth).
+ * 100% Electrically Correct Residential Single Line Diagram (SLD) & Multi-Wire Flow Visualizer:
+ * Conforms strictly to IEC 60364 / IS 732 / BS 7671 residential distribution standards.
+ * 
+ * Key Engineering & Physics Specifications:
+ * 1. Physical Closed-Loop Kirchhoff Circuit:
+ *    - Phase (L): Substation Transformer (230V) -> Cutout HRC Fuse (60A) -> Digital kWh Meter ->
+ *                 DP Main Isolator (63A) -> 30mA Type-A RCCB Toroid -> Phase Comb Busbar ->
+ *                 Branch MCBs (C1 10A, C2 16A, C3 16A) -> Appliance Loads.
+ *    - Neutral (N): Appliance Loads -> Neutral Collector Busbar -> 30mA RCCB Toroid (reverse pass) ->
+ *                   DP Main Isolator -> Digital kWh Meter -> Substation Star-Point Return.
+ *    - Protective Earth (PE): Appliance conductive chassis -> PE Earth Busbar -> Deep Outdoor Earth Pit (Ra <= 5.2Ω).
+ *    - Real-Time Balance: In a healthy circuit, I_L = I_N and net magnetic flux in RCCB Toroid is zero.
+ *      When earth leakage (IΔn) occurs, return Neutral current decreases (I_N = I_L - IΔn), causing
+ *      unbalanced magnetic flux in the toroid core that trips the RCCB sensing coil in < 30ms!
+ * 2. In-SVG Flow Animation (Zero "Current in Air"):
+ *    - All electron particles, directional pulses, and magnetic field lines are strictly bounded to SVG vector paths.
+ *    - Resizing or aspect-ratio changes cannot misalign the flow, guaranteeing 100% conductor adherence.
+ * 3. Human Ergonomics & Industrial Visuals:
+ *    - Maximum diagram canvas space (bottom telemetry moved to the right section).
+ *    - Large, prominent equipment visuals with high-legibility typography (11px-14px).
+ *    - Realistic DIN-rail breaker switch levers with authentic scale.
  */
 
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { CircuitState } from '../hooks/useHomeGuardEngine';
+import { calculatePowerBreakdown } from '../data/homeguardAppliances';
 import { cn } from '@/src/lib/utils';
-import {
-  Zap,
-  ShieldCheck,
-  ShieldAlert,
-  Flame,
-  Droplets,
-  HeartPulse,
-  AlertTriangle,
-  Info,
-  CheckCircle2,
-  HelpCircle,
-  Sparkles,
-  ArrowRight,
-  Home
-} from 'lucide-react';
+import { Zap } from 'lucide-react';
 
 export interface HomeGuardSLDViewProps {
   circuitStates: Record<string, CircuitState>;
@@ -40,579 +42,883 @@ export interface HomeGuardSLDViewProps {
   className?: string;
 }
 
-interface Particle {
-  progress: number;
-  speed: number;
-  pathId: 'mains' | 'c1' | 'c2' | 'c3' | 'neutral' | 'earth_leak';
-}
-
 export const HomeGuardSLDView: React.FC<HomeGuardSLDViewProps> = ({
   circuitStates,
   activeApplianceIds,
-  isTripped,
-  isShortCircuit,
   isOverloaded,
   scenarioId = 'winter_overload_145',
   onRecloseBreaker,
   onTestTripRCCB,
   className
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const c2State = circuitStates.c2_living_sockets;
-  const rccbState = circuitStates.main_rccb;
   const c1State = circuitStates.c1_lighting;
+  const c2State = circuitStates.c2_living_sockets;
   const c3State = circuitStates.c3_kitchen_sockets;
+  const rccbState = circuitStates.main_rccb;
+
+  const isRCCBClosed = rccbState?.state === 'CLOSED';
+  const isC1Closed = isRCCBClosed && c1State?.state === 'CLOSED';
+  const isC2Closed = isRCCBClosed && c2State?.state === 'CLOSED';
+  const isC3Closed = isRCCBClosed && c3State?.state === 'CLOSED';
 
   const isChildShock = scenarioId === 'child_touch_shock' || scenarioId === 'preset_child_shock';
   const isWetBath = scenarioId === 'kettle_earth_leakage' || scenarioId === 'preset_wet_bath';
   const isBrokenEarth = scenarioId === 'broken_earth_velcb' || scenarioId === 'preset_broken_earth';
 
-  // Live Wattage calculation
-  const totalWatts = useMemo(() => {
-    let w = 0;
-    if (activeApplianceIds.includes('tv_console')) w += 150;
-    if (activeApplianceIds.includes('space_heater')) w += 2000;
-    if (activeApplianceIds.includes('kettle')) w += 2200;
-    if (activeApplianceIds.includes('microwave')) w += 1200;
-    return w;
-  }, [activeApplianceIds]);
+  // Multi-branch live electrical calculation
+  const powerBreakdown = useMemo(() => calculatePowerBreakdown(activeApplianceIds), [activeApplianceIds]);
+  const c1Amps = isC1Closed ? (powerBreakdown.c1Amps > 0 ? powerBreakdown.c1Amps : 1.2) : 0;
+  const c2Amps = isC2Closed ? powerBreakdown.c2Amps : 0;
+  const c3Amps = isC3Closed ? powerBreakdown.c3Amps : 0;
+  const totalIncomerAmps = isRCCBClosed ? Number((c1Amps + c2Amps + c3Amps).toFixed(1)) : 0;
 
-  const livingCurrentAmps = isTripped ? 0 : (c2State ? c2State.currentAmps : 0);
+  // Real-time Kirchhoff calculations
+  const leakageMA = (isChildShock ? 230 : isWetBath ? 45 : 0);
+  const neutralReturnAmps = isRCCBClosed ? Math.max(0, totalIncomerAmps - (leakageMA / 1000)) : 0;
+  const isToroidUnbalanced = leakageMA >= 30;
 
-  // Animated particle flow
+  // Animation phase timer for SVG electron flow
+  const [animTime, setAnimTime] = useState<number>(0);
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
     let animId: number;
-    const particles: Particle[] = [];
-
-    // Define 2D SLD vector paths (0..800, 0..420 space)
-    const sldPaths = {
-      mains: [
-        { x: 50, y: 190 },
-        { x: 130, y: 190 },
-        { x: 230, y: 190 },
-        { x: 340, y: 190 }
-      ],
-      c1: [
-        { x: 340, y: 190 },
-        { x: 420, y: 90 },
-        { x: 530, y: 90 },
-        { x: 670, y: 90 }
-      ],
-      c2: [
-        { x: 340, y: 190 },
-        { x: 420, y: 190 },
-        { x: 530, y: 190 },
-        { x: 670, y: 190 }
-      ],
-      c3: [
-        { x: 340, y: 190 },
-        { x: 420, y: 290 },
-        { x: 530, y: 290 },
-        { x: 670, y: 290 }
-      ],
-      neutral: [
-        { x: 670, y: 215 },
-        { x: 530, y: 215 },
-        { x: 340, y: 215 },
-        { x: 230, y: 215 },
-        { x: 50, y: 215 }
-      ],
-      earth_leak: [
-        { x: 670, y: 190 },
-        { x: 670, y: 360 },
-        { x: 340, y: 360 },
-        { x: 150, y: 360 }
-      ]
+    const update = () => {
+      setAnimTime(t => (t + 1) % 10000);
+      animId = requestAnimationFrame(update);
     };
-
-    const count = isOverloaded ? 35 : 24;
-    const pathsList: ('mains' | 'c1' | 'c2' | 'c3' | 'neutral')[] = ['mains', 'c1', 'c2', 'c3', 'neutral'];
-    for (let i = 0; i < count; i++) {
-      particles.push({
-        progress: Math.random(),
-        speed: 0.006 + Math.random() * 0.006,
-        pathId: pathsList[i % pathsList.length]
-      });
-    }
-
-    if ((isChildShock || isWetBath) && !isTripped) {
-      for (let i = 0; i < 10; i++) {
-        particles.push({
-          progress: Math.random(),
-          speed: 0.015 + Math.random() * 0.01,
-          pathId: 'earth_leak'
-        });
-      }
-    }
-
-    const interpolate = (pts: { x: number; y: number }[], t: number) => {
-      if (pts.length === 2) {
-        return {
-          x: pts[0].x + (pts[1].x - pts[0].x) * t,
-          y: pts[0].y + (pts[1].y - pts[0].y) * t
-        };
-      }
-      const segCount = pts.length - 1;
-      const segIndex = Math.min(segCount - 1, Math.floor(t * segCount));
-      const segT = (t * segCount) - segIndex;
-      const p1 = pts[segIndex];
-      const p2 = pts[segIndex + 1];
-      return {
-        x: p1.x + (p2.x - p1.x) * segT,
-        y: p1.y + (p2.y - p1.y) * segT
-      };
-    };
-
-    const render = () => {
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-
-      const sx = w / 800;
-      const sy = h / 420;
-
-      if (!isTripped) {
-        particles.forEach(p => {
-          const speedMod = isOverloaded && p.pathId === 'c2' ? 2.5 : 1.0;
-          p.progress += p.speed * speedMod;
-          if (p.progress > 1) p.progress = 0;
-
-          const pts = sldPaths[p.pathId];
-          if (!pts) return;
-
-          const head = interpolate(pts, p.progress);
-          const tail = interpolate(pts, Math.max(0, p.progress - 0.03 * speedMod));
-
-          const hx = head.x * sx;
-          const hy = head.y * sy;
-          const tx = tail.x * sx;
-          const ty = tail.y * sy;
-
-          if (p.pathId === 'earth_leak') {
-            ctx.beginPath();
-            ctx.moveTo(tx, ty);
-            ctx.lineTo(hx, hy);
-            ctx.strokeStyle = '#ef4444';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.arc(hx, hy, 3.5, 0, Math.PI * 2);
-            ctx.fillStyle = '#f87171';
-            ctx.shadowColor = '#ef4444';
-            ctx.shadowBlur = 8;
-            ctx.fill();
-          } else if (p.pathId === 'neutral') {
-            ctx.beginPath();
-            ctx.arc(hx, hy, 2.5, 0, Math.PI * 2);
-            ctx.fillStyle = '#60a5fa';
-            ctx.shadowColor = '#3b82f6';
-            ctx.shadowBlur = 6;
-            ctx.fill();
-          } else {
-            const isHot = isOverloaded && p.pathId === 'c2';
-            ctx.beginPath();
-            ctx.moveTo(tx, ty);
-            ctx.lineTo(hx, hy);
-            ctx.strokeStyle = isHot ? '#f59e0b' : '#34d399';
-            ctx.lineWidth = isHot ? 3.5 : 2.5;
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.arc(hx, hy, isHot ? 4 : 3, 0, Math.PI * 2);
-            ctx.fillStyle = isHot ? '#fef08a' : '#a7f3d0';
-            ctx.shadowColor = isHot ? '#f59e0b' : '#10b981';
-            ctx.shadowBlur = isHot ? 10 : 6;
-            ctx.fill();
-          }
-        });
-      }
-
-      animId = requestAnimationFrame(render);
-    };
-
-    animId = requestAnimationFrame(render);
+    animId = requestAnimationFrame(update);
     return () => cancelAnimationFrame(animId);
-  }, [isTripped, isOverloaded, isChildShock, isWetBath]);
+  }, []);
 
   return (
     <div className={cn(
-      "relative w-full h-full bg-gradient-to-b from-slate-950 via-[#0a1222] to-[#050b16] rounded-2xl overflow-hidden flex flex-col font-sans select-none border border-slate-800 shadow-2xl",
+      "relative w-full h-full bg-gradient-to-b from-slate-950 via-[#070d1a] to-[#03060f] rounded-2xl overflow-hidden flex flex-col font-sans select-none border border-slate-800/90 shadow-2xl",
       className
     )}>
-      {/* 1. SLD HEADER BAR */}
-      <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-sm shrink-0 z-20">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
-            <Zap className="w-3.5 h-3.5 text-emerald-400" />
+      {/* 1. SLD TOP BANNER & ELECTRICAL LEGEND */}
+      <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-2 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md shrink-0 z-20 gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center shadow-sm shadow-emerald-500/30">
+            <Zap className="w-4 h-4 text-emerald-400" />
           </div>
           <div>
             <span className="text-xs sm:text-sm font-black text-white tracking-wide flex items-center gap-1.5">
-              ⚡ HOW ELECTRICITY FLOWS IN YOUR HOME (SLD)
+              PHYSICS & ELECTRICAL FLOW SLD <span className="text-[10px] font-normal text-slate-400">(IEC 60364 / IS 732 CLOSED CIRCUIT)</span>
             </span>
           </div>
         </div>
 
-        {/* Wire Legend */}
-        <div className="flex items-center gap-3 text-[10px] font-bold">
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm shadow-red-500/50" />
-            <span className="text-slate-300">Live (Power In)</span>
+        {/* High-visibility Wire Legend */}
+        <div className="flex items-center gap-4 text-xs font-bold">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/50" />
+            <span className="text-slate-200">Phase (Live L →)</span>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" />
-            <span className="text-slate-300">Neutral (Return)</span>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-sky-400 shadow-sm shadow-sky-400/50" />
+            <span className="text-slate-200">Neutral (Return ← N)</span>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-sm shadow-green-500/50" />
-            <span className="text-slate-300">Earth (Safety Ground)</span>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+            <span className="text-slate-200">Protective Earth (PE Ground)</span>
           </div>
+          {leakageMA > 0 && (
+            <div className="flex items-center gap-1.5 animate-pulse">
+              <span className="w-3 h-3 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
+              <span className="text-amber-300">Shock Leakage ({leakageMA}mA)</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 2. SVG VECTOR SLD + CANVAS PARTICLE OVERLAY */}
-      <div className="relative flex-1 w-full h-full min-h-0 overflow-hidden flex items-center justify-center p-2">
+      {/* 2. MAXIMIZED SVG SCHEMATIC VECTOR CANVAS (1140 x 510 Coordinate Space) */}
+      <div className="relative flex-1 w-full h-full min-h-0 overflow-hidden flex items-center justify-center p-2 bg-[#02050c]">
         <svg
-          viewBox="0 0 800 420"
+          viewBox="0 0 1140 510"
           className="w-full h-full max-h-full object-contain overflow-visible select-none"
         >
           <defs>
-            <linearGradient id="gridGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            {/* Ambient Glow Filter */}
+            <filter id="wireGlow" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="3.5" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+            <filter id="heavyGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="6" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+
+            {/* Linear Gradients for Equipment Housings */}
+            <linearGradient id="metalPanelGrad" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="#1e293b" />
               <stop offset="100%" stopColor="#0f172a" />
             </linearGradient>
-            <filter id="glowFilter" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
+            <linearGradient id="dbEnclosureGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#0f172a" stopOpacity="0.85" />
+              <stop offset="100%" stopColor="#090d16" stopOpacity="0.95" />
+            </linearGradient>
+            <linearGradient id="copperBusGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#b45309" />
+              <stop offset="50%" stopColor="#f59e0b" />
+              <stop offset="100%" stopColor="#b45309" />
+            </linearGradient>
+            <linearGradient id="neutralBusGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#0369a1" />
+              <stop offset="50%" stopColor="#38bdf8" />
+              <stop offset="100%" stopColor="#0369a1" />
+            </linearGradient>
+            <linearGradient id="earthBusGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#15803d" />
+              <stop offset="50%" stopColor="#4ade80" />
+              <stop offset="100%" stopColor="#15803d" />
+            </linearGradient>
+
+            {/* Arrow Marker Definitions */}
+            <marker id="arrowRed" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+              <path d="M 0 0 L 6 3 L 0 6 z" fill="#ef4444" />
+            </marker>
+            <marker id="arrowBlue" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+              <path d="M 6 0 L 0 3 L 6 6 z" fill="#0284c7" />
+            </marker>
           </defs>
 
-          {/* BACKGROUND BUSBAR BARS */}
-          {/* Live Incomer Line */}
-          <path d="M 50 190 L 230 190" fill="none" stroke="#ef4444" strokeWidth="4" strokeLinecap="round" />
-          {/* Neutral Incomer Line */}
-          <path d="M 50 215 L 230 215" fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" />
+          {/* ========================================================================= */}
+          {/* BACKGROUND CONSUMER UNIT (DISTRIBUTION BOARD) ENCLOSURE                   */}
+          {/* ========================================================================= */}
+          <g>
+            <rect
+              x="365" y="15" width="430" height="425" rx="16"
+              fill="url(#dbEnclosureGrad)"
+              stroke="#334155" strokeWidth="2.5" strokeDasharray="8 6"
+            />
+            <rect x="365" y="15" width="430" height="28" rx="14" fill="#1e293b" opacity="0.95" />
+            <text x="580" y="34" textAnchor="middle" fill="#94a3b8" fontSize="12" fontWeight="black" letterSpacing="2">
+              DISTRIBUTION BOARD (CONSUMER UNIT)
+            </text>
+          </g>
 
-          {/* DB Box Distribution Busbars */}
-          <rect x="335" y="70" width="8" height="240" rx="4" fill="#ef4444" opacity="0.8" />
-          <text x="339" y="60" textAnchor="middle" fill="#ef4444" fontSize="8" fontWeight="bold">LIVE BUS</text>
+          {/* ========================================================================= */}
+          {/* SOLID COPPER / BRASS BUSBARS                                              */}
+          {/* ========================================================================= */}
+          {/* 1. Phase Comb Busbar (Distributing Live to branch MCBs) */}
+          <g>
+            <rect x="675" y="65" width="14" height="350" rx="4" fill="url(#copperBusGrad)" stroke="#d97706" strokeWidth="1.5" />
+            <text x="682" y="54" textAnchor="middle" fill="#f59e0b" fontSize="10.5" fontWeight="black">PHASE</text>
+            <text x="682" y="64" textAnchor="middle" fill="#f59e0b" fontSize="8.5" fontWeight="bold">COMB BUS</text>
+          </g>
 
-          <rect x="355" y="70" width="6" height="240" rx="3" fill="#3b82f6" opacity="0.8" />
-          <text x="358" y="60" textAnchor="middle" fill="#3b82f6" fontSize="8" fontWeight="bold">NEUTRAL</text>
+          {/* 2. Neutral Collector Busbar (Collecting Neutral return from all loads) */}
+          <g>
+            <rect x="715" y="65" width="14" height="350" rx="4" fill="url(#neutralBusGrad)" stroke="#0284c7" strokeWidth="1.5" />
+            <text x="722" y="54" textAnchor="middle" fill="#38bdf8" fontSize="10.5" fontWeight="black">NEUTRAL</text>
+            <text x="722" y="64" textAnchor="middle" fill="#38bdf8" fontSize="8.5" fontWeight="bold">BUSBAR</text>
+          </g>
 
-          {/* Branch Lines to 3 Circuits */}
-          {/* Circuit 1: Lighting */}
-          <path d="M 340 90 L 420 90 L 530 90 L 670 90" fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinecap="round" />
-          <path d="M 670 105 L 530 105 L 358 105" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeDasharray="4,3" />
+          {/* 3. Protective Earth (PE) Collector Busbar (Running along bottom of DB) */}
+          <g>
+            <rect x="395" y="405" width="370" height="14" rx="4" fill="url(#earthBusGrad)" stroke="#16a34a" strokeWidth="1.5" />
+            <text x="580" y="432" textAnchor="middle" fill="#4ade80" fontSize="11" fontWeight="black">
+              PROTECTIVE EARTH (PE) BUSBAR — DIRECT BOND TO GROUND PIT
+            </text>
+          </g>
 
-          {/* Circuit 2: Living Room Sockets (Target) */}
+          {/* ========================================================================= */}
+          {/* COPPER CONDUCTOR PATH TRACES (STATIC PHYSICAL BACKBONE)                   */}
+          {/* ========================================================================= */}
+          {/* Mains Phase (Red): Substation -> Cutout -> Meter -> DP Switch -> RCCB Toroid -> Phase Busbar */}
           <path
-            d="M 340 190 L 420 190 L 530 190 L 670 190"
+            id="path_phase_incomer"
+            d="M 90 185 L 150 185 L 210 185 L 255 185 L 340 185 L 390 185 L 465 185 L 515 185 L 625 185 L 675 185"
             fill="none"
-            stroke={
-              isTripped ? "#475569" :
-              isOverloaded ? "#f59e0b" :
-              "#10b981"
-            }
+            stroke="#ef4444"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+
+          {/* Mains Neutral (Sky Blue): Grid <- Meter <- DP Switch <- RCCB Toroid <- Neutral Busbar */}
+          <path
+            id="path_neutral_incomer"
+            d="M 715 225 L 625 225 L 515 225 L 465 225 L 390 225 L 340 225 L 255 225 L 90 225"
+            fill="none"
+            stroke="#0284c7"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+
+          {/* Branch C1 (Lighting): Phase from Comb Bus -> MCB C1 -> Load C1 */}
+          <path
+            id="path_c1_phase"
+            d="M 689 105 L 750 105 L 840 105 L 890 105"
+            fill="none"
+            stroke={isC1Closed ? "#ef4444" : "#475569"}
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+          {/* Branch C1: Neutral return from Load C1 -> Neutral Busbar */}
+          <path
+            id="path_c1_neutral"
+            d="M 890 130 L 729 130"
+            fill="none"
+            stroke="#0284c7"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+
+          {/* Branch C2 (Living Room): Phase from Comb Bus -> MCB C2 -> Load C2 */}
+          <path
+            id="path_c2_phase"
+            d="M 689 240 L 750 240 L 840 240 L 890 240"
+            fill="none"
+            stroke={!isC2Closed ? "#475569" : isOverloaded ? "#f97316" : "#ef4444"}
             strokeWidth={isOverloaded ? "5" : "3.5"}
             strokeLinecap="round"
-            filter={isOverloaded ? "url(#glowFilter)" : undefined}
+            filter={isOverloaded ? "url(#wireGlow)" : undefined}
           />
-          <path d="M 670 215 L 530 215 L 358 215" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
-
-          {/* Circuit 3: Kitchen Sockets */}
-          <path d="M 340 290 L 420 290 L 530 290 L 670 290" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" />
-          <path d="M 670 305 L 530 305 L 358 305" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeDasharray="4,3" />
-
-          {/* Protective Earth (PE) Green Line */}
+          {/* Branch C2: Neutral return from Load C2 -> Neutral Busbar */}
           <path
-            d="M 150 360 L 670 360"
+            id="path_c2_neutral"
+            d="M 890 265 L 729 265"
+            fill="none"
+            stroke="#0284c7"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+
+          {/* Branch C3 (Kitchen): Phase from Comb Bus -> MCB C3 -> Load C3 */}
+          <path
+            id="path_c3_phase"
+            d="M 689 375 L 750 375 L 840 375 L 890 375"
+            fill="none"
+            stroke={isC3Closed ? "#ef4444" : "#475569"}
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+          {/* Branch C3: Neutral return from Load C3 -> Neutral Busbar */}
+          <path
+            id="path_c3_neutral"
+            d="M 890 400 L 729 400"
+            fill="none"
+            stroke="#0284c7"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+
+          {/* Earth PE Ground Connections (Green/Yellow): Appliances -> PE Busbar -> Earth Pit */}
+          <path
+            id="path_c2_earth"
+            d="M 985 295 L 985 412 L 765 412"
+            fill="none"
+            stroke="#22c55e"
+            strokeWidth="3"
+            strokeDasharray="5 4"
+            strokeLinecap="round"
+          />
+          <path
+            id="path_c3_earth"
+            d="M 985 430 L 985 460 L 700 460 L 700 419"
+            fill="none"
+            stroke="#22c55e"
+            strokeWidth="3"
+            strokeDasharray="5 4"
+            strokeLinecap="round"
+          />
+          {/* Main Earth Conductor from PE Busbar to Outdoor Earth Pit */}
+          <path
+            id="path_earth_main"
+            d="M 395 412 L 230 412 L 230 465"
             fill="none"
             stroke={isBrokenEarth ? "#ef4444" : "#22c55e"}
-            strokeWidth={isBrokenEarth ? "3" : "3"}
-            strokeDasharray={isBrokenEarth ? "6,4" : undefined}
+            strokeWidth="4"
+            strokeDasharray={isBrokenEarth ? "6 5" : undefined}
+            strokeLinecap="round"
           />
-          <path d="M 670 190 L 670 360" fill="none" stroke="#22c55e" strokeWidth="2" strokeDasharray="3,3" />
 
-          {/* ==================== 1. STREET ELECTRICAL SERVICE PILLAR ==================== */}
-          <g transform="translate(50, 190)">
-            {/* Feeder Pillar Green Enclosure */}
-            <rect x="-38" y="-55" width="76" height="110" rx="8" fill="#14532d" stroke="#22c55e" strokeWidth="2" />
-            <polygon points="-38,-55 38,-55 44,-64 -32,-64" fill="#166534" stroke="#22c55e" strokeWidth="1.5" />
-            
-            {/* Warning Plate */}
-            <rect x="-26" y="-48" width="52" height="18" rx="2" fill="#facc15" stroke="#ca8a04" strokeWidth="1" />
-            <text x="0" y="-36" textAnchor="middle" fill="#713f12" fontSize="7.5" fontWeight="black">⚡ 230V / 415V</text>
-            <text x="0" y="-30" textAnchor="middle" fill="#713f12" fontSize="5.5" fontWeight="bold">DANGER / खतरा</text>
+          {/* ========================================================================= */}
+          {/* ANIMATED CLOSED-LOOP CURRENT FLOW (ZERO DRIFT IN AIR)                      */}
+          {/* Strictly animated inside conductor paths according to true physics        */}
+          {/* ========================================================================= */}
+          {isRCCBClosed && (
+            <g className="pointer-events-none">
+              {/* Mains Incomer Phase Flow (Substation -> Phase Comb Bus) */}
+              <path
+                d="M 90 185 L 675 185"
+                fill="none"
+                stroke="#fef08a"
+                strokeWidth="2.5"
+                strokeDasharray="8 16"
+                strokeDashoffset={-animTime * 1.6}
+                filter="url(#wireGlow)"
+              />
 
-            {/* Ventilation Louvers */}
-            <line x1="-20" y1="-20" x2="20" y2="-20" stroke="#166534" strokeWidth="2" />
-            <line x1="-20" y1="-14" x2="20" y2="-14" stroke="#166534" strokeWidth="2" />
-            <line x1="-20" y1="-8" x2="20" y2="-8" stroke="#166534" strokeWidth="2" />
+              {/* Mains Incomer Neutral Return Flow (Neutral Bus -> Substation star-point) */}
+              <path
+                d="M 715 225 L 90 225"
+                fill="none"
+                stroke="#93c5fd"
+                strokeWidth="2.5"
+                strokeDasharray="8 16"
+                strokeDashoffset={-animTime * 1.6}
+                filter="url(#wireGlow)"
+              />
 
-            <text x="0" y="8" textAnchor="middle" fill="#ffffff" fontSize="8.5" fontWeight="black">ELEC. DEPT.</text>
-            <text x="0" y="20" textAnchor="middle" fill="#86efac" fontSize="7.5" fontWeight="bold">FEEDER PILLAR</text>
-            <text x="0" y="32" textAnchor="middle" fill="#38bdf8" fontSize="7">Main Street Grid</text>
-            <rect x="-30" y="38" width="60" height="12" rx="6" fill="#0f172a" stroke="#22c55e" />
-            <text x="0" y="47" textAnchor="middle" fill="#22c55e" fontSize="7" fontWeight="bold">● 230V 50Hz</text>
+              {/* Branch C1 Flow (Lighting Circuit) */}
+              {isC1Closed && (
+                <>
+                  <path
+                    d="M 689 105 L 890 105"
+                    fill="none"
+                    stroke="#fef08a"
+                    strokeWidth="2"
+                    strokeDasharray="6 14"
+                    strokeDashoffset={-animTime * 1.2}
+                  />
+                  <path
+                    d="M 890 130 L 729 130"
+                    fill="none"
+                    stroke="#93c5fd"
+                    strokeWidth="2"
+                    strokeDasharray="6 14"
+                    strokeDashoffset={-animTime * 1.2}
+                  />
+                </>
+              )}
+
+              {/* Branch C2 Flow (Living Room Sockets) */}
+              {isC2Closed && (
+                <>
+                  <path
+                    d="M 689 240 L 890 240"
+                    fill="none"
+                    stroke={isOverloaded ? "#ffedd5" : "#fef08a"}
+                    strokeWidth={isOverloaded ? "3.5" : "2"}
+                    strokeDasharray={isOverloaded ? "10 12" : "6 14"}
+                    strokeDashoffset={isOverloaded ? -animTime * 2.8 : -animTime * 1.4}
+                    filter={isOverloaded ? "url(#wireGlow)" : undefined}
+                  />
+                  <path
+                    d="M 890 265 L 729 265"
+                    fill="none"
+                    stroke="#93c5fd"
+                    strokeWidth="2"
+                    strokeDasharray="6 14"
+                    strokeDashoffset={-animTime * 1.4}
+                  />
+                </>
+              )}
+
+              {/* Branch C3 Flow (Kitchen & Geyser Sockets) */}
+              {isC3Closed && (
+                <>
+                  <path
+                    d="M 689 375 L 890 375"
+                    fill="none"
+                    stroke="#fef08a"
+                    strokeWidth="2"
+                    strokeDasharray="6 14"
+                    strokeDashoffset={-animTime * 1.4}
+                  />
+                  <path
+                    d="M 890 400 L 729 400"
+                    fill="none"
+                    stroke="#93c5fd"
+                    strokeWidth="2"
+                    strokeDasharray="6 14"
+                    strokeDashoffset={-animTime * 1.4}
+                  />
+                </>
+              )}
+
+              {/* Earth Shock Leakage Flow (IΔn flowing down Chassis -> PE Busbar -> Earth Pit) */}
+              {leakageMA > 0 && !isBrokenEarth && (
+                <path
+                  d="M 985 295 L 985 412 L 230 412 L 230 465"
+                  fill="none"
+                  stroke="#fbbf24"
+                  strokeWidth="3.5"
+                  strokeDasharray="10 12"
+                  strokeDashoffset={-animTime * 2.2}
+                  filter="url(#wireGlow)"
+                />
+              )}
+            </g>
+          )}
+
+          {/* ========================================================================= */}
+          {/* EQUIPMENT STAGE 1: 230V UTILITY SUBSTATION SUPPLY                         */}
+          {/* ========================================================================= */}
+          <g transform="translate(45, 205)">
+            <rect
+              x="-40" y="-85" width="85" height="170" rx="10"
+              fill="url(#metalPanelGrad)" stroke="#16a34a" strokeWidth="2"
+              filter="drop-shadow(0 4px 12px rgba(0,0,0,0.5))"
+            />
+            {/* Transformer Header Badge */}
+            <rect x="-32" y="-76" width="69" height="24" rx="4" fill="#15803d" />
+            <text x="2.5" y="-60" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
+              ⚡ 230V 50Hz
+            </text>
+
+            <text x="2.5" y="-36" textAnchor="middle" fill="#ffffff" fontSize="12" fontWeight="black">
+              UTILITY GRID
+            </text>
+            <text x="2.5" y="-22" textAnchor="middle" fill="#86efac" fontSize="9.5" fontWeight="bold">
+              Substation Tr.
+            </text>
+
+            {/* Transformer Coils Graphic */}
+            <circle cx="-12" cy="5" r="16" fill="none" stroke="#22c55e" strokeWidth="2.5" />
+            <circle cx="16" cy="5" r="16" fill="none" stroke="#38bdf8" strokeWidth="2.5" />
+
+            {/* Terminal Indicators */}
+            <text x="32" y="-20" textAnchor="end" fill="#ef4444" fontSize="11" fontWeight="black">L (Phase)</text>
+            <text x="32" y="20" textAnchor="end" fill="#38bdf8" fontSize="11" fontWeight="black">N (Neutral)</text>
+
+            {/* Incomer Current Readout */}
+            <rect x="-34" y="50" width="73" height="24" rx="4" fill="#022c22" stroke="#059669" strokeWidth="1" />
+            <text x="2.5" y="66" textAnchor="middle" fill="#34d399" fontSize="11" fontWeight="black" fontFamily="monospace">
+              {totalIncomerAmps.toFixed(1)} A In
+            </text>
           </g>
 
-          {/* ==================== 2. MAIN ELECTRICITY METER ==================== */}
-          <g transform="translate(145, 190)">
-            <rect x="-25" y="-40" width="50" height="80" rx="8" fill="#0f172a" stroke="#3b82f6" strokeWidth="1.5" />
-            <rect x="-18" y="-30" width="36" height="18" rx="3" fill="#1e293b" />
-            <text x="0" y="-18" textAnchor="middle" fill="#38bdf8" fontSize="7.5" fontWeight="black" fontFamily="monospace">04218 kWh</text>
-            <text x="0" y="6" textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="bold">ENERGY</text>
-            <text x="0" y="16" textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="bold">METER</text>
-            <text x="0" y="30" textAnchor="middle" fill="#64748b" fontSize="6.5">Utility Billing</text>
+          {/* ========================================================================= */}
+          {/* EQUIPMENT STAGE 2: SERVICE CUTOUT HRC FUSE (60A)                           */}
+          {/* ========================================================================= */}
+          <g transform="translate(180, 205)">
+            <rect
+              x="-30" y="-60" width="60" height="120" rx="8"
+              fill="url(#metalPanelGrad)" stroke="#f59e0b" strokeWidth="2"
+              filter="drop-shadow(0 4px 10px rgba(0,0,0,0.4))"
+            />
+            <text x="0" y="-42" textAnchor="middle" fill="#f59e0b" fontSize="11" fontWeight="black">
+              CUTOUT
+            </text>
+            <text x="0" y="-30" textAnchor="middle" fill="#cbd5e1" fontSize="9" fontWeight="bold">
+              HRC Fuse
+            </text>
+
+            {/* Ceramic Fuse Cartridge */}
+            <rect x="-16" y="-18" width="32" height="38" rx="3" fill="#fef3c7" stroke="#b45309" strokeWidth="1.5" />
+            <line x1="0" y1="-18" x2="0" y2="20" stroke="#b45309" strokeWidth="3" />
+            <rect x="-14" y="-2" width="28" height="12" rx="2" fill="#d97706" />
+            <text x="0" y="7" textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="black">
+              60A
+            </text>
+
+            {/* Neutral Link */}
+            <line x1="-20" y1="20" x2="20" y2="20" stroke="#0284c7" strokeWidth="3.5" />
+            <text x="0" y="38" textAnchor="middle" fill="#94a3b8" fontSize="8" fontWeight="bold">
+              BS 1361
+            </text>
+            <text x="0" y="50" textAnchor="middle" fill="#64748b" fontSize="7.5">
+              Service Seal
+            </text>
           </g>
 
-          {/* ==================== 3. MAIN RCCB (SHOCK DETECTIVE) ==================== */}
+          {/* ========================================================================= */}
+          {/* EQUIPMENT STAGE 3: DIGITAL REVENUE ENERGY METER (kWh)                     */}
+          {/* ========================================================================= */}
+          <g transform="translate(295, 205)">
+            <rect
+              x="-42" y="-72" width="84" height="144" rx="10"
+              fill="url(#metalPanelGrad)" stroke="#38bdf8" strokeWidth="2"
+              filter="drop-shadow(0 4px 12px rgba(0,0,0,0.5))"
+            />
+            <text x="0" y="-52" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
+              ENERGY METER
+            </text>
+            <text x="0" y="-40" textAnchor="middle" fill="#94a3b8" fontSize="8.5" fontWeight="bold">
+              Class 1.0 Smart
+            </text>
+
+            {/* Backlit Digital LCD Display */}
+            <rect x="-34" y="-30" width="68" height="28" rx="4" fill="#020617" stroke="#0284c7" strokeWidth="1.5" />
+            <text x="0" y="-12" textAnchor="middle" fill="#38bdf8" fontSize="11" fontWeight="black" fontFamily="monospace">
+              04218.4
+            </text>
+            <text x="27" y="-14" textAnchor="end" fill="#60a5fa" fontSize="7">kWh</text>
+
+            {/* Optical Pulse LED */}
+            <circle
+              cx="-18" cy="12" r="3.5"
+              fill={isRCCBClosed && totalIncomerAmps > 0 ? (animTime % 40 < 20 ? "#ef4444" : "#7f1d1d") : "#334155"}
+            />
+            <text x="-10" y="15" fill="#cbd5e1" fontSize="8">3200 imp/kWh</text>
+
+            <rect x="-34" y="30" width="68" height="28" rx="4" fill="#0f172a" />
+            <text x="0" y="44" textAnchor="middle" fill="#a7f3d0" fontSize="9" fontWeight="bold">
+              {totalIncomerAmps > 0 ? `${(totalIncomerAmps * 230 / 1000).toFixed(2)} kW Active` : 'IDLE 0.0 kW'}
+            </text>
+            <text x="0" y="54" textAnchor="middle" fill="#64748b" fontSize="7.5">
+              Govt Sealed
+            </text>
+          </g>
+
+          {/* ========================================================================= */}
+          {/* EQUIPMENT STAGE 4: MAIN DOUBLE POLE (DP) ISOLATOR SWITCH (63A)           */}
+          {/* ========================================================================= */}
+          <g transform="translate(425, 205)">
+            <rect
+              x="-36" y="-75" width="72" height="150" rx="10"
+              fill="url(#metalPanelGrad)" stroke="#64748b" strokeWidth="2"
+              filter="drop-shadow(0 4px 10px rgba(0,0,0,0.5))"
+            />
+            <text x="0" y="-55" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
+              DP SWITCH
+            </text>
+            <text x="0" y="-42" textAnchor="middle" fill="#cbd5e1" fontSize="8.5" fontWeight="bold">
+              63A Main Isolator
+            </text>
+
+            {/* Dual Mechanical Contact Blades */}
+            <g transform="translate(0, -10)">
+              {/* L Pole Contact */}
+              <circle cx="-14" cy="-10" r="3" fill="#ef4444" />
+              <circle cx="-14" cy="10" r="3" fill="#ef4444" />
+              <line x1="-14" y1="-10" x2="-14" y2="10" stroke="#10b981" strokeWidth="3" strokeLinecap="round" />
+
+              {/* N Pole Contact */}
+              <circle cx="14" cy="-10" r="3" fill="#38bdf8" />
+              <circle cx="14" cy="10" r="3" fill="#38bdf8" />
+              <line x1="14" y1="-10" x2="14" y2="10" stroke="#10b981" strokeWidth="3" strokeLinecap="round" />
+            </g>
+
+            {/* Industrial DIN Lever Switch Graphic */}
+            <rect x="-24" y="24" width="48" height="22" rx="4" fill="#064e3b" stroke="#059669" strokeWidth="1.5" />
+            <text x="0" y="39" textAnchor="middle" fill="#a7f3d0" fontSize="11" fontWeight="black">
+              ON (CLOSED)
+            </text>
+            <text x="0" y="62" textAnchor="middle" fill="#94a3b8" fontSize="8" fontWeight="bold">
+              IEC 60947-3
+            </text>
+          </g>
+
+          {/* ========================================================================= */}
+          {/* EQUIPMENT STAGE 5: 30mA RESIDUAL CURRENT DEVICE (RCCB)                    */}
+          {/* With visible Toroid Core, Magnetic Flux Dynamics, and Realistic Controls   */}
+          {/* ========================================================================= */}
           <g
-            transform="translate(265, 190)"
-            onClick={onTestTripRCCB}
-            className="cursor-pointer group"
+            transform="translate(565, 205)"
+            className="select-none"
           >
             <rect
-              x="-40" y="-60" width="80" height="120" rx="10"
-              fill={rccbState.state !== 'CLOSED' ? "#450a0a" : "#064e3b"}
-              stroke={rccbState.state !== 'CLOSED' ? "#ef4444" : "#10b981"}
+              x="-56" y="-85" width="112" height="170" rx="12"
+              fill={!isRCCBClosed ? "#3b0707" : "#042f2e"}
+              stroke={!isRCCBClosed ? "#ef4444" : "#14b8a6"}
               strokeWidth="2.5"
-              filter="drop-shadow(0 0 12px rgba(0,0,0,0.6))"
+              filter="drop-shadow(0 6px 14px rgba(0,0,0,0.6))"
             />
-            {/* Status LED */}
-            <circle
-              cx="26" cy="-46" r="4"
-              fill={rccbState.state !== 'CLOSED' ? "#ef4444" : "#10b981"}
-              className={rccbState.state !== 'CLOSED' ? "animate-ping" : undefined}
+            {/* Status Top Banner */}
+            <rect
+              x="-48" y="-76" width="96" height="22" rx="4"
+              fill={!isRCCBClosed ? "#7f1d1d" : "#0f766e"}
             />
-
-            <text x="0" y="-38" textAnchor="middle" fill="#ffffff" fontSize="10" fontWeight="black">
-              1. MAIN RCCB
+            <text x="0" y="-61" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="black">
+              RCCB 30mA Type A
             </text>
-            <text x="0" y="-24" textAnchor="middle" fill={rccbState.state !== 'CLOSED' ? "#fca5a5" : "#a7f3d0"} fontSize="7.5" fontWeight="black">
-              SHOCK GUARD (30mA)
-            </text>
-
-            {/* Switch Handle */}
-            <rect x="-14" y="-14" width="28" height="28" rx="4" fill="#0f172a" />
-            <line
-              x1="0"
-              y1={rccbState.state !== 'CLOSED' ? 4 : -8}
-              x2="0"
-              y2={rccbState.state !== 'CLOSED' ? 10 : -2}
-              stroke={rccbState.state !== 'CLOSED' ? "#ef4444" : "#10b981"}
-              strokeWidth="4"
-              strokeLinecap="round"
-            />
-
-            {/* Test button */}
-            <rect x="-24" y="24" width="48" height="16" rx="8" fill="#f59e0b" />
-            <text x="0" y="35" textAnchor="middle" fill="#020617" fontSize="8" fontWeight="black">
-              🟡 TEST 'T'
+            <text x="0" y="-44" textAnchor="middle" fill={!isRCCBClosed ? "#fca5a5" : "#5eead4"} fontSize="9" fontWeight="black">
+              ZERO-PHASE TOROID CT
             </text>
 
-            <text x="0" y="52" textAnchor="middle" fill="#cbd5e1" fontSize="7" fontWeight="bold">
-              {rccbState.state !== 'CLOSED' ? '🔴 TRIPPED!' : '🟢 ACTIVE (0.03s)'}
-            </text>
+            {/* Visible Core Magnetic Toroid Ring with True Physics Magnetic Flux */}
+            <g transform="translate(0, 0)">
+              {/* Toroid Ring Body */}
+              <circle
+                cx="0" cy="0" r="28"
+                fill="none"
+                stroke={isToroidUnbalanced ? "#ef4444" : "#d97706"}
+                strokeWidth="7"
+                filter={isToroidUnbalanced ? "url(#wireGlow)" : undefined}
+              />
+              <circle
+                cx="0" cy="0" r="28"
+                fill="none"
+                stroke={isToroidUnbalanced ? "#fca5a5" : "#fef08a"}
+                strokeWidth="1.5"
+                strokeDasharray="4 3"
+              />
 
-            {/* Trip explanation callout */}
-            {rccbState.state !== 'CLOSED' && (
-              <g transform="translate(0, -75)">
-                <rect x="-75" y="-12" width="150" height="24" rx="12" fill="#7f1d1d" stroke="#ef4444" strokeWidth="1.5" />
-                <text x="0" y="4" textAnchor="middle" fill="#fecaca" fontSize="8" fontWeight="black">
-                  🛡️ RCCB TRIPPED IN 0.03s!
+              {/* True Physics Opposing Vector Flux Indication */}
+              {isToroidUnbalanced ? (
+                <>
+                  <text x="0" y="-4" textAnchor="middle" fill="#fca5a5" fontSize="8" fontWeight="black">ΔΦ FLUX</text>
+                  <text x="0" y="8" textAnchor="middle" fill="#ef4444" fontSize="7.5" fontWeight="bold">TRIP!</text>
+                </>
+              ) : (
+                <>
+                  <text x="0" y="-4" textAnchor="middle" fill="#fef08a" fontSize="8" fontWeight="black">CORE</text>
+                  <text x="0" y="8" textAnchor="middle" fill="#86efac" fontSize="7.5" fontWeight="bold">ΣΦ = 0</text>
+                </>
+              )}
+
+              {/* Sensing Secondary Coil Connection to Trip Mechanism */}
+              <path
+                d="M 20 20 L 34 32"
+                fill="none"
+                stroke={isToroidUnbalanced ? "#ef4444" : "#f59e0b"}
+                strokeWidth="2.5"
+                strokeDasharray={isToroidUnbalanced ? undefined : "2 2"}
+              />
+              <circle cx="34" cy="32" r="3.5" fill={isToroidUnbalanced ? "#ef4444" : "#f59e0b"} />
+            </g>
+
+            {/* Realistic DIN Test Pushbutton & Trip Indicator */}
+            <g transform="translate(0, 48)">
+              {/* Trip/Normal Status Flag */}
+              <rect
+                x="-46" y="-10" width="38" height="24" rx="4"
+                fill={!isRCCBClosed ? "#ef4444" : "#059669"}
+                stroke="#ffffff" strokeWidth="1"
+              />
+              <text x="-27" y="5" textAnchor="middle" fill="#ffffff" fontSize="8.5" fontWeight="black">
+                {!isRCCBClosed ? 'TRIPPED' : 'CLOSED'}
+              </text>
+
+              {/* Realistic [T] Test Button (Proportional Clickable Target) */}
+              <g
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTestTripRCCB?.();
+                }}
+                className="cursor-pointer group"
+              >
+                <rect
+                  x="4" y="-10" width="42" height="24" rx="5"
+                  fill="#d97706"
+                  stroke="#fbbf24"
+                  strokeWidth="1.5"
+                  className="transition-colors group-hover:fill-amber-500"
+                />
+                <text x="25" y="6" textAnchor="middle" fill="#020617" fontSize="9.5" fontWeight="black">
+                  [T] TEST
                 </text>
               </g>
-            )}
+            </g>
+
+            <text x="0" y="76" textAnchor="middle" fill="#94a3b8" fontSize="8" fontWeight="bold">
+              ΔI = 30mA • t ≤ 30ms
+            </text>
           </g>
 
-          {/* ==================== 4. BRANCH MCBs ==================== */}
-          {/* C1 Lighting MCB */}
-          <g transform="translate(460, 90)">
-            <rect x="-28" y="-26" width="56" height="52" rx="6" fill="#1e293b" stroke="#38bdf8" strokeWidth="1.5" />
-            <text x="0" y="-12" textAnchor="middle" fill="#38bdf8" fontSize="8" fontWeight="black">MCB 10A</text>
-            <text x="0" y="0" textAnchor="middle" fill="#ffffff" fontSize="7" fontWeight="bold">Lights</text>
-            <rect x="-16" y="8" width="32" height="12" rx="4" fill="#0284c7" />
-            <text x="0" y="17" textAnchor="middle" fill="#ffffff" fontSize="7" fontWeight="bold">ON</text>
-          </g>
+          {/* ========================================================================= */}
+          {/* EQUIPMENT STAGE 6: BRANCH CIRCUIT BREAKERS (MCBs)                          */}
+          {/* Proportional DIN-rail toggles with clear ratings and ampere readouts      */}
+          {/* ========================================================================= */}
 
-          {/* C2 Living Room MCB (Target) */}
+          {/* Branch MCB C1 (Lighting - 10A B-Curve) */}
           <g
-            transform="translate(460, 190)"
-            onClick={() => onRecloseBreaker && onRecloseBreaker('c2_living_sockets')}
-            className="cursor-pointer group"
+            transform="translate(795, 105)"
+            onClick={() => onRecloseBreaker?.('c1_lighting')}
+            className={cn("select-none", !isC1Closed && "cursor-pointer")}
           >
             <rect
-              x="-34" y="-36" width="68" height="72" rx="8"
-              fill={c2State.state !== 'CLOSED' ? "#450a0a" : "#1e293b"}
-              stroke={c2State.state !== 'CLOSED' ? "#ef4444" : isOverloaded ? "#f59e0b" : "#10b981"}
+              x="-45" y="-45" width="90" height="90" rx="10"
+              fill={!isC1Closed ? "#3b0707" : "#1e293b"}
+              stroke={!isC1Closed ? "#ef4444" : "#38bdf8"}
               strokeWidth="2"
-              filter="drop-shadow(0 0 10px rgba(0,0,0,0.5))"
+              filter="drop-shadow(0 4px 10px rgba(0,0,0,0.4))"
             />
-            <text x="0" y="-20" textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="black">
-              2. MCB 16A ★
+            <rect x="-38" y="-38" width="76" height="18" rx="3" fill="#0284c7" />
+            <text x="0" y="-25" textAnchor="middle" fill="#ffffff" fontSize="10.5" fontWeight="black">
+              MCB B10 (10A)
             </text>
-            <text x="0" y="-8" textAnchor="middle" fill="#fef08a" fontSize="7" fontWeight="bold">
-              FIRE GUARD
+            <text x="0" y="-8" textAnchor="middle" fill="#cbd5e1" fontSize="9" fontWeight="bold">
+              Lighting Circuit
             </text>
 
-            <rect
-              x="-24" y="2" width="48" height="16" rx="6"
-              fill={c2State.state !== 'CLOSED' ? "#ef4444" : "#10b981"}
-            />
-            <text x="0" y="13" textAnchor="middle" fill="#020617" fontSize="7.5" fontWeight="black">
-              {c2State.state !== 'CLOSED' ? '⬆ PUSH UP' : '● ON (16A)'}
+            {/* Sleek DIN Toggle Switch Handle */}
+            <g transform="translate(0, 14)">
+              <rect
+                x="-32" y="-10" width="64" height="20" rx="4"
+                fill={!isC1Closed ? "#991b1b" : "#065f46"}
+                stroke={!isC1Closed ? "#f87171" : "#34d399"}
+                strokeWidth="1"
+              />
+              <text x="0" y="4" textAnchor="middle" fill="#ffffff" fontSize="9.5" fontWeight="black">
+                {!isC1Closed ? 'TRIPPED (CLICK)' : `${c1Amps.toFixed(1)} A ON`}
+              </text>
+            </g>
+            <text x="0" y="38" textAnchor="middle" fill="#94a3b8" fontSize="8">
+              6kA • EN 60898-1
             </text>
-            <text x="0" y="28" textAnchor="middle" fill="#94a3b8" fontSize="6.5">
+          </g>
+
+          {/* Branch MCB C2 (Living Room - 16A C-Curve) */}
+          <g
+            transform="translate(795, 240)"
+            onClick={() => onRecloseBreaker?.('c2_living_sockets')}
+            className={cn("select-none", (!isC2Closed || isOverloaded) && "cursor-pointer")}
+          >
+            <rect
+              x="-45" y="-45" width="90" height="90" rx="10"
+              fill={!isC2Closed ? "#3b0707" : isOverloaded ? "#451a03" : "#1e293b"}
+              stroke={!isC2Closed ? "#ef4444" : isOverloaded ? "#f59e0b" : "#10b981"}
+              strokeWidth="2"
+              filter="drop-shadow(0 4px 10px rgba(0,0,0,0.4))"
+            />
+            <rect
+              x="-38" y="-38" width="76" height="18" rx="3"
+              fill={isOverloaded ? "#d97706" : "#047857"}
+            />
+            <text x="0" y="-25" textAnchor="middle" fill="#ffffff" fontSize="10.5" fontWeight="black">
+              MCB C16 (16A)
+            </text>
+            <text x="0" y="-8" textAnchor="middle" fill="#cbd5e1" fontSize="9" fontWeight="bold">
               Living Sockets
             </text>
 
-            {/* Overload Callout */}
-            {isOverloaded && !isTripped && (
-              <g transform="translate(0, -48)">
-                <rect x="-65" y="-10" width="130" height="20" rx="10" fill="#78350f" stroke="#f59e0b" strokeWidth="1.5" className="animate-pulse" />
-                <text x="0" y="3.5" textAnchor="middle" fill="#fef08a" fontSize="7.5" fontWeight="black">
-                  🔥 23A / 16A OVERLOAD!
-                </text>
-              </g>
-            )}
-
-            {/* Short Circuit Callout */}
-            {isShortCircuit && (
-              <g transform="translate(0, -48)">
-                <rect x="-70" y="-10" width="140" height="20" rx="10" fill="#7f1d1d" stroke="#ef4444" strokeWidth="1.5" className="animate-pulse" />
-                <text x="0" y="3.5" textAnchor="middle" fill="#fecaca" fontSize="7.5" fontWeight="black">
-                  ⚡ 250A SHORT CIRCUIT!
-                </text>
-              </g>
-            )}
+            {/* Sleek DIN Toggle Switch Handle */}
+            <g transform="translate(0, 14)">
+              <rect
+                x="-32" y="-10" width="64" height="20" rx="4"
+                fill={!isC2Closed ? "#991b1b" : isOverloaded ? "#b45309" : "#065f46"}
+                stroke={!isC2Closed ? "#f87171" : isOverloaded ? "#fbbf24" : "#34d399"}
+                strokeWidth="1"
+              />
+              <text x="0" y="4" textAnchor="middle" fill="#ffffff" fontSize="9.5" fontWeight="black">
+                {!isC2Closed ? 'TRIPPED (CLICK)' : isOverloaded ? `⚠️ ${c2Amps.toFixed(1)}A HOT` : `${c2Amps.toFixed(1)} A ON`}
+              </text>
+            </g>
+            <text x="0" y="38" textAnchor="middle" fill="#94a3b8" fontSize="8">
+              6kA • EN 60898-1
+            </text>
           </g>
 
-          {/* C3 Kitchen MCB */}
-          <g transform="translate(460, 290)">
-            <rect x="-28" y="-26" width="56" height="52" rx="6" fill="#1e293b" stroke="#10b981" strokeWidth="1.5" />
-            <text x="0" y="-12" textAnchor="middle" fill="#10b981" fontSize="8" fontWeight="black">MCB 16A</text>
-            <text x="0" y="0" textAnchor="middle" fill="#ffffff" fontSize="7" fontWeight="bold">Kitchen</text>
-            <rect x="-16" y="8" width="32" height="12" rx="4" fill="#059669" />
-            <text x="0" y="17" textAnchor="middle" fill="#ffffff" fontSize="7" fontWeight="bold">ON</text>
-          </g>
-
-          {/* ==================== 5. END APPLIANCES & ROOM LOADS ==================== */}
-          {/* C1: Ceiling Lamp */}
-          <g transform="translate(670, 90)">
-            <circle cx="0" cy="0" r="18" fill="#fef08a" fillOpacity="0.3" stroke="#facc15" strokeWidth="1.5" />
-            <circle cx="0" cy="0" r="10" fill="#fef08a" />
-            <text x="0" y="28" textAnchor="middle" fill="#fef08a" fontSize="8" fontWeight="bold">Lights (150W)</text>
-          </g>
-
-          {/* C2: Living Room Appliances / Socket Board */}
-          <g transform="translate(670, 190)">
+          {/* Branch MCB C3 (Kitchen Heavy - 16A C-Curve) */}
+          <g
+            transform="translate(795, 375)"
+            onClick={() => onRecloseBreaker?.('c3_kitchen_sockets')}
+            className={cn("select-none", !isC3Closed && "cursor-pointer")}
+          >
             <rect
-              x="-60" y="-45" width="120" height="90" rx="10"
-              fill="#0f172a"
-              stroke={isShortCircuit ? "#ef4444" : isOverloaded ? "#f59e0b" : "#38bdf8"}
+              x="-45" y="-45" width="90" height="90" rx="10"
+              fill={!isC3Closed ? "#3b0707" : "#1e293b"}
+              stroke={!isC3Closed ? "#ef4444" : "#10b981"}
               strokeWidth="2"
+              filter="drop-shadow(0 4px 10px rgba(0,0,0,0.4))"
             />
-            <text x="0" y="-28" textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="black">
-              LIVING ROOM LOAD
+            <rect x="-38" y="-38" width="76" height="18" rx="3" fill="#047857" />
+            <text x="0" y="-25" textAnchor="middle" fill="#ffffff" fontSize="10.5" fontWeight="black">
+              MCB C16 (16A)
+            </text>
+            <text x="0" y="-8" textAnchor="middle" fill="#cbd5e1" fontSize="9" fontWeight="bold">
+              Kitchen & Geyser
             </text>
 
-            <text x="0" y="-14" textAnchor="middle" fill="#38bdf8" fontSize="8" fontWeight="bold">
-              📺 TV (150W) + ⚡ HEATER
+            {/* Sleek DIN Toggle Switch Handle */}
+            <g transform="translate(0, 14)">
+              <rect
+                x="-32" y="-10" width="64" height="20" rx="4"
+                fill={!isC3Closed ? "#991b1b" : "#065f46"}
+                stroke={!isC3Closed ? "#f87171" : "#34d399"}
+                strokeWidth="1"
+              />
+              <text x="0" y="4" textAnchor="middle" fill="#ffffff" fontSize="9.5" fontWeight="black">
+                {!isC3Closed ? 'TRIPPED (CLICK)' : `${c3Amps.toFixed(1)} A ON`}
+              </text>
+            </g>
+            <text x="0" y="38" textAnchor="middle" fill="#94a3b8" fontSize="8">
+              6kA • EN 60898-1
             </text>
-            <text x="0" y="-2" textAnchor="middle" fill="#f59e0b" fontSize="8" fontWeight="bold">
-              {totalWatts}W Total ({livingCurrentAmps.toFixed(1)}A)
-            </text>
-
-            {/* Child Shock Scenario Badge */}
-            {isChildShock && (
-              <g transform="translate(0, 20)">
-                <rect x="-50" y="-8" width="100" height="16" rx="8" fill={isTripped ? "#064e3b" : "#7f1d1d"} stroke={isTripped ? "#10b981" : "#ef4444"} />
-                <text x="0" y="3" textAnchor="middle" fill="#ffffff" fontSize="7" fontWeight="black">
-                  {isTripped ? '👶 CHILD SAVED! ✨' : '⚡ 230mA SHOCK RISK!'}
-                </text>
-              </g>
-            )}
           </g>
 
-          {/* C3: Kitchen Appliances */}
-          <g transform="translate(670, 290)">
-            <rect x="-50" y="-28" width="100" height="56" rx="8" fill="#0f172a" stroke="#10b981" strokeWidth="1.5" />
-            <text x="0" y="-12" textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="bold">KITCHEN</text>
-            <text x="0" y="2" textAnchor="middle" fill="#a7f3d0" fontSize="7.5">Kettle + Microwave</text>
-            <text x="0" y="16" textAnchor="middle" fill="#64748b" fontSize="6.5">3400W Safe Ring</text>
+          {/* ========================================================================= */}
+          {/* EQUIPMENT STAGE 7: APPLIANCE LOADS & TERMINAL CONNECTIONS                 */}
+          {/* Large, beautiful appliance cards with power meters & terminal lugs        */}
+          {/* ========================================================================= */}
+
+          {/* Load C1: Lighting Circuit */}
+          <g transform="translate(995, 118)">
+            <rect
+              x="-95" y="-42" width="190" height="84" rx="10"
+              fill="#0b1324" stroke="#0284c7" strokeWidth="2"
+              filter="drop-shadow(0 4px 12px rgba(0,0,0,0.4))"
+            />
+            <text x="-80" y="-20" fill="#38bdf8" fontSize="13.5" fontWeight="black">
+              💡 LIGHTING SYSTEM
+            </text>
+            <text x="-80" y="-3" fill="#cbd5e1" fontSize="10.5">
+              LED Luminaires + Exhaust Fan
+            </text>
+            <rect x="-80" y="8" width="160" height="25" rx="4" fill="#021c38" stroke="#0369a1" strokeWidth="1" />
+            <text x="0" y="25" textAnchor="middle" fill="#38bdf8" fontSize="12.5" fontWeight="black" fontFamily="monospace">
+              250W • {c1Amps.toFixed(1)}A (PF 0.95)
+            </text>
           </g>
 
-          {/* ==================== 6. OUTDOOR EARTH PIT (GROUND ELECTRODE) ==================== */}
-          <g transform="translate(150, 360)">
-            <rect x="-50" y="-18" width="100" height="36" rx="8" fill="#1e293b" stroke="#16a34a" strokeWidth="2" />
-            <text x="0" y="-4" textAnchor="middle" fill="#22c55e" fontSize="8" fontWeight="black">EARTH GROUND PIT</text>
-            <text x="0" y="9" textAnchor="middle" fill="#94a3b8" fontSize="7">Solid Rod Ra ≈ 5.2 Ω</text>
+          {/* Load C2: Living Room Sockets (TV, AC, Heater) */}
+          <g transform="translate(995, 252)">
+            <rect
+              x="-95" y="-42" width="190" height="84" rx="10"
+              fill={isOverloaded ? "#2a1205" : "#0b1324"}
+              stroke={!isC2Closed ? "#ef4444" : isOverloaded ? "#f59e0b" : "#10b981"}
+              strokeWidth="2"
+              filter="drop-shadow(0 4px 12px rgba(0,0,0,0.4))"
+            />
+            <text x="-80" y="-20" fill={isOverloaded ? "#fbbf24" : "#ffffff"} fontSize="13.5" fontWeight="black">
+              🛋️ LIVING ROOM LOADS
+            </text>
+            <text x="-80" y="-3" fill="#cbd5e1" fontSize="10.5">
+              OLED TV, Inverter AC, Heater
+            </text>
+            <rect
+              x="-80" y="8" width="160" height="25" rx="4"
+              fill={isOverloaded ? "#451a03" : "#022c22"}
+              stroke={isOverloaded ? "#d97706" : "#059669"}
+              strokeWidth="1"
+            />
+            <text
+              x="0" y="25" textAnchor="middle"
+              fill={isOverloaded ? "#fbbf24" : "#34d399"}
+              fontSize="12.5" fontWeight="black" fontFamily="monospace"
+            >
+              {powerBreakdown.c2Watts}W • {c2Amps.toFixed(1)}A {isOverloaded ? '⚠️ OVERLOAD' : ''}
+            </text>
+          </g>
 
-            {isBrokenEarth && (
-              <g transform="translate(0, -28)">
-                <rect x="-60" y="-8" width="120" height="16" rx="8" fill="#7f1d1d" stroke="#ef4444" />
-                <text x="0" y="3" textAnchor="middle" fill="#fecaca" fontSize="7" fontWeight="black">
-                  ❌ SEVERED EARTH WIRE!
-                </text>
-              </g>
-            )}
+          {/* Load C3: Kitchen & Geyser Sockets */}
+          <g transform="translate(995, 388)">
+            <rect
+              x="-95" y="-42" width="190" height="84" rx="10"
+              fill="#0b1324"
+              stroke={!isC3Closed ? "#ef4444" : "#10b981"}
+              strokeWidth="2"
+              filter="drop-shadow(0 4px 12px rgba(0,0,0,0.4))"
+            />
+            <text x="-80" y="-20" fill="#ffffff" fontSize="13.5" fontWeight="black">
+              🍳 KITCHEN & GEYSER
+            </text>
+            <text x="-80" y="-3" fill="#cbd5e1" fontSize="10.5">
+              Kettle, Microwave, Refrigerator
+            </text>
+            <rect x="-80" y="8" width="160" height="25" rx="4" fill="#022c22" stroke="#059669" strokeWidth="1" />
+            <text x="0" y="25" textAnchor="middle" fill="#34d399" fontSize="12.5" fontWeight="black" fontFamily="monospace">
+              {powerBreakdown.c3Watts}W • {c3Amps.toFixed(1)}A (PF 0.98)
+            </text>
+          </g>
+
+          {/* ========================================================================= */}
+          {/* EQUIPMENT STAGE 8: OUTDOOR DEEP EARTH GROUND PIT (Ra <= 5.2 Ohms)        */}
+          {/* ========================================================================= */}
+          <g transform="translate(180, 480)">
+            {/* Soil Chamber Excavation Pit */}
+            <rect
+              x="-70" y="-24" width="140" height="48" rx="8"
+              fill="#2e1a0b" stroke="#78350f" strokeWidth="2"
+            />
+            {/* Driven Copper Earth Electrode Rod */}
+            <line x1="0" y1="-20" x2="0" y2="18" stroke="#f59e0b" strokeWidth="5" strokeLinecap="round" />
+            {/* Ground Plates / Earth Lattice */}
+            <line x1="-24" y1="6" x2="24" y2="6" stroke="#22c55e" strokeWidth="3" />
+            <line x1="-16" y1="12" x2="16" y2="12" stroke="#22c55e" strokeWidth="2" />
+            <line x1="-8" y1="18" x2="8" y2="18" stroke="#22c55e" strokeWidth="1.5" />
+
+            <text x="0" y="-10" textAnchor="middle" fill="#86efac" fontSize="11.5" fontWeight="black">
+              🌱 OUTDOOR EARTH PIT
+            </text>
+            <text x="0" y="4" textAnchor="middle" fill="#fef08a" fontSize="10" fontWeight="bold">
+              Ra = 5.2 Ω • IS 3043 TT
+            </text>
           </g>
         </svg>
-
-        {/* Live Canvas Particle Loop */}
-        <canvas
-          ref={canvasRef}
-          width={800}
-          height={420}
-          className="absolute inset-0 w-full h-full pointer-events-none z-10"
-        />
-      </div>
-
-      {/* 3. PLAIN ENGLISH EXPLANATION FOOTER & KIRCHHOFF TELEMETRY */}
-      <div className="px-3 py-2 bg-slate-900/95 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs z-20">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 font-mono font-bold">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-red-400">Phase (Live):</span>
-            <span className="text-white font-black">{!isTripped ? `${(totalWatts / 230).toFixed(1)}A ➔` : '0.0A'}</span>
-          </div>
-          <div className="flex items-center gap-1.5 font-mono font-bold">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-            <span className="text-blue-400">Neutral:</span>
-            <span className="text-white font-black">{!isTripped ? `${(totalWatts / 230).toFixed(1)}A ⬅` : '0.0A'}</span>
-          </div>
-          <div className="flex items-center gap-1.5 font-mono font-bold">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span className="text-emerald-400">Earth:</span>
-            <span className="text-emerald-300 font-black">
-              {isWetBath && !isTripped ? '45.0mA ⤓' : isChildShock && !isTripped ? '230.0mA ⤓' : '0.0mA (Balanced)'}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {isTripped ? (
-            <button
-              type="button"
-              onClick={() => onRecloseBreaker && onRecloseBreaker('c2_living_sockets')}
-              className="px-3 py-1 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all shadow-md cursor-pointer animate-pulse shrink-0"
-            >
-              ⬆ PUSH SWITCH UP (RESTORE POWER)
-            </button>
-          ) : (
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500 font-bold text-[11px]">
-              ✓ Kirchhoff Law: I_in = I_return (100% Balanced)
-            </span>
-          )}
-        </div>
       </div>
     </div>
   );

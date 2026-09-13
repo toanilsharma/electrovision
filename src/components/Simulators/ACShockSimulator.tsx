@@ -470,7 +470,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           initial={{ opacity: 0, y: -20, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -20, scale: 0.96 }}
-          className="fixed top-2 sm:top-3 left-1/2 -translate-x-1/2 z-[300] w-[94%] max-w-xl bg-red-950/95 border-2 border-red-500 text-white px-3 py-2 rounded-xl shadow-[0_0_40px_rgba(239,68,68,0.9)] backdrop-blur-2xl flex items-center justify-between gap-3 pointer-events-auto"
+          className="fixed top-2 sm:top-3 right-3 sm:right-6 z-[300] w-[92%] sm:w-auto max-w-xl bg-red-950/95 border-2 border-red-500 text-white px-3 py-2 rounded-xl shadow-[0_0_40px_rgba(239,68,68,0.9)] backdrop-blur-2xl flex items-center justify-between gap-3 pointer-events-auto"
         >
           <div className="flex items-center gap-2 min-w-0 font-mono">
             <div className="p-1.5 bg-red-500/20 rounded-lg border border-red-400 text-red-400 shrink-0 animate-pulse">
@@ -507,7 +507,7 @@ export function ACShockSimulator({ config }: { config?: UserConfig }) {
           initial={{ opacity: 0, y: -20, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -20, scale: 0.96 }}
-          className="fixed top-2 sm:top-3 left-1/2 -translate-x-1/2 z-[300] w-[94%] max-w-lg bg-emerald-950/95 border-2 border-emerald-400 text-white px-3 py-2 rounded-xl shadow-[0_0_35px_rgba(16,185,129,0.8)] backdrop-blur-2xl flex items-center justify-between gap-2.5 pointer-events-auto font-mono"
+          className="fixed top-2 sm:top-3 right-3 sm:right-6 z-[300] w-[92%] sm:w-auto max-w-lg bg-emerald-950/95 border-2 border-emerald-400 text-white px-3 py-2 rounded-xl shadow-[0_0_35px_rgba(16,185,129,0.8)] backdrop-blur-2xl flex items-center justify-between gap-2.5 pointer-events-auto font-mono"
         >
           <div className="flex items-center gap-2 min-w-0">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 animate-bounce" />

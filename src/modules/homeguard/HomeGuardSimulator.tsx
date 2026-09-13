@@ -21,6 +21,10 @@ const HomeSafetyAuditModal = lazy(() => import('./components/HomeSafetyAuditModa
 const ScavengerHuntModal = lazy(() => import('./components/ScavengerHuntModal').then(m => ({ default: m.ScavengerHuntModal })));
 const ShockRescueDrillModal = lazy(() => import('./components/ShockRescueDrillModal').then(m => ({ default: m.ShockRescueDrillModal })));
 const FamilyCertificateModal = lazy(() => import('./components/FamilyCertificateModal').then(m => ({ default: m.FamilyCertificateModal })));
+import { HomeGuardTourModal } from './components/HomeGuardTourModal';
+import { CurrentBalanceGauge } from './components/CurrentBalanceGauge';
+import { WhatJustHappenedCard } from './components/WhatJustHappenedCard';
+import { calculatePowerBreakdown } from './data/homeguardAppliances';
 import { homeguardAudio } from './utils/homeguardAudio';
 import { HOMEGUARD_PRESETS, HomeGuardPreset } from './data/homeguardPresets';
 import { RESIDENTIAL_SCENARIOS } from './data/residentialProfile';
@@ -90,18 +94,17 @@ export const HomeGuardSimulator: React.FC = () => {
     'refrigerator'
   ]);
 
-  // Dynamic Live Amperage on Living Room Circuit C2 (Physics Engine Synced: I = P / V)
-  const dynamicC2Amps = useMemo(() => {
-    let watts = 0;
-    if (activeApplianceIds.includes('tv_console')) watts += 150;
-    if (activeApplianceIds.includes('space_heater')) watts += 2000;
-    if (activeApplianceIds.includes('kettle')) watts += 2200;
-    if (activeApplianceIds.includes('hair_dryer')) watts += 986;
-    if (activeApplianceIds.includes('air_conditioner')) watts += 1500;
-    return Number((watts / 230).toFixed(1));
-  }, [activeApplianceIds]);
+  // Multi-branch Circuit Power Breakdown (100% Physics Synced: I = P / V)
+  const powerBreakdown = useMemo(() => calculatePowerBreakdown(activeApplianceIds), [activeApplianceIds]);
+  const dynamicC2Amps = powerBreakdown.c2Amps;
+  const dynamicC3Amps = powerBreakdown.c3Amps;
 
-  // SINGLE PHYSICS ENGINE INSTANCE
+  // New Modals (Rec 6 & 7 & 8)
+  const [isTourModalOpen, setIsTourModalOpen] = useState<boolean>(false);
+  const [isBalanceGaugeOpen, setIsBalanceGaugeOpen] = useState<boolean>(false);
+  const [isWhatHappenedDismissed, setIsWhatHappenedDismissed] = useState<boolean>(false);
+
+  // SINGLE PHYSICS ENGINE INSTANCE (Multi-Branch C2 + C3)
   const {
     selectedScenario,
     selectScenario,
@@ -114,7 +117,7 @@ export const HomeGuardSimulator: React.FC = () => {
     setIsMuted,
     handleRecloseBreaker,
     handleTestTripRCCB
-  } = useHomeGuardEngine('normal_living', dynamicC2Amps);
+  } = useHomeGuardEngine('normal_living', dynamicC2Amps, dynamicC3Amps);
 
   // Sync audio mute state
   useEffect(() => {
@@ -143,6 +146,16 @@ export const HomeGuardSimulator: React.FC = () => {
       homeguardAudio.playArcSizzleSound();
     }
   }, [isShortCircuit]);
+
+  // Audio: play subtle wire hum warning when current approaches rated capacity (>14.4A on 16A branch)
+  useEffect(() => {
+    if (!isTripped && (dynamicC2Amps > 14.4 || dynamicC3Amps > 14.4)) {
+      const humInterval = setInterval(() => {
+        homeguardAudio.playWireHumWarningSound();
+      }, 3500);
+      return () => clearInterval(humInterval);
+    }
+  }, [isTripped, dynamicC2Amps, dynamicC3Amps]);
 
   // Determine if active mission passed
   const isMissionActivePassed = useMemo(() => {
@@ -193,15 +206,64 @@ export const HomeGuardSimulator: React.FC = () => {
     });
   };
 
-  // Safe reclose breaker logic
+  // Determine Trip Type for "What Just Happened?" 3-Beat Card (Rec 8)
+  const tripType = useMemo(() => {
+    if (!isTripped) return null;
+    if (selectedScenario.faultType === 'thermal_overload') return 'overload';
+    if (selectedScenario.faultType === 'short_circuit') return 'short_circuit';
+    if (selectedScenario.faultType === 'child_shock') return 'child_shock';
+    if (selectedScenario.faultType === 'earth_leakage') return 'water_leak';
+    if (rccbState.tripCause === 'TEST_TRIP') return 'test_trip';
+    if (c2State.state !== MCBState.CLOSED) return 'overload';
+    if (rccbState.state !== MCBState.CLOSED) return 'water_leak';
+    return null;
+  }, [isTripped, selectedScenario.faultType, rccbState.tripCause, c2State.state, rccbState.state]);
+
+  // Reset What Happened card dismissal on new trip
+  useEffect(() => {
+    if (isTripped) {
+      setIsWhatHappenedDismissed(false);
+    }
+  }, [isTripped]);
+
+  // Quick Fix helper action (Unplug heavy loads and safely restore)
+  const handleQuickFixReset = () => {
+    setActiveApplianceIds(prev => prev.filter(id => id !== 'space_heater' && id !== 'kettle'));
+    setTimeout(() => {
+      handleRecloseBreaker('c1_lighting');
+      handleRecloseBreaker('c2_living_sockets');
+      handleRecloseBreaker('c3_kitchen_sockets');
+      handleRecloseBreaker('main_rccb');
+      homeguardAudio.playBreakerResetSound();
+      homeguardAudio.playSuccessChime();
+      setIsWhatHappenedDismissed(true);
+      setHabitTip({
+        type: 'success',
+        text: '✨ Heavy loads unplugged & switches safely reset! Power restored.'
+      });
+      setTimeout(() => setHabitTip(null), 4000);
+    }, 150);
+  };
+
+  // Safe reclose breaker logic (Rec 10: Real-life bounce-back enforcement)
   const handleSafeRecloseBreaker = (circuitId: string) => {
     const isOverloadStillPlugged = activeApplianceIds.includes('space_heater') && activeApplianceIds.includes('kettle');
-    if (isOverloadStillPlugged && circuitId === 'c2_living_sockets') {
+    const isShortStillActive = selectedScenario.faultType === 'short_circuit';
+
+    if (circuitId === 'c2_living_sockets' && (isOverloadStillPlugged || isShortStillActive)) {
+      // Simulate real-life bounce-back: loud arc flash sound & trip sound!
+      homeguardAudio.playArcSizzleSound();
+      homeguardAudio.playBreakerTripSound();
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([100, 50, 150]);
+      }
       setHabitTip({
         type: 'warn',
-        text: '⚠️ UNPLUG HEATER FIRST! In real life, turning on a breaker with 23A of heaters still plugged in will cause a loud spark and trip right back in your face!'
+        text: isShortStillActive
+          ? '⚠️ BREAKER BOUNCED BACK! Crushed shorted wire is still connected. In real life, resetting into a short causes an explosive flash!'
+          : '⚠️ UNPLUG HEATER FIRST! Breaker bounced back! In real life, turning on into a 23A overload causes an electric spark in your face!'
       });
-      setTimeout(() => setHabitTip(null), 5000);
+      setTimeout(() => setHabitTip(null), 6000);
       return;
     }
     setHabitTip({
@@ -399,6 +461,38 @@ export const HomeGuardSimulator: React.FC = () => {
 
           {/* Quick Action Tools (Labeled for accessibility & clarity) */}
           <div className="flex items-center gap-1.5">
+            {/* 30-Second Guided Tour Button (Rec 6) */}
+            <button
+              type="button"
+              onClick={() => setIsTourModalOpen(true)}
+              className={cn(
+                "px-2 py-1 rounded-lg border transition-all cursor-pointer min-h-[30px] flex items-center gap-1 text-[11px] font-black",
+                presentationMode === 'simple'
+                  ? "bg-amber-400 text-amber-950 border-amber-500 shadow-sm"
+                  : "bg-cyan-950 border-cyan-700 text-cyan-300 hover:bg-cyan-900"
+              )}
+              title="Open 30-Second Interactive Guided Tour"
+            >
+              <span className="text-xs">🚀</span>
+              <span className="hidden lg:inline">30s Tour</span>
+            </button>
+
+            {/* Current Balance Gauge Button (Rec 7) */}
+            <button
+              type="button"
+              onClick={() => setIsBalanceGaugeOpen(true)}
+              className={cn(
+                "px-2 py-1 rounded-lg border transition-all cursor-pointer min-h-[30px] flex items-center gap-1 text-[11px] font-bold",
+                presentationMode === 'simple'
+                  ? "bg-white border-amber-300 text-amber-900 hover:bg-amber-50"
+                  : "bg-slate-800 border-slate-700 text-slate-300 hover:text-cyan-300"
+              )}
+              title="Open Water-Balance Flow Meter (Kirchhoff's Law)"
+            >
+              <span className="text-xs">⚖️</span>
+              <span className="hidden md:inline">Balance</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -582,6 +676,31 @@ export const HomeGuardSimulator: React.FC = () => {
           <VELCBComparisonModal
             isOpen={isVELCBLabOpen}
             onClose={() => setIsVELCBLabOpen(false)}
+          />
+        )}
+
+        {/* 30-Second Guided Tour Modal (Rec 6) */}
+        <HomeGuardTourModal
+          isOpen={isTourModalOpen}
+          onClose={() => setIsTourModalOpen(false)}
+        />
+
+        {/* Water-In vs Water-Out Balance Meter Modal (Rec 7) */}
+        <CurrentBalanceGauge
+          liveAmps={c2State.currentAmps + circuitStates.c3_kitchen_sockets.currentAmps + 1.5}
+          neutralAmps={isTripped ? 0 : (c2State.currentAmps + circuitStates.c3_kitchen_sockets.currentAmps + 1.5 - (leakageCurrentMA / 1000))}
+          leakageCurrentMA={leakageCurrentMA}
+          isTripped={isTripped}
+          isOpen={isBalanceGaugeOpen}
+          onClose={() => setIsBalanceGaugeOpen(false)}
+        />
+
+        {/* "What Just Happened?" 3-Beat Trip Explanation Card (Rec 8) */}
+        {tripType && !isWhatHappenedDismissed && (
+          <WhatJustHappenedCard
+            tripType={tripType}
+            onQuickFixReset={handleQuickFixReset}
+            onDismiss={() => setIsWhatHappenedDismissed(true)}
           />
         )}
       </Suspense>

@@ -592,7 +592,7 @@ NFPA 70E 2024 Category: PPE Category ${ppeCategory}`;
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute top-12 left-1/2 -translate-x-1/2 z-[100] px-3.5 py-1.5 rounded-xl bg-slate-900 border border-orange-500/80 text-orange-300 text-[11px] font-bold shadow-2xl flex items-center gap-2 pointer-events-none font-mono"
+            className="absolute top-12 right-4 sm:right-6 z-[100] px-3.5 py-1.5 rounded-xl bg-slate-900 border border-orange-500/80 text-orange-300 text-[11px] font-bold shadow-2xl flex items-center gap-2 pointer-events-none font-mono"
             aria-live="polite"
           >
             <Zap className="w-4 h-4 text-orange-400 shrink-0" />

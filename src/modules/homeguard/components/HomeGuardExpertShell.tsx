@@ -8,7 +8,7 @@
  * - Zero compromises for electrical engineers and technicians
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { IsometricHouseView } from './IsometricHouseView';
 import { HomeGuardSLDView } from './HomeGuardSLDView';
 import { DistributionBoard } from './DistributionBoard';
@@ -16,9 +16,11 @@ import { DeathRaceView } from './DeathRaceView';
 import { ToroidCoreVisualizer } from './ToroidCoreVisualizer';
 import { HomeGuardValidationTable } from './HomeGuardValidationTable';
 import { HOMEGUARD_PRESETS, HomeGuardPreset } from '../data/homeguardPresets';
+import { HOMEGUARD_APPLIANCES } from '../data/homeguardAppliances';
 import { BreakerConfigurationMode } from '../data/auditReportData';
 import { MissionAssessmentState } from '../data/assessmentStorage';
 import { CircuitStates, ScenarioProfile } from '../types/homeguard';
+import { HomeGuardKirchhoffTelemetry } from './HomeGuardKirchhoffTelemetry';
 import { calculateCircuitPower } from '../utils/homeguardMeters';
 import { cn } from '@/src/lib/utils';
 import {
@@ -36,7 +38,8 @@ import {
   Eye,
   ShieldCheck,
   ShieldAlert,
-  ClipboardCheck
+  ClipboardCheck,
+  RotateCcw
 } from 'lucide-react';
 
 export type HomeGuardVisualMode = 'house' | 'sld' | 'toroid' | 'death_race' | 'db_box';
@@ -94,6 +97,13 @@ export const HomeGuardExpertShell: React.FC<HomeGuardExpertShellProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<HomeGuardVisualMode>('house');
   const [isValidationTableOpen, setIsValidationTableOpen] = useState<boolean>(false);
+  const [leftControlTab, setLeftControlTab] = useState<'all' | 'presets' | 'appliances'>('all');
+  const [applianceRoomFilter, setApplianceRoomFilter] = useState<'all' | 'living' | 'kitchen' | 'bathroom' | 'bedroom'>('all');
+  const [toroidLeakageMA, setToroidLeakageMA] = useState<number>(selectedScenario.leakageCurrentMA || 0);
+
+  useEffect(() => {
+    setToroidLeakageMA(selectedScenario.leakageCurrentMA || 0);
+  }, [selectedScenario]);
 
   const c2State = circuitStates.c2_living_sockets;
   const rccbState = circuitStates.main_rccb;
@@ -110,9 +120,9 @@ export const HomeGuardExpertShell: React.FC<HomeGuardExpertShellProps> = ({
   return (
     <div className="flex-1 min-h-0 w-full h-full flex flex-col font-sans select-none overflow-hidden relative bg-slate-950 text-slate-100">
       
-      {/* Real-Life Safety Habit Feedback Banner */}
+      {/* Real-Life Safety Habit Feedback Banner (Rendered on top-right) */}
       {habitTip && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+        <div className="absolute top-2 right-4 sm:right-6 z-50 pointer-events-none">
           <div className={cn(
             "px-4 py-1.5 text-xs font-bold text-center border rounded-full flex items-center justify-center gap-2 animate-in fade-in slide-in-from-top-1 duration-150 shadow-xl pointer-events-auto",
             habitTip.type === 'warn'
@@ -127,260 +137,591 @@ export const HomeGuardExpertShell: React.FC<HomeGuardExpertShellProps> = ({
       {/* 3-Column Layout */}
       <div className="flex-1 min-h-0 w-full h-full flex flex-col lg:flex-row overflow-hidden">
         
-        {/* Left Column: Scenarios & Controls */}
-        <aside className="w-full lg:w-80 shrink-0 h-full overflow-y-auto p-2.5 bg-slate-900 border-r border-slate-800 flex flex-col justify-between space-y-3 select-none">
-          
-          {/* Section 1: Scenarios Picker */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                1. PICK A SCENARIO
-              </span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-bold text-amber-400 font-mono">
-                  {assessmentState.totalScore}/500 PTS
-                </span>
-                {assessmentState.completedPresetIds.length > 0 && onResetProgress && (
-                  <button
-                    type="button"
-                    onClick={onResetProgress}
-                    className="text-[9px] text-slate-400 hover:text-rose-300 underline cursor-pointer"
-                    title="Clear completed badges"
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-            </div>
+        {/* Left Column: All Controls & Inputs (Smart Zero-Scroll Layout) */}
+        <aside className="w-full lg:w-76 xl:w-80 shrink-0 h-full overflow-hidden p-2 bg-slate-900 border-r border-slate-800 flex flex-col justify-between space-y-1.5 select-none z-20">
+          {viewMode === 'toroid' ? (
+            /* ============================================================== */
+            /* SMART RCCB CONTROLLER (ZERO SCROLLERS, CLEAN & FOCUSED)        */
+            /* ============================================================== */
+            <div className="flex-1 flex flex-col justify-between space-y-2 select-none overflow-hidden">
+              <div className="space-y-2">
+                {/* Header */}
+                <div className="flex items-center gap-2 px-1 pb-1 border-b border-slate-800">
+                  <div className="w-6 h-6 rounded-lg bg-cyan-500/20 border border-cyan-500/50 flex items-center justify-center">
+                    <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-[11px] font-black text-white uppercase tracking-wider">RCCB CONTROLLER</h4>
+                    <span className="text-[9px] text-slate-400">Differential magnetic flux engine</span>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-1 gap-1">
-              {HOMEGUARD_PRESETS.map((preset, idx) => {
-                const isSelected = selectedPreset.id === preset.id;
-                const isPassed = assessmentState.completedPresetIds.includes(preset.id);
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => onSelectPreset(preset)}
-                    className={cn(
-                      "w-full text-left p-1.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-1.5",
-                      isSelected
-                        ? "bg-cyan-500/20 border-cyan-400 text-white shadow-sm ring-1 ring-cyan-400"
-                        : "bg-slate-950/60 border-slate-800 hover:border-slate-750 text-slate-300"
-                    )}
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <div className="w-5 h-5 rounded-md bg-slate-800 flex items-center justify-center shrink-0">
-                        {preset.chipLabel === 'NORMAL' && <ShieldCheck className="w-3 h-3 text-emerald-400" />}
-                        {preset.chipLabel === 'OVERLOAD' && <Flame className="w-3 h-3 text-amber-400" />}
-                        {preset.chipLabel === 'SHORT' && <Zap className="w-3 h-3 text-rose-400" />}
-                        {preset.chipLabel === 'CHILD SHOCK' && <HeartPulse className="w-3 h-3 text-rose-400" />}
-                        {preset.chipLabel === 'WET BATH' && <Droplets className="w-3 h-3 text-cyan-400" />}
-                        {preset.chipLabel === 'BROKEN EARTH' && <AlertTriangle className="w-3 h-3 text-yellow-400" />}
+                {/* Breaker Switch Lever */}
+                <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                    BREAKER SWITCH LEVER
+                  </span>
+                  {rccbState.state !== 'CLOSED' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSafeRecloseBreaker('c2_living_sockets');
+                        setToroidLeakageMA(0);
+                      }}
+                      className="w-full py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 animate-bounce cursor-pointer shadow-lg shadow-emerald-500/40"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>⬆ PUSH LEVER UP (RESET)</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex-1 py-1 px-2 rounded-lg bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 font-bold text-[10px] flex items-center justify-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>ARMED [I] (CLOSED)</span>
                       </div>
-                      <div className="min-w-0 leading-tight">
-                        <div className="text-[10px] font-bold truncate">
-                          {idx + 1}. {preset.chipLabel}
-                        </div>
-                        <div className="text-[8.5px] text-slate-400 font-sans truncate">
-                          {preset.id === 'preset_normal' && 'Standard Everyday Power (Safe)'}
-                          {preset.id === 'preset_overload' && 'Too Many Heaters (145%)'}
-                          {preset.id === 'preset_short' && 'Damaged Wire Touching'}
-                          {preset.id === 'preset_child_shock' && 'Baby Socket Touch (230mA)'}
-                          {preset.id === 'preset_wet_bath' && 'Wet Bathroom Leakage'}
-                          {preset.id === 'preset_broken_earth' && 'Broken Green Wire Trap'}
-                        </div>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setToroidLeakageMA(35);
+                          onSafeTestTripRCCB();
+                        }}
+                        className="py-1 px-2.5 rounded-lg bg-rose-950 hover:bg-rose-900 border border-rose-700 text-rose-300 font-black text-[10px] flex items-center gap-1 cursor-pointer"
+                        title="Internal test button across 3.3kΩ resistor"
+                      >
+                        <Zap className="w-3 h-3 text-rose-400" />
+                        <span>TEST 'T'</span>
+                      </button>
                     </div>
-
-                    {isSelected ? (
-                      <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black bg-cyan-400 text-slate-950 uppercase shrink-0">
-                        ACTIVE
-                      </span>
-                    ) : isPassed ? (
-                      <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-700/60 shrink-0">
-                        ✓ Done
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Section 2: Room Appliances Switches */}
-          <div className="pt-1 border-t border-slate-800 space-y-1">
-            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
-              2. ROOM APPLIANCES (TAP TO TOGGLE)
-            </span>
-
-            <div className="grid grid-cols-2 gap-1">
-              {/* Space Heater */}
-              <button
-                type="button"
-                onClick={() => onToggleAppliance('space_heater')}
-                className={cn(
-                  "p-1.5 rounded-lg border text-left transition-all cursor-pointer flex flex-col",
-                  activeApplianceIds.includes('space_heater')
-                    ? "bg-orange-950/70 border-orange-500 text-orange-200"
-                    : "bg-slate-950/60 border-slate-800 text-slate-400"
-                )}
-              >
-                <div className="flex items-center justify-between text-[10px] font-bold">
-                  <span>Heater</span>
-                  <span className={cn("text-[8px] px-1 rounded", activeApplianceIds.includes('space_heater') ? "bg-orange-500 text-slate-950 font-black" : "bg-slate-800")}>
-                    {activeApplianceIds.includes('space_heater') ? 'ON' : 'OFF'}
-                  </span>
+                  )}
                 </div>
-                <span className="text-[8px] font-sans text-orange-400 truncate">2,000W Heavy 🔴</span>
-              </button>
 
-              {/* Electric Kettle */}
-              <button
-                type="button"
-                onClick={() => onToggleAppliance('kettle')}
-                className={cn(
-                  "p-1.5 rounded-lg border text-left transition-all cursor-pointer flex flex-col",
-                  activeApplianceIds.includes('kettle')
-                    ? "bg-sky-950/70 border-sky-500 text-sky-200"
-                    : "bg-slate-950/60 border-slate-800 text-slate-400"
-                )}
-              >
-                <div className="flex items-center justify-between text-[10px] font-bold">
-                  <span>Kettle</span>
-                  <span className={cn("text-[8px] px-1 rounded", activeApplianceIds.includes('kettle') ? "bg-sky-500 text-slate-950 font-black" : "bg-slate-800")}>
-                    {activeApplianceIds.includes('kettle') ? 'ON' : 'OFF'}
+                {/* Fault Injection (4 Smart Buttons) */}
+                <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                    INJECT EARTH LEAKAGE (IΔ)
                   </span>
-                </div>
-                <span className="text-[8px] font-sans text-sky-400 truncate">2,200W Heavy 🔴</span>
-              </button>
+                  <div className="grid grid-cols-2 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setToroidLeakageMA(0);
+                        if (rccbState.state !== 'CLOSED') onSafeRecloseBreaker('c2_living_sockets');
+                      }}
+                      className={cn(
+                        "p-1.5 rounded-lg border text-[9.5px] font-bold transition-all cursor-pointer text-center",
+                        toroidLeakageMA === 0 && rccbState.state === 'CLOSED'
+                          ? "bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow"
+                          : "bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800"
+                      )}
+                    >
+                      🟢 0 mA (Normal)
+                    </button>
 
-              {/* TV Console */}
-              <button
-                type="button"
-                onClick={() => onToggleAppliance('tv_console')}
-                className={cn(
-                  "p-1.5 rounded-lg border text-left transition-all cursor-pointer flex flex-col",
-                  activeApplianceIds.includes('tv_console')
-                    ? "bg-emerald-950/70 border-emerald-500 text-emerald-200"
-                    : "bg-slate-950/60 border-slate-800 text-slate-400"
-                )}
-              >
-                <div className="flex items-center justify-between text-[10px] font-bold">
-                  <span>TV Unit</span>
-                  <span className={cn("text-[8px] px-1 rounded", activeApplianceIds.includes('tv_console') ? "bg-emerald-500 text-slate-950 font-black" : "bg-slate-800")}>
-                    {activeApplianceIds.includes('tv_console') ? 'ON' : 'OFF'}
-                  </span>
-                </div>
-                <span className="text-[8px] font-sans text-emerald-400 truncate">150W Light 🟢</span>
-              </button>
+                    <button
+                      type="button"
+                      onClick={() => setToroidLeakageMA(15)}
+                      className={cn(
+                        "p-1.5 rounded-lg border text-[9.5px] font-bold transition-all cursor-pointer text-center",
+                        toroidLeakageMA === 15 && rccbState.state === 'CLOSED'
+                          ? "bg-amber-500 text-slate-950 border-amber-400 font-black shadow"
+                          : "bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800"
+                      )}
+                      title="15mA leakage below 30mA threshold - safe no-trip"
+                    >
+                      🟡 15 mA (Safe)
+                    </button>
 
-              {/* Microwave */}
-              <button
-                type="button"
-                onClick={() => onToggleAppliance('microwave')}
-                className={cn(
-                  "p-1.5 rounded-lg border text-left transition-all cursor-pointer flex flex-col",
-                  activeApplianceIds.includes('microwave')
-                    ? "bg-amber-950/70 border-amber-500 text-amber-200"
-                    : "bg-slate-950/60 border-slate-800 text-slate-400"
-                )}
-              >
-                <div className="flex items-center justify-between text-[10px] font-bold">
-                  <span>Microwave</span>
-                  <span className={cn("text-[8px] px-1 rounded", activeApplianceIds.includes('microwave') ? "bg-amber-500 text-slate-950 font-black" : "bg-slate-800")}>
-                    {activeApplianceIds.includes('microwave') ? 'ON' : 'OFF'}
-                  </span>
-                </div>
-                <span className="text-[8px] font-sans text-amber-400 truncate">1,200W Med 🟡</span>
-              </button>
-            </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setToroidLeakageMA(35);
+                        if (rccbState.state !== 'CLOSED') onSafeRecloseBreaker('c2_living_sockets');
+                      }}
+                      className={cn(
+                        "p-1.5 rounded-lg border text-[9.5px] font-bold transition-all cursor-pointer text-center",
+                        toroidLeakageMA === 35
+                          ? "bg-rose-600 text-white border-rose-500 font-black shadow-[0_0_12px_rgba(225,29,72,0.5)]"
+                          : "bg-slate-900 text-rose-300 border-rose-900/60 hover:bg-slate-800"
+                      )}
+                      title="35mA human contact - causes 28ms magnetic trip"
+                    >
+                      🔴 35 mA (Trip!)
+                    </button>
 
-            {/* Multi-Plug Extension Strip Toggle */}
-            <button
-              type="button"
-              onClick={onToggleDaisyChain}
-              className={cn(
-                "w-full px-2 py-1 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between text-[10px] font-bold",
-                isDaisyChainActive
-                  ? "bg-rose-950/70 border-rose-500 text-rose-200 shadow-sm"
-                  : "bg-slate-950/60 border-slate-800 text-slate-400"
-              )}
-            >
-              <div className="flex items-center gap-1 truncate">
-                <span>🔌 Multi-Plug Strip:</span>
-                <span className={isDaisyChainActive ? "text-rose-300 font-black" : "text-slate-500"}>
-                  {isDaisyChainActive ? 'PLUGGED IN' : 'UNPLUGGED'}
-                </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setToroidLeakageMA(150);
+                        if (rccbState.state !== 'CLOSED') onSafeRecloseBreaker('c2_living_sockets');
+                      }}
+                      className={cn(
+                        "p-1.5 rounded-lg border text-[9.5px] font-bold transition-all cursor-pointer text-center",
+                        toroidLeakageMA === 150
+                          ? "bg-purple-600 text-white border-purple-500 font-black shadow"
+                          : "bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800"
+                      )}
+                      title="150mA direct bolted contact"
+                    >
+                      ⚡ 150 mA (Direct)
+                    </button>
+                  </div>
+
+                  {/* Slider Control */}
+                  <div className="pt-1 flex items-center gap-2">
+                    <input
+                      type="range"
+                      min="0"
+                      max="200"
+                      step="5"
+                      value={toroidLeakageMA}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setToroidLeakageMA(val);
+                      }}
+                      className="w-full accent-rose-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                    />
+                    <span className={cn(
+                      "font-mono font-bold text-[10.5px] min-w-[48px] text-right",
+                      toroidLeakageMA >= 30 ? "text-rose-400" : toroidLeakageMA > 0 ? "text-amber-400" : "text-emerald-400"
+                    )}>
+                      {toroidLeakageMA} mA
+                    </span>
+                  </div>
+                </div>
               </div>
-              <span className="text-[8.5px] font-mono text-amber-400 shrink-0">
-                {isDaisyChainActive ? 'TRAP ACTIVE' : 'TEST TRAP'}
-              </span>
-            </button>
-          </div>
 
-          {/* Section 3: Consumer Unit Panel Type */}
-          <div className="pt-1 border-t border-slate-800 space-y-1">
-            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
-              3. DB PANEL SAFETY SWITCH
-            </span>
-
-            <div className="grid grid-cols-3 gap-1">
-              {[
-                { id: 'rccb_mcb', label: 'Modern RCCB', note: 'Safe' },
-                { id: 'mcb_only', label: 'MCB Only', note: 'No Shock' },
-                { id: 'velcb', label: '1980s v-ELCB', note: 'Trap' }
-              ].map(cfg => (
+              {/* Physics Principle Card */}
+              <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-[9.5px] text-slate-300 space-y-1">
+                <div className="font-bold text-cyan-400 uppercase tracking-wide">HOW IT WORKS</div>
+                <p className="leading-tight text-slate-400 font-sans">
+                  The toroid ring compares Going and Return current. When difference ≥ 30mA, trip coil cancels holding magnet and snaps power in ≤ 0.03s!
+                </p>
+              </div>
+            </div>
+          ) : (
+            /* ============================================================== */
+            /* STANDARD HOMEGUARD ALL CONTROLS (ZERO SCROLLERS, SMART LAYOUT) */
+            /* ============================================================== */
+            <div className="flex flex-col flex-1 min-h-0 justify-between space-y-1 overflow-hidden">
+              
+              {/* Top View Filter Tabs */}
+              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800 text-[10px] font-bold shrink-0 shadow-inner">
                 <button
-                  key={cfg.id}
                   type="button"
-                  onClick={() => onChangeBreakerMode(cfg.id as BreakerConfigurationMode)}
+                  onClick={() => setLeftControlTab('all')}
                   className={cn(
-                    "text-center py-1 px-1 rounded-md border text-[9.5px] transition-all cursor-pointer flex flex-col items-center justify-center leading-tight",
-                    breakerMode === cfg.id
-                      ? "bg-cyan-500 text-slate-950 border-cyan-400 font-black shadow-sm"
-                      : "bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white"
+                    "flex-1 py-1 px-1 rounded transition-all cursor-pointer flex items-center justify-center gap-1 text-[9.5px]",
+                    leftControlTab === 'all' ? "bg-cyan-500 text-slate-950 font-black shadow" : "text-slate-400 hover:text-white"
                   )}
                 >
-                  <span className="truncate w-full">{cfg.label}</span>
-                  <span className="text-[7.5px] opacity-80 truncate">{cfg.note}</span>
+                  <span>🎛️ All Inputs</span>
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setLeftControlTab('presets')}
+                  className={cn(
+                    "flex-1 py-1 px-1 rounded transition-all cursor-pointer flex items-center justify-center gap-1 text-[9.5px]",
+                    leftControlTab === 'presets' ? "bg-cyan-500 text-slate-950 font-black shadow" : "text-slate-400 hover:text-white"
+                  )}
+                >
+                  <span>🎯 Presets (6)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeftControlTab('appliances')}
+                  className={cn(
+                    "flex-1 py-1 px-1 rounded transition-all cursor-pointer flex items-center justify-center gap-1 text-[9.5px]",
+                    leftControlTab === 'appliances' ? "bg-cyan-500 text-slate-950 font-black shadow" : "text-slate-400 hover:text-white"
+                  )}
+                >
+                  <span>🔌 Loads ({activeApplianceIds.length})</span>
+                </button>
+              </div>
+
+              {/* ── MODE 1: ALL-IN-ONE COMPACT CONSOLE (NO SCROLLING) ── */}
+              {leftControlTab === 'all' && (
+                <div className="flex-1 min-h-0 flex flex-col justify-between space-y-1 overflow-hidden">
+                  {/* Section 1: Scenarios Compact 2x3 Grid */}
+                  <div className="space-y-0.5 shrink-0">
+                    <div className="flex items-center justify-between px-0.5">
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-400">
+                        1. SCENARIOS (6)
+                      </span>
+                      <span className="text-[8px] font-mono text-amber-400">
+                        {assessmentState.completedPresetIds.length}/5 Passed
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                      {HOMEGUARD_PRESETS.map((preset, idx) => {
+                        const isSelected = selectedPreset.id === preset.id;
+                        const isPassed = assessmentState.completedPresetIds.includes(preset.id);
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => onSelectPreset(preset)}
+                            className={cn(
+                              "w-full text-left py-1 px-1.5 rounded-md border transition-all cursor-pointer flex items-center justify-between gap-1",
+                              isSelected
+                                ? "bg-cyan-500/25 border-cyan-400 text-white font-bold ring-1 ring-cyan-400"
+                                : "bg-slate-950/70 border-slate-800 hover:border-slate-700 text-slate-300"
+                            )}
+                          >
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="text-[10px]">
+                                {preset.chipLabel === 'NORMAL' && '🛡️'}
+                                {preset.chipLabel === 'OVERLOAD' && '🔥'}
+                                {preset.chipLabel === 'SHORT' && '⚡'}
+                                {preset.chipLabel === 'CHILD SHOCK' && '👶'}
+                                {preset.chipLabel === 'WET BATH' && '💧'}
+                                {preset.chipLabel === 'BROKEN EARTH' && '⚠️'}
+                              </span>
+                              <span className="text-[9px] font-bold truncate">
+                                {idx + 1}. {preset.chipLabel}
+                              </span>
+                            </div>
+                            {isSelected ? (
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping shrink-0" />
+                            ) : isPassed ? (
+                              <span className="text-[8px] text-emerald-400 font-black shrink-0">✓</span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Section 2: Room Filter + Appliances Grid */}
+                  <div className="flex-1 min-h-0 flex flex-col justify-between space-y-0.5 overflow-hidden">
+                    <div className="flex items-center justify-between px-0.5">
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-400">
+                        2. APPLIANCES ({activeApplianceIds.length} ACTIVE)
+                      </span>
+                      <span className="text-[8px] font-mono text-cyan-400">
+                        {livingRoomWatts}W ({livingRoomCurrent.toFixed(1)}A)
+                      </span>
+                    </div>
+
+                    {/* Compact Room Filter */}
+                    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
+                      {(['all', 'living', 'kitchen', 'bathroom', 'bedroom'] as const).map(room => (
+                        <button
+                          key={room}
+                          type="button"
+                          onClick={() => setApplianceRoomFilter(room)}
+                          className={cn(
+                            "px-1.5 py-0.2 rounded text-[8px] font-bold capitalize transition-all cursor-pointer whitespace-nowrap",
+                            applianceRoomFilter === room
+                              ? "bg-cyan-500 text-slate-950 font-black"
+                              : "bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200"
+                          )}
+                        >
+                          {room === 'all' ? 'All (10)' : room}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* 2-Column Compact Appliances Grid */}
+                    <div className="grid grid-cols-2 gap-1 flex-1 min-h-0 overflow-hidden">
+                      {HOMEGUARD_APPLIANCES
+                        .filter(app => applianceRoomFilter === 'all' || app.room === applianceRoomFilter)
+                        .slice(0, applianceRoomFilter === 'all' ? 10 : 6)
+                        .map(app => {
+                          const isActive = activeApplianceIds.includes(app.id);
+                          return (
+                            <button
+                              key={app.id}
+                              type="button"
+                              onClick={() => onToggleAppliance(app.id)}
+                              className={cn(
+                                "py-0.5 px-1.5 rounded-md border text-left transition-all cursor-pointer flex items-center justify-between gap-1",
+                                isActive
+                                  ? "bg-slate-900 border-emerald-500/80 text-white shadow-xs ring-1 ring-emerald-500/40"
+                                  : "bg-slate-950/60 border-slate-850 text-slate-400 hover:border-slate-700"
+                              )}
+                            >
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className="text-xs shrink-0">{app.icon}</span>
+                                <div className="min-w-0 leading-none">
+                                  <div className="text-[8.5px] font-bold text-slate-200 truncate">
+                                    {app.shortName}
+                                  </div>
+                                  <span className="text-[7.5px] text-slate-400 font-mono">
+                                    {app.watts}W
+                                  </span>
+                                </div>
+                              </div>
+                              <span className={cn(
+                                "text-[7.5px] px-1 py-0.2 rounded font-black shrink-0",
+                                isActive ? "bg-emerald-500 text-slate-950" : "bg-slate-800 text-slate-400"
+                              )}>
+                                {isActive ? 'ON' : 'OFF'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+
+                    {/* Compact Extension Strip Button */}
+                    <button
+                      type="button"
+                      onClick={onToggleDaisyChain}
+                      className={cn(
+                        "w-full px-2 py-0.5 rounded-md border text-left transition-all cursor-pointer flex items-center justify-between text-[9px] font-bold shrink-0",
+                        isDaisyChainActive
+                          ? "bg-rose-950/70 border-rose-500 text-rose-200"
+                          : "bg-slate-950/60 border-slate-800 text-slate-400"
+                      )}
+                    >
+                      <div className="flex items-center gap-1 truncate">
+                        <span>🔌 Multi-Plug Strip:</span>
+                        <span className={isDaisyChainActive ? "text-rose-300 font-black" : "text-slate-500"}>
+                          {isDaisyChainActive ? 'PLUGGED IN' : 'UNPLUGGED'}
+                        </span>
+                      </div>
+                      <span className="text-[8px] font-mono text-amber-400 shrink-0">
+                        {isDaisyChainActive ? '⚠️ TRAP' : 'TEST TRAP'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── MODE 2: FOCUSED PRESETS (EXPANDED DESCRIPTIONS) ── */}
+              {leftControlTab === 'presets' && (
+                <div className="flex-1 min-h-0 flex flex-col justify-between space-y-1 overflow-hidden">
+                  <div className="flex items-center justify-between px-1 shrink-0">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                      GUIDED FAULT MISSIONS
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[8.5px] font-bold text-amber-400 font-mono">
+                        {assessmentState.totalScore}/500 PTS
+                      </span>
+                      {assessmentState.completedPresetIds.length > 0 && onResetProgress && (
+                        <button
+                          type="button"
+                          onClick={onResetProgress}
+                          className="text-[8.5px] text-slate-400 hover:text-rose-300 underline cursor-pointer"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-1 flex-1 min-h-0 overflow-hidden">
+                    {HOMEGUARD_PRESETS.map((preset, idx) => {
+                      const isSelected = selectedPreset.id === preset.id;
+                      const isPassed = assessmentState.completedPresetIds.includes(preset.id);
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => onSelectPreset(preset)}
+                          className={cn(
+                            "w-full text-left p-1.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-1.5",
+                            isSelected
+                              ? "bg-cyan-500/25 border-cyan-400 text-white shadow-xs ring-1 ring-cyan-400"
+                              : "bg-slate-950/60 border-slate-800 hover:border-slate-750 text-slate-300"
+                          )}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div className="w-5 h-5 rounded-md bg-slate-800 flex items-center justify-center shrink-0">
+                              {preset.chipLabel === 'NORMAL' && <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />}
+                              {preset.chipLabel === 'OVERLOAD' && <Flame className="w-3.5 h-3.5 text-amber-400" />}
+                              {preset.chipLabel === 'SHORT' && <Zap className="w-3.5 h-3.5 text-rose-400" />}
+                              {preset.chipLabel === 'CHILD SHOCK' && <HeartPulse className="w-3.5 h-3.5 text-rose-400" />}
+                              {preset.chipLabel === 'WET BATH' && <Droplets className="w-3.5 h-3.5 text-cyan-400" />}
+                              {preset.chipLabel === 'BROKEN EARTH' && <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />}
+                            </div>
+                            <div className="min-w-0 leading-tight">
+                              <div className="text-[9.5px] font-bold truncate">
+                                {idx + 1}. {preset.chipLabel}
+                              </div>
+                              <div className="text-[8px] text-slate-400 font-sans truncate">
+                                {preset.id === 'preset_normal' && 'Standard Everyday Power (Safe)'}
+                                {preset.id === 'preset_overload' && 'Too Many Heaters (145%)'}
+                                {preset.id === 'preset_short' && 'Damaged Wire Touching'}
+                                {preset.id === 'preset_child_shock' && 'Baby Socket Touch (230mA)'}
+                                {preset.id === 'preset_wet_bath' && 'Wet Bathroom Leakage'}
+                                {preset.id === 'preset_broken_earth' && 'Broken Green Wire Trap'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {isSelected ? (
+                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-cyan-400 text-slate-950 uppercase shrink-0">
+                              ACTIVE
+                            </span>
+                          ) : isPassed ? (
+                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-700/60 shrink-0">
+                              ✓ Done
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── MODE 3: FOCUSED SWITCHBOARD (EXPANDED APPLIANCES) ── */}
+              {leftControlTab === 'appliances' && (
+                <div className="flex-1 min-h-0 flex flex-col justify-between space-y-1 overflow-hidden">
+                  <div className="flex items-center justify-between px-1 shrink-0">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                      ROOM APPLIANCES ({activeApplianceIds.length} ACTIVE)
+                    </span>
+                    <span className="text-[8.5px] font-mono text-cyan-400">
+                      10 Total
+                    </span>
+                  </div>
+
+                  {/* Room Filters */}
+                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
+                    {(['all', 'living', 'kitchen', 'bathroom', 'bedroom'] as const).map(room => (
+                      <button
+                        key={room}
+                        type="button"
+                        onClick={() => setApplianceRoomFilter(room)}
+                        className={cn(
+                          "px-2 py-0.5 rounded text-[8.5px] font-bold capitalize transition-all cursor-pointer whitespace-nowrap",
+                          applianceRoomFilter === room
+                            ? "bg-cyan-500 text-slate-950 font-black shadow-xs"
+                            : "bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200"
+                        )}
+                      >
+                        {room === 'all' ? 'All (10)' : room}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 2-Column Grid */}
+                  <div className="grid grid-cols-2 gap-1 flex-1 min-h-0 overflow-hidden">
+                    {HOMEGUARD_APPLIANCES
+                      .filter(app => applianceRoomFilter === 'all' || app.room === applianceRoomFilter)
+                      .slice(0, applianceRoomFilter === 'all' ? 10 : 6)
+                      .map(app => {
+                        const isActive = activeApplianceIds.includes(app.id);
+                        return (
+                          <button
+                            key={app.id}
+                            type="button"
+                            onClick={() => onToggleAppliance(app.id)}
+                            className={cn(
+                              "p-1 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between gap-1",
+                              isActive
+                                ? "bg-slate-900 border-emerald-500/80 text-white shadow-xs ring-1 ring-emerald-500/40"
+                                : "bg-slate-950/60 border-slate-850 text-slate-400 hover:border-slate-700"
+                            )}
+                          >
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="text-base shrink-0">{app.icon}</span>
+                              <div className="min-w-0 leading-tight">
+                                <div className="text-[9px] font-bold text-slate-200 truncate">{app.shortName}</div>
+                                <span className="text-[8px] font-mono text-slate-400">{app.watts}W</span>
+                              </div>
+                            </div>
+                            <span className={cn(
+                              "text-[8px] px-1 py-0.2 rounded font-black shrink-0",
+                              isActive ? "bg-emerald-500 text-slate-950" : "bg-slate-800 text-slate-400"
+                            )}>
+                              {isActive ? 'ON' : 'OFF'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                  </div>
+
+                  {/* Multi-Plug Extension Strip */}
+                  <button
+                    type="button"
+                    onClick={onToggleDaisyChain}
+                    className={cn(
+                      "w-full px-2 py-1 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between text-[9.5px] font-bold shrink-0",
+                      isDaisyChainActive
+                        ? "bg-rose-950/70 border-rose-500 text-rose-200 shadow-xs"
+                        : "bg-slate-950/60 border-slate-800 text-slate-400"
+                    )}
+                  >
+                    <div className="flex items-center gap-1 truncate">
+                      <span>🔌 Multi-Plug Strip:</span>
+                      <span className={isDaisyChainActive ? "text-rose-300 font-black" : "text-slate-500"}>
+                        {isDaisyChainActive ? 'PLUGGED IN' : 'UNPLUGGED'}
+                      </span>
+                    </div>
+                    <span className="text-[8px] font-mono text-amber-400 shrink-0">
+                      {isDaisyChainActive ? 'TRAP ACTIVE' : 'TEST TRAP'}
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {/* ── SECTION 3: DB PANEL SAFETY SWITCH (PERMANENT, ZERO SCROLL) ── */}
+              <div className="pt-1 border-t border-slate-800 space-y-0.5 shrink-0">
+                <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-400 block px-0.5">
+                  3. DB PANEL SAFETY SWITCH
+                </span>
+
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { id: 'rccb_mcb', label: 'Modern RCCB', note: 'Safe' },
+                    { id: 'mcb_only', label: 'MCB Only', note: 'No Shock' },
+                    { id: 'velcb', label: '1980s v-ELCB', note: 'Trap' }
+                  ].map(cfg => (
+                    <button
+                      key={cfg.id}
+                      type="button"
+                      onClick={() => onChangeBreakerMode(cfg.id as BreakerConfigurationMode)}
+                      className={cn(
+                        "text-center py-1 px-1 rounded-md border text-[9px] transition-all cursor-pointer flex flex-col items-center justify-center leading-none",
+                        breakerMode === cfg.id
+                          ? "bg-cyan-500 text-slate-950 border-cyan-400 font-black shadow-xs"
+                          : "bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white"
+                      )}
+                    >
+                      <span className="truncate w-full">{cfg.label}</span>
+                      <span className="text-[7.5px] opacity-80 truncate mt-0.5">{cfg.note}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── SECTION 4: MANUAL BREAKER ACTIONS (PERMANENT, ZERO SCROLL) ── */}
+              <div className="pt-0.5 border-t border-slate-800 space-y-0.5 shrink-0">
+                <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-400 block px-0.5">
+                  4. MANUAL BREAKER ACTIONS
+                </span>
+
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onSafeRecloseBreaker('c2_living_sockets')}
+                    className={cn(
+                      "py-1 px-1.5 rounded-lg text-center transition-all cursor-pointer font-black text-[9.5px] flex flex-col items-center justify-center border shadow-xs leading-none",
+                      isTripped
+                        ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-400 animate-pulse"
+                        : "bg-slate-800 text-slate-400 border-slate-700"
+                    )}
+                  >
+                    <span>⬆ RESET POWER</span>
+                    <span className="text-[7.5px] font-sans font-normal opacity-90 mt-0.5">Push Switch UP</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onSafeTestTripRCCB}
+                    className="py-1 px-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[9.5px] text-center transition-all cursor-pointer flex flex-col items-center justify-center border border-amber-400 shadow-xs leading-none"
+                  >
+                    <span>🟡 TEST 'T' BUTTON</span>
+                    <span className="text-[7.5px] font-sans font-normal opacity-90 mt-0.5">Test Tripping</span>
+                  </button>
+                </div>
+              </div>
+
             </div>
-          </div>
-
-          {/* Section 4: Breaker Actions */}
-          <div className="pt-1 border-t border-slate-800 space-y-1">
-            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
-              4. MANUAL BREAKER ACTIONS
-            </span>
-
-            <div className="grid grid-cols-2 gap-1">
-              <button
-                type="button"
-                onClick={() => onSafeRecloseBreaker('c2_living_sockets')}
-                className={cn(
-                  "p-1.5 rounded-lg text-center transition-all cursor-pointer font-black text-[10px] flex flex-col items-center justify-center border shadow-sm leading-tight",
-                  isTripped
-                    ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-400 animate-pulse"
-                    : "bg-slate-800 text-slate-400 border-slate-700"
-                )}
-              >
-                <span>⬆ RESET POWER</span>
-                <span className="text-[8px] font-sans font-normal opacity-90">Push Switch UP</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={onSafeTestTripRCCB}
-                className="p-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10px] text-center transition-all cursor-pointer flex flex-col items-center justify-center border border-amber-400 shadow-sm leading-tight"
-              >
-                <span>🟡 TEST 'T' BUTTON</span>
-                <span className="text-[8px] font-sans font-normal opacity-90">Test Tripping</span>
-              </button>
-            </div>
-          </div>
-
+          )}
         </aside>
 
         {/* ── CENTER COLUMN: VISUAL SIMULATOR VIEWPORT ── */}
@@ -505,10 +846,14 @@ export const HomeGuardExpertShell: React.FC<HomeGuardExpertShellProps> = ({
             {viewMode === 'toroid' && (
               <div className="w-full h-full p-1 overflow-hidden flex flex-col">
                 <ToroidCoreVisualizer
-                  initialLeakageMA={selectedScenario.leakageCurrentMA}
+                  leakageMA={toroidLeakageMA}
                   rccbRatingMA={30}
-                  isExternalTripped={rccbState.state !== 'CLOSED'}
+                  isTripped={rccbState.state !== 'CLOSED'}
                   onTrip={onSafeTestTripRCCB}
+                  onReset={() => {
+                    onSafeRecloseBreaker('c2_living_sockets');
+                    setToroidLeakageMA(0);
+                  }}
                   className="flex-1 w-full h-full overflow-hidden"
                 />
               </div>
@@ -539,11 +884,11 @@ export const HomeGuardExpertShell: React.FC<HomeGuardExpertShellProps> = ({
         </main>
 
         {/* ── RIGHT COLUMN: RESULTS, STATUS & TELEMETRY ── */}
-        <aside className="w-full lg:w-72 xl:w-78 shrink-0 h-full overflow-hidden p-2 bg-slate-900/95 border-l border-slate-800 flex flex-col justify-between select-none">
+        <aside className="w-full lg:w-72 xl:w-78 shrink-0 h-full overflow-y-auto custom-scrollbar p-2 bg-slate-900/95 border-l border-slate-800 flex flex-col gap-2 select-none">
           
           {/* Section 1: Live Verdict Banner */}
           <div className={cn(
-            "p-2 rounded-xl border flex flex-col gap-1 shadow-sm",
+            "p-2 rounded-xl border flex flex-col gap-1 shadow-sm shrink-0",
             isTripped
               ? "bg-rose-950/70 border-rose-500 text-rose-100"
               : isOverloaded
@@ -584,6 +929,15 @@ export const HomeGuardExpertShell: React.FC<HomeGuardExpertShellProps> = ({
                 : 'Current within safe 16A limit. Magnetic and thermal trip standing by.'}
             </p>
           </div>
+
+          {/* Section 1.5: Kirchhoff Physical Flow & Output Telemetry */}
+          <HomeGuardKirchhoffTelemetry
+            circuitStates={circuitStates}
+            activeApplianceIds={activeApplianceIds}
+            scenarioId={selectedScenario.id}
+            isCompact={true}
+            className="shrink-0"
+          />
 
           {/* Section 2: Live Socket Power Speedometer & Meters */}
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2 space-y-1.5">

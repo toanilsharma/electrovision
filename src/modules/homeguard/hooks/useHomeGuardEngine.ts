@@ -24,7 +24,11 @@ export interface CircuitState {
   remainingTripTimeSec: number;
 }
 
-export function useHomeGuardEngine(initialScenarioId: string = 'normal_living', dynamicC2Amps?: number) {
+export function useHomeGuardEngine(
+  initialScenarioId: string = 'normal_living',
+  dynamicC2Amps?: number,
+  dynamicC3Amps?: number
+) {
   const [selectedScenario, setSelectedScenario] = useState<ResidentialScenario>(() => {
     return RESIDENTIAL_SCENARIOS.find(s => s.id === initialScenarioId) || RESIDENTIAL_SCENARIOS[0];
   });
@@ -67,8 +71,8 @@ export function useHomeGuardEngine(initialScenarioId: string = 'normal_living', 
     enginesRef.current.c3 = createMCB({ In: 16, curve: 'C', ambientTemp: 30 });
     enginesRef.current.rccb = createRCD({ iDeltaN: 30 });
 
-    const c2Current = scenario.targetCircuitId === 'c2_living_sockets' ? scenario.totalLoadAmps : 4.2;
-    const c3Current = scenario.targetCircuitId === 'c3_kitchen_sockets' ? scenario.totalLoadAmps : 2.0;
+    const c2Current = scenario.targetCircuitId === 'c2_living_sockets' ? scenario.totalLoadAmps : (dynamicC2Amps ?? 4.2);
+    const c3Current = scenario.targetCircuitId === 'c3_kitchen_sockets' ? scenario.totalLoadAmps : (dynamicC3Amps ?? 2.0);
 
     // Calculate theoretical trip time on c2 using the exact calibrated bimetal thermal model
     let countdown = Infinity;
@@ -90,7 +94,7 @@ export function useHomeGuardEngine(initialScenarioId: string = 'normal_living', 
     });
 
     setIsSimulating(true);
-  }, []);
+  }, [dynamicC2Amps, dynamicC3Amps]);
 
   // Sync mute with soundKit
   useEffect(() => {
@@ -132,7 +136,7 @@ export function useHomeGuardEngine(initialScenarioId: string = 'normal_living', 
     }));
   }, []);
 
-  // Simulation physics step loop
+  // Simulation physics step loop (Multi-branch C2 and C3)
   useEffect(() => {
     if (!isSimulating) return;
 
@@ -143,26 +147,37 @@ export function useHomeGuardEngine(initialScenarioId: string = 'normal_living', 
       const deltaSec = (time - lastTime) / 1000;
       lastTime = time;
 
+      const isC1Tripped = circuitStates.c1_lighting.state !== MCBState.CLOSED;
       const isC2Tripped = circuitStates.c2_living_sockets.state !== MCBState.CLOSED;
+      const isC3Tripped = circuitStates.c3_kitchen_sockets.state !== MCBState.CLOSED;
       const isRCCBTripped = circuitStates.main_rccb.state !== MCBState.CLOSED;
 
-      // Current values (Physics Synced: Short Circuit = 250A, otherwise live active load or scenario load)
-      const baseLoad = dynamicC2Amps !== undefined ? dynamicC2Amps : (
+      // ── Branch C2 (Living Room) ──
+      const baseLoadC2 = dynamicC2Amps !== undefined ? dynamicC2Amps : (
         selectedScenario.targetCircuitId === 'c2_living_sockets' ? selectedScenario.totalLoadAmps : 4.2
       );
-
       const c2TargetCurrent = isC2Tripped || isRCCBTripped
         ? 0
-        : selectedScenario.faultType === 'short_circuit'
+        : selectedScenario.faultType === 'short_circuit' && selectedScenario.targetCircuitId === 'c2_living_sockets'
         ? 250.0
-        : baseLoad;
+        : baseLoadC2;
 
-      // Step c2 engine with dt scaled by timeLapseSpeed
+      // ── Branch C3 (Kitchen Heavy Sockets) ──
+      const baseLoadC3 = dynamicC3Amps !== undefined ? dynamicC3Amps : (
+        selectedScenario.targetCircuitId === 'c3_kitchen_sockets' ? selectedScenario.totalLoadAmps : 2.0
+      );
+      const c3TargetCurrent = isC3Tripped || isRCCBTripped
+        ? 0
+        : selectedScenario.faultType === 'short_circuit' && selectedScenario.targetCircuitId === 'c3_kitchen_sockets'
+        ? 250.0
+        : baseLoadC3;
+
+      const dt = Math.min(2.0, deltaSec * timeLapseSpeed);
+
+      // Step C2 Engine
       if (!isC2Tripped && !isRCCBTripped) {
-        const dt = Math.min(2.0, deltaSec * timeLapseSpeed);
         const snapC2 = enginesRef.current.c2.step(dt, c2TargetCurrent);
 
-        // Check if C2 tripped this frame
         if (snapC2.state !== MCBState.CLOSED) {
           const isShort = snapC2.tripCause === TripCause.MAGNETIC || snapC2.tripCause === TripCause.MAGNETIC_TOLERANCE_ZONE;
           defaultSoundKit.playTrip(isShort);
@@ -180,7 +195,6 @@ export function useHomeGuardEngine(initialScenarioId: string = 'normal_living', 
           }));
           setLivingCountdownSec(0);
         } else {
-          // Update live thermal temperature and remaining countdown
           const model = enginesRef.current.c2.getRawSimulator().getThermalModel();
           const rem = Math.max(0, model.calculateTheoreticalTripTime(c2TargetCurrent, 30) - snapC2.time);
           setLivingCountdownSec(rem);
@@ -189,36 +203,95 @@ export function useHomeGuardEngine(initialScenarioId: string = 'normal_living', 
             ...prev,
             c2_living_sockets: {
               ...prev.c2_living_sockets,
+              currentAmps: c2TargetCurrent,
               temperatureC: snapC2.thermal.temperature,
               remainingTripTimeSec: rem
             }
           }));
         }
+      }
 
-        // Check Earth Leakage on RCCB
-        if (selectedScenario.faultType === 'earth_leakage' && selectedScenario.leakageCurrentMA) {
-          const rcdResult = enginesRef.current.rccb.evaluate(selectedScenario.leakageCurrentMA);
-          if (rcdResult.shouldTrip) {
-            defaultSoundKit.playTrip(false);
-            setCircuitStates(prev => ({
-              ...prev,
-              main_rccb: {
-                ...prev.main_rccb,
-                state: MCBState.OPEN_CLEARED,
-                tripCause: 'RESIDUAL_LEAKAGE',
-                currentAmps: 0
-              }
-            }));
-          }
+      // Step C3 Engine (Kitchen)
+      if (!isC3Tripped && !isRCCBTripped) {
+        const snapC3 = enginesRef.current.c3.step(dt, c3TargetCurrent);
+
+        if (snapC3.state !== MCBState.CLOSED) {
+          const isShort = snapC3.tripCause === TripCause.MAGNETIC || snapC3.tripCause === TripCause.MAGNETIC_TOLERANCE_ZONE;
+          defaultSoundKit.playTrip(isShort);
+
+          setCircuitStates(prev => ({
+            ...prev,
+            c3_kitchen_sockets: {
+              ...prev.c3_kitchen_sockets,
+              state: snapC3.state,
+              tripCause: snapC3.tripCause,
+              currentAmps: 0,
+              temperatureC: snapC3.thermal.temperature,
+              remainingTripTimeSec: 0
+            }
+          }));
+        } else {
+          setCircuitStates(prev => ({
+            ...prev,
+            c3_kitchen_sockets: {
+              ...prev.c3_kitchen_sockets,
+              currentAmps: c3TargetCurrent,
+              temperatureC: snapC3.thermal.temperature
+            }
+          }));
         }
       }
+
+      // Check Earth Leakage on RCCB
+      if (!isRCCBTripped && selectedScenario.faultType === 'earth_leakage' && selectedScenario.leakageCurrentMA) {
+        const rcdResult = enginesRef.current.rccb.evaluate(selectedScenario.leakageCurrentMA);
+        if (rcdResult.shouldTrip) {
+          defaultSoundKit.playTrip(false);
+          setCircuitStates(prev => ({
+            ...prev,
+            main_rccb: {
+              ...prev.main_rccb,
+              state: MCBState.OPEN_CLEARED,
+              tripCause: 'RESIDUAL_LEAKAGE',
+              currentAmps: 0
+            }
+          }));
+        }
+      }
+
+      // Update total incomer RCCB current
+      const liveC1 = isC1Tripped || isRCCBTripped ? 0 : 1.5;
+      const liveC2 = isC2Tripped || isRCCBTripped ? 0 : c2TargetCurrent;
+      const liveC3 = isC3Tripped || isRCCBTripped ? 0 : c3TargetCurrent;
+      const totalIncomerCurrent = isRCCBTripped ? 0 : Number((liveC1 + liveC2 + liveC3).toFixed(1));
+
+      setCircuitStates(prev => {
+        if (prev.main_rccb.currentAmps === totalIncomerCurrent) return prev;
+        return {
+          ...prev,
+          main_rccb: {
+            ...prev.main_rccb,
+            currentAmps: totalIncomerCurrent
+          }
+        };
+      });
 
       animId = requestAnimationFrame(loop);
     };
 
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [isSimulating, selectedScenario, timeLapseSpeed, circuitStates.c2_living_sockets.state, circuitStates.main_rccb.state]);
+  }, [
+    isSimulating,
+    selectedScenario,
+    timeLapseSpeed,
+    dynamicC2Amps,
+    dynamicC3Amps,
+    circuitStates.c1_lighting.state,
+    circuitStates.c2_living_sockets.state,
+    circuitStates.c3_kitchen_sockets.state,
+    circuitStates.main_rccb.state
+  ]);
 
   return {
     selectedScenario,

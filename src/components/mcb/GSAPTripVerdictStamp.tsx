@@ -95,29 +95,31 @@ export const GSAPTripVerdictStamp: React.FC<GSAPTripVerdictStampProps> = ({
   if (!isTripped) return null;
 
   return (
-    <div className={cn("absolute inset-0 z-40 pointer-events-none flex items-center justify-center overflow-hidden", className)}>
-      {/* Shockwave Ring */}
-      <div
-        ref={ringRef}
-        className="absolute w-72 h-28 rounded-2xl border-2 border-rose-500 pointer-events-none opacity-0"
-      />
+    <div className={cn("absolute top-3 right-3 z-40 pointer-events-none flex flex-col items-end overflow-visible", className)}>
+      <div className="relative">
+        {/* Shockwave Ring */}
+        <div
+          ref={ringRef}
+          className="absolute -inset-2 rounded-2xl border-2 border-rose-500 pointer-events-none opacity-0"
+        />
 
-      {/* GSAP Stamp Banner */}
-      <div
-        ref={stampRef}
-        className="px-6 py-3 rounded-2xl bg-rose-950/95 border-4 border-rose-500 shadow-[0_0_50px_rgba(239,68,68,0.7)] flex flex-col items-center justify-center text-center rotate-[-4deg] select-none"
-      >
-        <div className="flex items-center gap-2 text-rose-300 text-xs font-black uppercase tracking-wider mb-0.5">
-          <ShieldAlert className="w-4 h-4 text-rose-400 animate-bounce" />
-          <span>IEC 60898-1 VERDICT</span>
-        </div>
+        {/* GSAP Stamp Banner */}
+        <div
+          ref={stampRef}
+          className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-2xl bg-rose-950/95 border-2 sm:border-3 border-rose-500 shadow-[0_0_35px_rgba(239,68,68,0.75)] flex flex-col items-center justify-center text-center rotate-[-2deg] select-none backdrop-blur-md"
+        >
+          <div className="flex items-center gap-1.5 text-rose-300 text-[10px] sm:text-xs font-black uppercase tracking-wider mb-0.5">
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-400 animate-bounce" />
+            <span>IEC 60898-1 VERDICT</span>
+          </div>
 
-        <div className="text-white text-base sm:text-lg font-black tracking-tight uppercase font-mono drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-          {verdictText}
-        </div>
+          <div className="text-white text-sm sm:text-base font-black tracking-tight uppercase font-mono drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+            {verdictText}
+          </div>
 
-        <div className="text-[10px] text-rose-300/80 font-bold uppercase mt-0.5">
-          Contacts Open • Arc Extinguished
+          <div className="text-[9px] sm:text-[10px] text-rose-300/90 font-bold uppercase mt-0.5">
+            Contacts Open • Arc Extinguished
+          </div>
         </div>
       </div>
     </div>
